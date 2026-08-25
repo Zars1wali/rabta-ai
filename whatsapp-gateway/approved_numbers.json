@@ -1,0 +1,24 @@
+{
+  "approved_numbers": [
+    {
+      "phone": "923169827188",
+      "business_name": "Sapphire Studio Gulberg",
+      "status": "APPROVED",
+      "plan": "UNLIMITED_TRIAL",
+      "added_at": "2026-08-24"
+    },
+    {
+      "phone": "923040124445",
+      "business_name": "Haider Arms",
+      "status": "APPROVED",
+      "plan": "ACTIVE_ONBOARDED",
+      "added_at": "2026-08-24"
+    },
+    {
+      "phone": "923185551234",
+      "business_name": "Khaadi Classic Pret Lahore",
+      "status": "APPROVED",
+      "plan": "ACTIVE_ONBOARDED"
+    }
+  ]
+}

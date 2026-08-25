@@ -1,0 +1,173 @@
+{
+  "pilot_businesses": [
+    {
+      "phone_number_id": "923040124445",
+      "business_name": "Haider Arms Official",
+      "business_phone": "+923040124445",
+      "owner_personal_phone": "+923040124445",
+      "industry": "Tactical Gear & Firearms",
+      "catalog": [
+        {
+          "item": "Custom Kydex IWB Concealed Holster (Glock/CZ/Canik/Beretta)",
+          "price": 6500,
+          "details": "Adjustable retention, right/left hand available"
+        },
+        {
+          "item": "Canik METE SFx 9mm Pistol",
+          "price": 185000,
+          "details": "Imported Turkish 9mm pistol, high capacity magazine"
+        },
+        {
+          "item": "Beretta 92FS 9mm Pistol",
+          "price": 260000,
+          "details": "Italian classic 9mm pistol, 15-round capacity"
+        },
+        {
+          "item": "Tisas PX-9 Gen 3 9mm Pistol",
+          "price": 140000,
+          "details": "Reliable polymer frame 9mm pistol with hard case"
+        },
+        {
+          "item": "Heavy-Duty Cordura Dual Pistol Range Bag",
+          "price": 9500,
+          "details": "Water-resistant, lockable zippers"
+        },
+        {
+          "item": "Universal Handgun Cleaning & Maintenance Kit",
+          "price": 4800,
+          "details": "Bore snake, patches, CLP oil included"
+        },
+        {
+          "item": "MOLLE Tactical Shooter Belt System",
+          "price": 5200,
+          "details": "Cobra buckle, fits 32-44 inch waist"
+        },
+        {
+          "item": "Modular Tactical Plate Carrier Vest",
+          "price": 14500,
+          "details": "Lightweight MOLLE system, one size adjustable"
+        }
+      ],
+      "policies": "All orders are dispatched quickly via cash on delivery or bank transfer across Pakistan. WhatsApp: 03040124445"
+    },
+    {
+      "phone_number_id": "923169827188",
+      "business_name": "Sapphire Studio Gulberg",
+      "business_phone": "+923169827188",
+      "owner_personal_phone": "+923169827188",
+      "industry": "Pakistani Lawn & Luxury Pret",
+      "catalog": [
+        {
+          "item": "Premium Embroidered Lawn 3-Piece (Unstitched)",
+          "price": 4800,
+          "details": "Chikankari front with printed chiffon dupatta"
+        },
+        {
+          "item": "Pure Swiss Lawn Printed Kurti",
+          "price": 2450,
+          "details": "100% voile, ban collar, pearl buttons, sizes S-XL"
+        },
+        {
+          "item": "Festive Bridal Chiffon Collection",
+          "price": 12500,
+          "details": "Heavy embroidery, includes dupatta & trouser"
+        }
+      ],
+      "policies": "Free delivery nationwide on orders above PKR 3,000. Cash on Delivery available. 7-day exchange policy."
+    },
+    {
+      "phone_number_id": "YOUR_META_PHONE_NUMBER_ID_1",
+      "business_name": "Al-Rehman Textiles",
+      "business_phone": "+923001111111",
+      "owner_personal_phone": "+923009999999",
+      "industry": "Pakistani Fabric & Fashion",
+      "catalog": [
+        {
+          "item": "Premium Lawn 3-Piece Unstitched",
+          "price": 4500,
+          "details": "Embroidered, Chiffon Dupatta"
+        },
+        {
+          "item": "Cotton Men's Kurta",
+          "price": 2200,
+          "details": "Sizes S, M, L, XL"
+        },
+        {
+          "item": "Silk Dupatta",
+          "price": 1200,
+          "details": "Various colors available"
+        }
+      ],
+      "policies": "Free delivery across Pakistan on orders above PKR 3,000. COD available."
+    },
+    {
+      "phone_number_id": "YOUR_META_PHONE_NUMBER_ID_2",
+      "business_name": "Khyber Shinwari Restaurant",
+      "business_phone": "+923002222222",
+      "owner_personal_phone": "+923008888888",
+      "industry": "Restaurant & Desi Food",
+      "catalog": [
+        {
+          "item": "Shinwari Mutton Karahi (Full)",
+          "price": 3600,
+          "details": "Serves 4 persons, fresh desi ghee"
+        },
+        {
+          "item": "Chicken Tikka Boti",
+          "price": 650,
+          "details": "4 skewers, raita and salad included"
+        },
+        {
+          "item": "Kabuli Pulao",
+          "price": 1100,
+          "details": "Special mutton pulao with carrots and raisins"
+        }
+      ],
+      "policies": "Delivery time: 45 mins. Minimum order PKR 1,500. Delivery charges PKR 150."
+    },
+    {
+      "phone_number_id": "923185551234",
+      "business_name": "Khaadi Classic Pret Lahore",
+      "business_phone": "+923185551234",
+      "owner_personal_phone": "+923001112233",
+      "industry": "Pakistani Pret & Luxury Fabrics",
+      "catalog": [
+        {
+          "item": "Luxury Silk Festive Kurti",
+          "price": 5500.0,
+          "details": "Hand-embroidered with mirror work, sizes S-XL",
+          "category": "Pret",
+          "image_url": "",
+          "video_url": ""
+        },
+        {
+          "item": "Embroidered 3-Piece Lawn Suit",
+          "price": 6200.0,
+          "details": "Printed chiffon dupatta and dyed trouser",
+          "category": "Unstitched",
+          "image_url": "",
+          "video_url": ""
+        },
+        {
+          "item": "Velvet Shawl Collection",
+          "price": 8500.0,
+          "details": "Heavy tilla work with zari lace border",
+          "category": "Winter",
+          "image_url": "",
+          "video_url": ""
+        },
+        {
+          "item": "Organza Wrap",
+          "price": 3200.0,
+          "details": "Added via WhatsApp by store owner",
+          "category": "General",
+          "image_url": "",
+          "video_url": ""
+        }
+      ],
+      "policies": "Free delivery across Pakistan on orders above PKR 3,000. Cash on delivery available.",
+      "social_links": {},
+      "inventory_context": ""
+    }
+  ]
+}

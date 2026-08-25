@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RABTA AI — Your AI Employee for WhatsApp, Instagram & Beyond</title>
+    <meta name="description" content="RABTA AI is your 24/7 AI sales employee. It talks to your customers on WhatsApp, Instagram, TikTok & voice — in Urdu, English, or Roman Urdu — using your real catalog and prices.">
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        /* ── Hero ── */
+        .hero {
+            position: relative;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 120px 24px 96px;
+            overflow: hidden;
+        }
+
+        .hero__bg {
+            position: absolute;
+            inset: 0;
+            background: var(--bg-hero-gradient);
+            z-index: 0;
+        }
+
+        .hero__orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            animation: float 8s ease-in-out infinite;
+        }
+
+        .hero__orb--1 {
+            width: 400px; height: 400px;
+            background: rgba(16,185,129,0.25);
+            top: 10%; left: 15%;
+            animation-delay: 0s;
+        }
+        .hero__orb--2 {
+            width: 300px; height: 300px;
+            background: rgba(59,130,246,0.2);
+            top: 40%; right: 10%;
+            animation-delay: 2s;
+        }
+        .hero__orb--3 {
+            width: 250px; height: 250px;
+            background: rgba(168,85,247,0.15);
+            bottom: 15%; left: 30%;
+            animation-delay: 4s;
+        }
+
+        [data-theme="light"] .hero__orb { opacity: 0.25; }
+
+        .hero__content {
+            position: relative;
+            z-index: 1;
+            max-width: 800px;
+        }
+
+        .hero__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--accent-surface);
+            border: 1px solid var(--accent);
+            border-radius: 9999px;
+            padding: 6px 16px;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 32px;
+            animation: fadeInDown 0.6s var(--ease-out);
+        }
+
+        .hero__badge-dot {
+            width: 6px; height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        .hero__title {
+            font-size: 3.75rem;
+            font-weight: 900;
+            line-height: 1.08;
+            letter-spacing: -1.5px;
+            margin-bottom: 24px;
+            animation: fadeInUp 0.7s var(--ease-out);
+        }
+
+        .hero__title-accent {
+            background: linear-gradient(135deg, var(--accent), #3B82F6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero__subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            max-width: 600px;
+            margin: 0 auto 40px;
+            animation: fadeInUp 0.8s var(--ease-out);
+        }
+
+        .hero__actions {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            animation: fadeInUp 0.9s var(--ease-out);
+        }
+
+        .hero__scroll-cue {
+            position: absolute;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .hero__scroll-arrow {
+            width: 24px; height: 24px;
+            border-right: 2px solid var(--text-muted);
+            border-bottom: 2px solid var(--text-muted);
+            transform: rotate(45deg);
+        }
+
+        /* ── Story ── */
+        .story {
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .story__inner {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        .story__quote {
+            font-size: 1.375rem;
+            line-height: 1.7;
+            color: var(--text-primary);
+            font-style: italic;
+            position: relative;
+            padding-left: 32px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .story__body {
+            margin-top: 32px;
+            font-size: 1.0625rem;
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        /* ── How It Works ── */
+        .how-it-works__steps {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 32px;
+            position: relative;
+            margin-top: 64px;
+        }
+
+        .how-it-works__steps::before {
+            content: '';
+            position: absolute;
+            top: 40px;
+            left: 80px;
+            right: 80px;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--border), var(--accent));
+            z-index: 0;
+        }
+
+        @media (max-width: 768px) {
+            .how-it-works__steps {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+            .how-it-works__steps::before {
+                display: none;
+            }
+        }
+
+        .hiw-step {
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hiw-step__number {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--bg-surface);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin: 0 auto 20px;
+            transition: all 0.3s var(--ease-out);
+        }
+
+        .hiw-step:hover .hiw-step__number {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-glow), var(--shadow-glow);
+            transform: translateY(-4px);
+        }
+
+        .hiw-step__title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .hiw-step__desc {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* ── Channels ── */
+        .channel-card {
+            text-align: center;
+            padding: 40px 24px;
+        }
+
+        .channel-card__icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .channel-card__name {
+            font-size: 1.125rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .channel-card__desc {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        /* ── Industries ── */
+        .industry-tile {
+            padding: 32px 24px;
+            text-align: center;
+            border-radius: var(--radius-lg);
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--border);
+            transition: all 0.3s var(--ease-out);
+        }
+
+        .industry-tile:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .industry-tile__icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+
+        .industry-tile__name {
+            font-weight: 600;
+            font-size: 0.9375rem;
+        }
+
+        /* ── Pricing ── */
+        .pricing__grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
+            margin-top: 64px;
+            align-items: start;
+        }
+
+        @media (max-width: 768px) {
+            .pricing__grid {
+                grid-template-columns: 1fr;
+                max-width: 400px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+        }
+
+        /* ── Final CTA ── */
+        .final-cta {
+            text-align: center;
+            padding: 128px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .final-cta__bg {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at center, var(--accent-glow) 0%, transparent 70%);
+        }
+
+        .final-cta__content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .final-cta__title {
+            font-size: 2.75rem;
+            font-weight: 900;
+            margin-bottom: 16px;
+            letter-spacing: -1px;
+        }
+
+        .final-cta__subtitle {
+            font-size: 1.125rem;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* ── Footer ── */
+        .footer {
+            border-top: 1px solid var(--border);
+            padding: 48px 24px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .footer__links {
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .footer__links a {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        .footer__links a:hover {
+            color: var(--accent);
+        }
+
+        /* ── Parallax ── */
+        .parallax-layer {
+            will-change: transform;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════ Navigation ═══════ -->
+<nav class="nav" id="mainNav">
+    <div class="nav__inner">
+        <a href="/" class="nav__logo" id="navLogo">
+            <span class="nav__logo-dot"></span>
+            RABTA AI
+        </a>
+
+        <button class="nav__hamburger" id="navHamburger" aria-label="Toggle navigation menu">☰</button>
+
+        <ul class="nav__links" id="navLinks">
+            <li><a href="#story" class="nav__link">Our Story</a></li>
+            <li><a href="#how-it-works" class="nav__link">How It Works</a></li>
+            <li><a href="#channels" class="nav__link">Channels</a></li>
+            <li><a href="#pricing" class="nav__link">Pricing</a></li>
+        </ul>
+
+        <div class="nav__actions">
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode">
+                <div class="theme-toggle__thumb" id="themeThumb">🌙</div>
+            </button>
+            <a href="/onboard" class="btn btn--primary btn--sm" id="navCta">Get Started</a>
+        </div>
+    </div>
+</nav>
+
+<!-- ═══════ Hero ═══════ -->
+<section class="hero" id="hero">
+    <div class="hero__bg">
+        <div class="hero__orb hero__orb--1 parallax-layer" data-speed="0.3"></div>
+        <div class="hero__orb hero__orb--2 parallax-layer" data-speed="0.2"></div>
+        <div class="hero__orb hero__orb--3 parallax-layer" data-speed="0.15"></div>
+    </div>
+
+    <div class="hero__content">
+        <div class="hero__badge">
+            <span class="hero__badge-dot"></span>
+            Now Live for Pakistani Businesses
+        </div>
+
+        <h1 class="hero__title">
+            Your AI employee that<br>
+            <span class="hero__title-accent">sells like you do.</span>
+        </h1>
+
+        <p class="hero__subtitle">
+            RABTA AI talks to your customers on WhatsApp, Instagram, and TikTok —
+            in Urdu, English, or Roman Urdu — using your real products and prices.
+            24/7. No technical skills needed.
+        </p>
+
+        <div class="hero__actions">
+            <a href="/onboard" class="btn btn--primary btn--lg" id="heroCta">
+                Onboard Your Business
+            </a>
+            <a href="#how-it-works" class="btn btn--secondary btn--lg" id="heroLearnMore">
+                See How It Works
+            </a>
+        </div>
+    </div>
+
+    <div class="hero__scroll-cue">
+        <span>Scroll</span>
+        <div class="hero__scroll-arrow"></div>
+    </div>
+</section>
+
+<!-- ═══════ Story ═══════ -->
+<section class="section story" id="story">
+    <div class="container">
+        <div class="story__inner reveal">
+            <div class="section__label">Why RABTA AI Exists</div>
+            <h2 class="section__title">A missed message.<br>A lost sale.</h2>
+
+            <blockquote class="story__quote">
+                "Bhai, yeh suit jo aap ki Instagram story mein tha — woh kya price hai?
+                Mujhe abhi chahiye, delivery ho jayegi?"
+            </blockquote>
+
+            <div class="story__body">
+                <p>
+                    That WhatsApp message sat unread for four hours. By the time Ali — a fabric
+                    shop owner in Faisalabad — replied, the customer had already bought from someone
+                    else. It wasn't Ali's first lost sale that week. He's busy cutting cloth, managing
+                    workers, handling accounts. He can't reply to 80 WhatsApp messages a day while
+                    running a shop.
+                </p>
+                <p style="margin-top: 16px;">
+                    Multiply Ali across 5.2 million small businesses in Pakistan — tailors, restaurant
+                    owners, mobile shops, shoe wholesalers — all losing customers because they simply
+                    can't reply fast enough. That's why we built RABTA AI: an AI employee that knows
+                    your products, your prices, your policies, and talks exactly the way you would —
+                    so you never lose another sale to a late reply again.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════ How It Works ═══════ -->
+<section class="section" id="how-it-works">
+    <div class="container text-center">
+        <div class="section__label reveal">Simple Setup</div>
+        <h2 class="section__title reveal">Live in 4 steps.<br>No tech skills needed.</h2>
+        <p class="section__subtitle section__subtitle--centered reveal">
+            Even if you've never used a computer — if you can use WhatsApp, you can set up RABTA AI.
+        </p>
+
+        <div class="how-it-works__steps">
+            <div class="hiw-step reveal reveal-delay-1">
+                <div class="hiw-step__number">📱</div>
+                <div class="hiw-step__title">Register</div>
+                <div class="hiw-step__desc">Enter your business name, WhatsApp number, and industry. Takes 30 seconds.</div>
+            </div>
+            <div class="hiw-step reveal reveal-delay-2">
+                <div class="hiw-step__number">📦</div>
+                <div class="hiw-step__title">Add Products</div>
+                <div class="hiw-step__desc">Type your products & prices — or let AI import them from your Instagram or WhatsApp catalog.</div>
+            </div>
+            <div class="hiw-step reveal reveal-delay-3">
+                <div class="hiw-step__number">🔗</div>
+                <div class="hiw-step__title">Connect WhatsApp</div>
+                <div class="hiw-step__desc">Scan one QR code to connect your WhatsApp. Done. Your AI employee is ready.</div>
+            </div>
+            <div class="hiw-step reveal reveal-delay-4">
+                <div class="hiw-step__number">🤖</div>
+                <div class="hiw-step__title">AI Starts Selling</div>
+                <div class="hiw-step__desc">Every customer message gets a fast, friendly reply with your real prices and products.</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════ Channels ═══════ -->
+<section class="section" id="channels" style="background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="container text-center">
+        <div class="section__label reveal">Omnichannel AI</div>
+        <h2 class="section__title reveal">One AI. Every platform<br>your customers use.</h2>
+        <p class="section__subtitle section__subtitle--centered reveal">
+            Your customers message you everywhere. RABTA AI answers everywhere — instantly.
+        </p>
+
+        <div class="grid grid--4" style="margin-top: 64px;">
+            <div class="card card--interactive channel-card reveal reveal-delay-1" id="channelWhatsApp">
+                <span class="channel-card__icon">💬</span>
+                <div class="channel-card__name">WhatsApp</div>
+                <div class="channel-card__desc">Auto-reply to product inquiries, take orders, and send catalogs — all via WhatsApp.</div>
+            </div>
+            <div class="card card--interactive channel-card reveal reveal-delay-2" id="channelInstagram">
+                <span class="channel-card__icon">📸</span>
+                <div class="channel-card__name">Instagram DMs</div>
+                <div class="channel-card__desc">Reply to story reactions, product questions, and DMs with your AI store employee.</div>
+            </div>
+            <div class="card card--interactive channel-card reveal reveal-delay-3" id="channelTikTok">
+                <span class="channel-card__icon">🎵</span>
+                <div class="channel-card__name">TikTok</div>
+                <div class="channel-card__desc">Convert TikTok viewers into buyers with instant, automated responses.</div>
+            </div>
+            <div class="card card--interactive channel-card reveal reveal-delay-4" id="channelVoice">
+                <span class="channel-card__icon">📞</span>
+                <div class="channel-card__name">Voice Calls</div>
+                <div class="channel-card__desc">AI answers phone calls in Urdu or English, understands questions, and books orders.</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════ Industries ═══════ -->
+<section class="section" id="industries">
+    <div class="container text-center">
+        <div class="section__label reveal">Built for Pakistan</div>
+        <h2 class="section__title reveal">Every industry.<br>Every bazaar.</h2>
+        <p class="section__subtitle section__subtitle--centered reveal">
+            Whether you sell fabric in Faisalabad or biryani in Karachi — RABTA AI speaks your language.
+        </p>
+
+        <div class="grid grid--4" style="margin-top: 48px;">
+            <div class="industry-tile reveal reveal-delay-1" id="indFabric">
+                <div class="industry-tile__icon">🧵</div>
+                <div class="industry-tile__name">Textile & Fashion</div>
+            </div>
+            <div class="industry-tile reveal reveal-delay-2" id="indFood">
+                <div class="industry-tile__icon">🍛</div>
+                <div class="industry-tile__name">Restaurant & Food</div>
+            </div>
+            <div class="industry-tile reveal reveal-delay-3" id="indElectronics">
+                <div class="industry-tile__icon">📱</div>
+                <div class="industry-tile__name">Electronics & Mobile</div>
+            </div>
+            <div class="industry-tile reveal reveal-delay-4" id="indShoes">
+                <div class="industry-tile__icon">👟</div>
+                <div class="industry-tile__name">Shoes & Leather</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════ Pricing ═══════ -->
+<section class="section" id="pricing" style="background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="container text-center">
+        <div class="section__label reveal">Simple Pricing</div>
+        <h2 class="section__title reveal">Start free. Scale when<br>you're ready.</h2>
+        <p class="section__subtitle section__subtitle--centered reveal">
+            No hidden fees. No setup cost. Start selling with AI today.
+        </p>
+
+        <div class="pricing__grid">
+            <!-- Free -->
+            <div class="pricing-card reveal reveal-delay-1" id="pricingFree">
+                <div class="pricing-card__name">Starter</div>
+                <div class="pricing-card__price">
+                    Free <span class="pricing-card__period">forever</span>
+                </div>
+                <ul class="pricing-card__features">
+                    <li>1 WhatsApp number</li>
+                    <li>Up to 20 products</li>
+                    <li>100 AI replies / month</li>
+                    <li>Urdu + English support</li>
+                    <li>Basic sales reporting</li>
+                </ul>
+                <a href="/onboard" class="btn btn--secondary" style="width: 100%;" id="pricingFreeCta">Get Started Free</a>
+            </div>
+
+            <!-- Growth (Featured) -->
+            <div class="pricing-card pricing-card--featured reveal reveal-delay-2" id="pricingGrowth">
+                <div class="pricing-card__name">Growth</div>
+                <div class="pricing-card__price">
+                    PKR 2,999 <span class="pricing-card__period">/month</span>
+                </div>
+                <ul class="pricing-card__features">
+                    <li>2 WhatsApp numbers</li>
+                    <li>Unlimited products</li>
+                    <li>Unlimited AI replies</li>
+                    <li>Instagram + TikTok DMs</li>
+                    <li>AI auto-sense (import products)</li>
+                    <li>Owner alerts & slash commands</li>
+                    <li>Priority support</li>
+                </ul>
+                <a href="/onboard?plan=growth" class="btn btn--primary" style="width: 100%;" id="pricingGrowthCta">Start Growth Plan</a>
+            </div>
+
+            <!-- Pro -->
+            <div class="pricing-card reveal reveal-delay-3" id="pricingPro">
+                <div class="pricing-card__name">Pro</div>
+                <div class="pricing-card__price">
+                    PKR 7,999 <span class="pricing-card__period">/month</span>
+                </div>
+                <ul class="pricing-card__features">
+                    <li>5 WhatsApp numbers</li>
+                    <li>Unlimited everything</li>
+                    <li>Voice call AI (Urdu/English)</li>
+                    <li>Custom AI personality</li>
+                    <li>Dedicated account manager</li>
+                    <li>API access</li>
+                    <li>White-label option</li>
+                </ul>
+                <a href="/onboard?plan=pro" class="btn btn--secondary" style="width: 100%;" id="pricingProCta">Contact Sales</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════ Final CTA ═══════ -->
+<section class="final-cta" id="finalCta">
+    <div class="final-cta__bg"></div>
+    <div class="final-cta__content reveal">
+        <h2 class="final-cta__title">Ready to never miss<br>a sale again?</h2>
+        <p class="final-cta__subtitle">
+            Join hundreds of Pakistani businesses already selling 24/7 with RABTA AI.
+            Setup takes 2 minutes. No credit card needed.
+        </p>
+        <a href="/onboard" class="btn btn--primary btn--lg" id="finalCtaBtn">
+            Onboard Your Business Now
+        </a>
+    </div>
+</section>
+
+<!-- ═══════ Footer ═══════ -->
+<footer class="footer" id="footer">
+    <div class="container">
+        <div class="footer__links">
+            <a href="#story">Our Story</a>
+            <a href="#how-it-works">How It Works</a>
+            <a href="#pricing">Pricing</a>
+            <a href="/onboard">Onboard</a>
+            <a href="/dashboard">Dashboard</a>
+        </div>
+        <p>Made with ❤️ in Pakistan &nbsp;·&nbsp; &copy; 2026 RABTA AI. All rights reserved.</p>
+    </div>
+</footer>
+
+<!-- ═══════ Toast Container ═══════ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+/* ── Theme Toggle ── */
+const themeToggle = document.getElementById('themeToggle');
+const themeThumb = document.getElementById('themeThumb');
+const html = document.documentElement;
+
+function setTheme(theme) {
+    html.setAttribute('data-theme', theme);
+    themeThumb.textContent = theme === 'dark' ? '🌙' : '☀️';
+    localStorage.setItem('rabta-theme', theme);
+}
+
+const savedTheme = localStorage.getItem('rabta-theme') || 'dark';
+setTheme(savedTheme);
+
+themeToggle.addEventListener('click', () => {
+    const current = html.getAttribute('data-theme');
+    setTheme(current === 'dark' ? 'light' : 'dark');
+});
+
+/* ── Mobile Nav ── */
+const hamburger = document.getElementById('navHamburger');
+const navLinks = document.getElementById('navLinks');
+
+hamburger.addEventListener('click', () => {
+    navLinks.classList.toggle('open');
+});
+
+// Close nav on link click
+navLinks.querySelectorAll('.nav__link').forEach(link => {
+    link.addEventListener('click', () => navLinks.classList.remove('open'));
+});
+
+/* ── Scroll Reveal (IntersectionObserver) ── */
+const revealElements = document.querySelectorAll('.reveal');
+const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            revealObserver.unobserve(entry.target);
+        }
+    });
+}, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+
+revealElements.forEach(el => revealObserver.observe(el));
+
+/* ── Parallax on Hero Orbs ── */
+const parallaxLayers = document.querySelectorAll('.parallax-layer');
+
+window.addEventListener('scroll', () => {
+    const scrollY = window.scrollY;
+    parallaxLayers.forEach(layer => {
+        const speed = parseFloat(layer.dataset.speed) || 0.2;
+        layer.style.transform = `translateY(${scrollY * speed}px)`;
+    });
+}, { passive: true });
+
+/* ── Sticky Nav Shadow ── */
+const nav = document.getElementById('mainNav');
+window.addEventListener('scroll', () => {
+    if (window.scrollY > 20) {
+        nav.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)';
+    } else {
+        nav.style.boxShadow = 'none';
+    }
+}, { passive: true });
+
+/* ── Smooth scroll for anchor links ── */
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+});
+</script>
+
+</body>
+</html>

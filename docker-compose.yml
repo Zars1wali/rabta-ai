@@ -1,0 +1,125 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Rabta AI — Production Docker Compose
+# All services restart automatically after a crash or server reboot.
+# Run: docker compose up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL 16 ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: rabta_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-rabta_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - rabta_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-rabta_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Not exposed to host — only accessible to backend container via internal network
+
+  # ── FastAPI Backend (AI Engine) ────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rabta_backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Override DATABASE_URL to use the internal Docker network hostname
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-rabta_dev}
+      PYTHON_BACKEND_URL: http://backend:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rabta_internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    volumes:
+      # Preserve alembic state and any static assets
+      - ./backend/backups:/app/backups
+
+  # ── WhatsApp Baileys Gateway ───────────────────────────────────────────────
+  gateway:
+    build:
+      context: ./whatsapp-gateway
+      dockerfile: Dockerfile
+    container_name: rabta_gateway
+    restart: unless-stopped
+    environment:
+      PYTHON_BACKEND_URL: http://backend:8000
+      NODE_ENV: production
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - rabta_internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    volumes:
+      # CRITICAL: mount auth_session so WhatsApp QR link survives container restarts
+      - gateway_auth:/app/auth_session
+      - ./whatsapp-gateway/approved_numbers.json:/app/approved_numbers.json:ro
+
+  # ── Caddy Reverse Proxy (HTTPS + auto-TLS) ─────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: rabta_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required in .env (e.g. api.yourdomain.com)}
+    networks:
+      - rabta_internal
+    depends_on:
+      - backend
+      - gateway
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+
+# ── Named Volumes ──────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  gateway_auth:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+
+# ── Internal Network ────────────────────────────────────────────────────────
+networks:
+  rabta_internal:
+    driver: bridge

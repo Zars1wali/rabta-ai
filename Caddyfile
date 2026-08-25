@@ -1,0 +1,46 @@
+# Caddyfile — Rabta AI Production Reverse Proxy
+# DOMAIN env var is injected by docker-compose from .env
+# Caddy automatically issues and renews Let's Encrypt TLS certificates.
+
+{env.DOMAIN} {
+    # Main API backend
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    # WhatsApp webhook (Meta sends POST here)
+    handle /webhooks/* {
+        reverse_proxy backend:8000
+    }
+
+    # Health check passthrough
+    handle /health {
+        reverse_proxy backend:8000
+    }
+
+    # WhatsApp gateway QR admin UI (restrict to your IP in production if desired)
+    handle /gateway/* {
+        reverse_proxy gateway:3001
+    }
+
+    # Static frontend (onboarding, dashboard, landing page)
+    handle /* {
+        reverse_proxy backend:8000
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+    }
+}

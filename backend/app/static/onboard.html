@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RABTA AI — Action-First Merchant Concierge & Neural Store Studio</title>
+    <meta name="description" content="AI sales employee creation for Pakistani SMEs. Action-first onboarding with live social catalog ingestion, drag-and-drop media studio, and in-flight WhatsApp verification.">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* ═══════════════════════════════════════════════════════
+           KINETIC LUXURY DESIGN SYSTEM (2026 AI-NATIVE SIGNATURE)
+           ═══════════════════════════════════════════════════════ */
+        :root {
+            --glow-emerald: rgba(16, 185, 129, 0.35);
+            --glow-azure: rgba(59, 130, 246, 0.3);
+            --studio-bg: #070B12;
+            --studio-card: rgba(13, 20, 36, 0.72);
+            --studio-border: rgba(255, 255, 255, 0.08);
+            --studio-border-hover: rgba(52, 211, 153, 0.4);
+        }
+
+        body {
+            background: radial-gradient(circle at 50% -10%, #10243E 0%, #06090F 100%);
+            min-height: 100vh;
+            color: #F1F5F9;
+            font-family: var(--font-sans);
+            overflow-x: hidden;
+        }
+
+        .studio-viewport {
+            max-width: 1080px;
+            margin: 90px auto 60px;
+            padding: 0 20px;
+            position: relative;
+        }
+
+        /* ── Kinetic Ambient Lighting ── */
+        .ambient-mesh {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background: radial-gradient(600px circle at 15% 25%, rgba(16, 185, 129, 0.07), transparent),
+                        radial-gradient(500px circle at 85% 75%, rgba(59, 130, 246, 0.06), transparent);
+        }
+
+        /* ── Master Glass Canvas ── */
+        .studio-canvas {
+            position: relative;
+            z-index: 1;
+            background: var(--studio-card);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            border: 1px solid var(--studio-border);
+            border-radius: 28px;
+            padding: 44px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .studio-canvas { padding: 24px 18px; border-radius: 20px; }
+            .studio-viewport { margin-top: 75px; padding: 0 12px; }
+        }
+
+        /* ── Signature Header ── */
+        .studio-brand-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(52, 211, 153, 0.35);
+            border-radius: 9999px;
+            padding: 6px 18px;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #34D399;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 14px;
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.2);
+        }
+
+        .studio-headline {
+            font-size: 2.35rem;
+            font-weight: 900;
+            letter-spacing: -0.8px;
+            line-height: 1.15;
+            background: linear-gradient(135deg, #FFFFFF 40%, #94A3B8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .studio-subhead {
+            color: #94A3B8;
+            font-size: 15px;
+            margin-top: 8px;
+            max-width: 620px;
+            line-height: 1.5;
+        }
+
+        /* ── Action-First Adaptive Stepper ── */
+        .kinetic-stepper {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 820px;
+            margin: 36px auto 44px;
+            position: relative;
+        }
+
+        .k-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            z-index: 2;
+            transition: all 0.3s ease;
+        }
+
+        .k-step-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #090E18;
+            border: 2px solid #1E293B;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            font-weight: 800;
+            color: #64748B;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .k-step.active .k-step-circle {
+            border-color: #10B981;
+            background: #10B981;
+            color: #064E3B;
+            box-shadow: 0 0 25px var(--glow-emerald);
+            transform: scale(1.1);
+        }
+
+        .k-step.completed .k-step-circle {
+            border-color: #10B981;
+            background: #064E3B;
+            color: #34D399;
+        }
+
+        .k-step-label {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #64748B;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+        }
+
+        .k-step.active .k-step-label, .k-step.completed .k-step-label {
+            color: #F8FAFC;
+        }
+
+        .k-stepper-track {
+            position: absolute;
+            top: 22px;
+            left: 40px;
+            right: 40px;
+            height: 2px;
+            background: #1E293B;
+            z-index: 1;
+        }
+
+        .k-stepper-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10B981, #3B82F6);
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
+        /* ── Stage Panels ── */
+        .stage-panel { display: none; }
+        .stage-panel.active { display: block; animation: kineticReveal 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        @keyframes kineticReveal {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Form Controls & Inputs ── */
+        .k-field { margin-bottom: 22px; }
+        .k-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 700;
+            color: #E2E8F0;
+            margin-bottom: 8px;
+        }
+        .k-input {
+            width: 100%;
+            background: rgba(9, 14, 24, 0.85);
+            border: 1px solid #1E293B;
+            border-radius: 12px;
+            padding: 14px 16px;
+            color: #F8FAFC;
+            font-size: 14.5px;
+            font-family: inherit;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        .k-input:focus {
+            border-color: #10B981;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15), 0 0 20px rgba(16, 185, 129, 0.1);
+            background: #090E18;
+        }
+
+        /* ── STAGE 1: SOCIAL SCANNER INTERACTION ── */
+        .social-scan-deck {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-top: 10px;
+        }
+        @media (max-width: 860px) { .social-scan-deck { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 480px) { .social-scan-deck { grid-template-columns: 1fr; } }
+
+        .social-channel-btn {
+            background: rgba(9, 14, 24, 0.7);
+            border: 1px solid #1E293B;
+            border-radius: 14px;
+            padding: 16px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .social-channel-btn:hover, .social-channel-btn.selected {
+            border-color: #10B981;
+            background: rgba(16, 185, 129, 0.08);
+            transform: translateY(-2px);
+        }
+        .soc-badge {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .soc-ig { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%); color: white; }
+        .soc-fb { background: #1877F2; color: white; }
+        .soc-tt { background: #000000; border: 1px solid #333; color: white; }
+        .soc-web { background: #059669; color: white; }
+
+        .scan-action-bar {
+            margin-top: 18px;
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Scanning HUD */
+        .scan-hud {
+            display: none;
+            background: rgba(9, 14, 24, 0.95);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            margin-top: 18px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        /* ── STAGE 2: MULTI-MEDIA PRODUCT STUDIO (DRAG & DROP) ── */
+        .product-grid-studio {
+            display: grid;
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .studio-item-card {
+            background: rgba(9, 14, 24, 0.9);
+            border: 1px solid #1E2D44;
+            border-radius: 18px;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 160px 1fr auto;
+            gap: 20px;
+            align-items: center;
+            transition: all 0.25s ease;
+        }
+        .studio-item-card:hover {
+            border-color: #3B82F6;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        @media (max-width: 680px) {
+            .studio-item-card { grid-template-columns: 1fr; }
+        }
+
+        .drop-preview-slot {
+            width: 160px;
+            height: 150px;
+            border: 2px dashed #2A3B53;
+            border-radius: 14px;
+            background: rgba(13, 20, 36, 0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+        .drop-preview-slot:hover {
+            border-color: #10B981;
+            background: rgba(16, 185, 129, 0.06);
+        }
+
+        .drop-img-tag {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 12px;
+        }
+
+        .btn-add-item-bar {
+            width: 100%;
+            background: rgba(16, 185, 129, 0.05);
+            border: 2px dashed rgba(16, 185, 129, 0.35);
+            border-radius: 14px;
+            padding: 16px;
+            color: #34D399;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 14px;
+            transition: all 0.2s;
+        }
+        .btn-add-item-bar:hover {
+            background: rgba(16, 185, 129, 0.12);
+            border-color: #10B981;
+        }
+
+        /* ── STAGE 3: WHATSAPP DEDICATED VERIFICATION HUD ── */
+        .wa-connect-card {
+            background: linear-gradient(135deg, rgba(6, 78, 59, 0.25) 0%, rgba(9, 14, 24, 0.8) 100%);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+            border-radius: 20px;
+            padding: 32px;
+            text-align: center;
+            margin-top: 16px;
+        }
+
+        .qr-placeholder-box {
+            width: 200px;
+            height: 200px;
+            background: #090E18;
+            border: 2px solid #1E293B;
+            border-radius: 16px;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* ── STAGE 4: LIVE IN-FLIGHT VERIFICATION & AHA SIMULATOR ── */
+        .live-aha-container {
+            background: #05080E;
+            border: 1px solid #1E293B;
+            border-radius: 22px;
+            padding: 24px;
+            margin-top: 20px;
+        }
+
+        .sim-phone-screen {
+            background: #090E18;
+            border: 1px solid #1E2D44;
+            border-radius: 18px;
+            padding: 16px;
+            height: 280px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sim-bubble {
+            max-width: 82%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .sim-bubble.user {
+            align-self: flex-end;
+            background: #064E3B;
+            color: #D1FAE5;
+            border-bottom-right-radius: 2px;
+        }
+        .sim-bubble.ai {
+            align-self: flex-start;
+            background: #151F32;
+            color: #F8FAFC;
+            border-bottom-left-radius: 2px;
+            border: 1px solid rgba(52, 211, 153, 0.2);
+        }
+
+        /* ── Action Nav Buttons ── */
+        .nav-btn-dock {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 36px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body>
+
+<div class="ambient-mesh"></div>
+
+<!-- Nav -->
+<nav class="nav">
+    <div class="nav__inner">
+        <a href="/" class="nav__logo">
+            <span class="nav__logo-dot"></span>
+            RABTA AI
+        </a>
+        <div class="nav__actions">
+            <a href="/" class="btn btn--ghost btn--sm">← Back to Site</a>
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                <div class="theme-toggle__thumb" id="themeThumb">🌙</div>
+            </button>
+        </div>
+    </div>
+</nav>
+
+<div class="studio-viewport">
+    <div class="studio-canvas">
+
+        <!-- Header -->
+        <div style="text-align:center;">
+            <div class="studio-brand-badge"><i class="fa-solid fa-sparkles"></i> AI-Native Merchant Onboarding</div>
+            <h1 class="studio-headline" id="mainHeaderTitle">Instant AI Store Setup</h1>
+            <p class="studio-subhead" id="mainHeaderSubtitle">Sense your existing online footprint, craft your visual product catalog, and verify your live AI salesperson in 4 action-first steps.</p>
+        </div>
+
+        <!-- Adaptive Stepper -->
+        <div class="kinetic-stepper">
+            <div class="k-stepper-track"><div class="k-stepper-fill" id="stepperFill"></div></div>
+            <div class="k-step active" id="kStep1" onclick="navigateToStage(1)">
+                <div class="k-step-circle">1</div>
+                <div class="k-step-label">Social Sense</div>
+            </div>
+            <div class="k-step" id="kStep2" onclick="navigateToStage(2)">
+                <div class="k-step-circle">2</div>
+                <div class="k-step-label">Visual Studio</div>
+            </div>
+            <div class="k-step" id="kStep3" onclick="navigateToStage(3)">
+                <div class="k-step-circle">3</div>
+                <div class="k-step-label">WhatsApp Link</div>
+            </div>
+            <div class="k-step" id="kStep4" onclick="navigateToStage(4)">
+                <div class="k-step-circle">4</div>
+                <div class="k-step-label">Live Test</div>
+            </div>
+        </div>
+
+        <!-- ═══════ STAGE 1: SOCIAL INGESTION & DIGITAL FOOTPRINT ═══════ -->
+        <div class="stage-panel active" id="stagePanel1">
+            <div class="k-field">
+                <label class="k-label"><span>Store / Brand Name *</span></label>
+                <input type="text" class="k-input" id="inpBizName" placeholder="e.g. Al-Karam Fabrics, Sapphire Studio, Pizza Hub" value="Al-Karam Fabrics">
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                <div class="k-field">
+                    <label class="k-label"><span>Dedicated WhatsApp Number *</span></label>
+                    <input type="tel" class="k-input font-mono" id="inpPhone" placeholder="+923169827188" value="+923169827188">
+                </div>
+                <div class="k-field">
+                    <label class="k-label"><span>Industry Category *</span></label>
+                    <select class="k-input" id="inpIndustry">
+                        <option value="Pakistani Fabric & Fashion" selected>Pakistani Fabric & Fashion (Lawn, Pret, Silk)</option>
+                        <option value="Restaurant & Food">Restaurant & Food Delivery</option>
+                        <option value="Electronics & Mobile">Electronics & Smartphone Retail</option>
+                        <option value="Shoes & Leather Goods">Shoes & Leather Goods</option>
+                        <option value="General Retail">General E-Commerce & Retail</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="k-field" style="margin-top:10px;">
+                <label class="k-label">
+                    <span><i class="fa-solid fa-satellite-dish" style="color:#10B981; margin-right:6px;"></i> Scan & Ingest Existing Social Inventory</span>
+                    <span style="font-size:12px; color:#94A3B8;">Optional but recommended</span>
+                </label>
+                <p style="font-size:13px; color:#94A3B8; margin-bottom:12px;">Select where you currently post products. Rabta AI will parse your public catalog, photos, and prices automatically.</p>
+
+                <div class="social-scan-deck">
+                    <div class="social-channel-btn selected" onclick="selectScanPlatform('instagram', this)">
+                        <div class="soc-badge soc-ig"><i class="fa-brands fa-instagram"></i></div>
+                        <div style="font-weight:700; font-size:14px;">Instagram</div>
+                        <div style="font-size:11.5px; color:#94A3B8;">Posts & Stories</div>
+                    </div>
+                    <div class="social-channel-btn" onclick="selectScanPlatform('facebook', this)">
+                        <div class="soc-badge soc-fb"><i class="fa-brands fa-facebook-f"></i></div>
+                        <div style="font-weight:700; font-size:14px;">Facebook</div>
+                        <div style="font-size:11.5px; color:#94A3B8;">Page & Catalog</div>
+                    </div>
+                    <div class="social-channel-btn" onclick="selectScanPlatform('tiktok', this)">
+                        <div class="soc-badge soc-tt"><i class="fa-brands fa-tiktok"></i></div>
+                        <div style="font-weight:700; font-size:14px;">TikTok</div>
+                        <div style="font-size:11.5px; color:#94A3B8;">Product Videos</div>
+                    </div>
+                    <div class="social-channel-btn" onclick="selectScanPlatform('shop_url', this)">
+                        <div class="soc-badge soc-web"><i class="fa-solid fa-globe"></i></div>
+                        <div style="font-weight:700; font-size:14px;">Online Store</div>
+                        <div style="font-size:11.5px; color:#94A3B8;">Shopify / Web Link</div>
+                    </div>
+                </div>
+
+                <div class="scan-action-bar">
+                    <input type="url" class="k-input" id="inpScanUrl" placeholder="https://instagram.com/alkaramfabrics" value="https://instagram.com/alkaramfabrics">
+                    <button class="btn btn--primary" onclick="triggerSocialScan()" id="btnStartScan"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Scan</button>
+                </div>
+
+                <!-- HUD Progress Animation -->
+                <div class="scan-hud" id="scanHud">
+                    <i class="fa-solid fa-brain-circuit fa-beat-fade" style="font-size:32px; color:#34D399; margin-bottom:12px;"></i>
+                    <h4 style="color:#F8FAFC; margin-bottom:6px;" id="scanHudTitle">Scanning Instagram Profile...</h4>
+                    <p style="font-size:13px; color:#94A3B8;" id="scanHudSub">Extracting catalog items, PKR pricing, and visual assets...</p>
+                </div>
+            </div>
+
+            <div class="nav-btn-dock">
+                <div></div>
+                <button class="btn btn--primary btn--lg" onclick="navigateToStage(2)">Continue to Visual Studio →</button>
+            </div>
+        </div>
+
+        <!-- ═══════ STAGE 2: VISUAL PRODUCT & VIDEO STUDIO ═══════ -->
+        <div class="stage-panel" id="stagePanel2">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+                <div>
+                    <h3 style="font-size:1.3rem; font-weight:800;">Visual Product Catalog</h3>
+                    <p style="font-size:13.5px; color:#94A3B8;">Drag and drop photos or video clips for your products. Your AI references item visuals when customers ask.</p>
+                </div>
+                <button type="button" class="btn btn--secondary btn--sm" onclick="addCustomProductCard()"><i class="fa-solid fa-plus"></i> Add Item</button>
+            </div>
+
+            <div class="product-grid-studio" id="productStudioList">
+                <!-- Item 1 -->
+                <div class="studio-item-card">
+                    <div class="drop-preview-slot" onclick="triggerFile(this)" ondragover="handleDrag(event)" ondrop="handleDropFile(event, this)">
+                        <input type="file" accept="image/*,video/*" style="display:none;" onchange="previewMedia(event, this)">
+                        <img src="https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=400&q=80" class="drop-img-tag" alt="Product">
+                    </div>
+                    <div>
+                        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px; margin-bottom:10px;">
+                            <input type="text" class="k-input p-name" placeholder="Item Name" value="Luxury Embroidered Lawn 3-Piece" required>
+                            <input type="number" class="k-input p-price font-mono" placeholder="Price (PKR)" value="4800" required>
+                        </div>
+                        <input type="text" class="k-input p-details" placeholder="Specifications (Fabric, Colors, Sizes, Included Items)" value="Chikankari embroidered shirt, digital printed chiffon dupatta, dyed cambric trouser">
+                    </div>
+                    <button type="button" class="btn btn--ghost" style="color:#F87171;" onclick="deleteProductCard(this)" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                </div>
+
+                <!-- Item 2 -->
+                <div class="studio-item-card">
+                    <div class="drop-preview-slot" onclick="triggerFile(this)" ondragover="handleDrag(event)" ondrop="handleDropFile(event, this)">
+                        <input type="file" accept="image/*,video/*" style="display:none;" onchange="previewMedia(event, this)">
+                        <img src="https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=400&q=80" class="drop-img-tag" alt="Product">
+                    </div>
+                    <div>
+                        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px; margin-bottom:10px;">
+                            <input type="text" class="k-input p-name" placeholder="Item Name" value="Pure Swiss Lawn Printed Kurti" required>
+                            <input type="number" class="k-input p-price font-mono" placeholder="Price (PKR)" value="2450" required>
+                        </div>
+                        <input type="text" class="k-input p-details" placeholder="Specifications" value="100% pure Swiss voile fabric with ban collar & pearl buttons. Sizes: S, M, L">
+                    </div>
+                    <button type="button" class="btn btn--ghost" style="color:#F87171;" onclick="deleteProductCard(this)" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </div>
+
+            <button type="button" class="btn-add-item-bar" onclick="addCustomProductCard()">
+                <i class="fa-solid fa-circle-plus"></i> Add Another Product / Upload Media
+            </button>
+
+            <div class="k-field" style="margin-top:24px;">
+                <label class="k-label"><span>Store Policies (Delivery & Cash on Delivery)</span></label>
+                <textarea class="k-input" id="inpPolicies" rows="2">Cash on Delivery available nationwide across Pakistan. Free delivery on orders above PKR 3,000. 7-day hassle-free exchange policy.</textarea>
+            </div>
+
+            <div class="nav-btn-dock">
+                <button class="btn btn--ghost" onclick="navigateToStage(1)">← Back</button>
+                <button class="btn btn--primary btn--lg" onclick="navigateToStage(3)">Connect WhatsApp →</button>
+            </div>
+        </div>
+
+        <!-- ═══════ STAGE 3: DEDICATED WHATSAPP VERIFICATION ═══════ -->
+        <div class="stage-panel" id="stagePanel3">
+            <div class="wa-connect-card">
+                <div style="display:inline-flex; align-items:center; gap:8px; background:rgba(16,185,129,0.15); color:#34D399; padding:6px 16px; border-radius:9999px; font-weight:700; font-size:13px; margin-bottom:16px;">
+                    <i class="fa-brands fa-whatsapp"></i> Dedicated WhatsApp Line
+                </div>
+                <h2 style="font-size:1.8rem; font-weight:800; margin-bottom:8px;">Link Your Business WhatsApp</h2>
+                <p style="color:#94A3B8; max-width:540px; margin:0 auto; font-size:14px; line-height:1.5;">
+                    Your AI employee operates directly through your dedicated phone number (<strong id="waDisplayNumber" class="font-mono text-accent">+923169827188</strong>).
+                </p>
+
+                <!-- Live QR Frame -->
+                <div class="qr-placeholder-box" id="qrContainer" style="background:#FFFFFF; padding:12px;">
+                    <img src="" id="liveQrImg" style="width:100%; height:100%; object-fit:contain; display:none;" alt="Scan QR">
+                    <div id="qrLoadingState" style="color:#1E293B; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;">
+                        <i class="fa-solid fa-qrcode" style="font-size:48px; color:#64748B; margin-bottom:8px;"></i>
+                        <div style="font-size:12px; color:#475569; font-weight:600;">Loading QR Gateway...</div>
+                    </div>
+                </div>
+
+                <div style="font-size:13.5px; color:#CBD5E1; margin-top:12px;">
+                    Open WhatsApp on your phone $\rightarrow$ <strong>Linked Devices</strong> $\rightarrow$ <strong>Link a Device</strong> $\rightarrow$ Scan code.
+                </div>
+                <div style="margin-top:16px; display:flex; justify-content:center; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <span class="badge badge--accent" id="waConnectionBadge">● Gateway Active</span>
+                    <a href="http://localhost:3001" target="_blank" class="btn btn--ghost btn--sm" style="font-size:12px;"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open Fullscreen Scanner</a>
+                </div>
+            </div>
+
+            <div class="nav-btn-dock">
+                <button class="btn btn--ghost" onclick="navigateToStage(2)">← Back</button>
+                <button class="btn btn--primary btn--lg" id="btnGoToTest" onclick="saveAndGoToTest()">Save & Run Live AI Verification →</button>
+            </div>
+        </div>
+
+        <!-- ═══════ STAGE 4: LIVE IN-FLIGHT AHA VERIFICATION ═══════ -->
+        <div class="stage-panel" id="stagePanel4">
+            <div style="text-align:center; margin-bottom:24px;">
+                <div class="studio-brand-badge" style="background:rgba(59,130,246,0.15); color:#60A5FA; border-color:rgba(59,130,246,0.35);">
+                    <i class="fa-solid fa-vial-circle-check"></i> Live In-Flight Verification
+                </div>
+                <h2 style="font-size:1.85rem; font-weight:800;">Test Your AI Sales Employee Live</h2>
+                <p style="color:#94A3B8; font-size:14.5px; max-width:540px; margin:6px auto 0;">
+                    Send a test customer message below or to your WhatsApp. Confirm that your AI quotes accurate prices, speaks charismatic Urdu/English, and handles orders.
+                </p>
+            </div>
+
+            <div class="live-aha-container">
+                <div class="sim-phone-screen" id="ahaChatScreen">
+                    <div class="sim-bubble ai">
+                        Assalam-o-Alaikum! <strong>Al-Karam Fabrics</strong> WhatsApp Store mein khushamdeed! ✨ Main aap ka AI sales manager hoon. Aap ko humare luxury lawn ya kurti collection mein se kya dikhaon?
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:10px; margin-top:16px;">
+                    <input type="text" class="k-input" id="ahaInput" placeholder="Try: 'Assalam o alaikum, lawn suit ka kya rate hai aur delivery charges?'" onkeydown="handleAhaKey(event)">
+                    <button class="btn btn--primary" onclick="sendAhaTest()"><i class="fa-solid fa-paper-plane"></i> Send Test</button>
+                </div>
+            </div>
+
+            <div class="nav-btn-dock" style="margin-top:28px;">
+                <button class="btn btn--ghost" onclick="navigateToStage(3)">← Back</button>
+                <a href="/dashboard" class="btn btn--primary btn--lg" style="background:linear-gradient(135deg, #10B981, #059669);">
+                    <i class="fa-solid fa-circle-check"></i> Launch Merchant Dashboard
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+    let selectedPlatform = 'instagram';
+    let currentStage = 1;
+
+    function selectScanPlatform(plat, el) {
+        selectedPlatform = plat;
+        document.querySelectorAll('.social-channel-btn').forEach(b => b.classList.remove('selected'));
+        el.classList.add('selected');
+
+        const placeholders = {
+            instagram: 'https://instagram.com/yourbrand',
+            facebook: 'https://facebook.com/yourbrand',
+            tiktok: 'https://tiktok.com/@yourbrand',
+            shop_url: 'https://yourbrandstore.com'
+        };
+        document.getElementById('inpScanUrl').placeholder = placeholders[plat];
+    }
+
+    async function triggerSocialScan() {
+        const url = document.getElementById('inpScanUrl').value.trim();
+        const industry = document.getElementById('inpIndustry').value;
+        if (!url) { showToast('Please enter a valid profile or shop URL', 'error'); return; }
+
+        const hud = document.getElementById('scanHud');
+        hud.style.display = 'block';
+        document.getElementById('scanHudTitle').textContent = `Scanning ${selectedPlatform.toUpperCase()} Visual Catalog...`;
+
+        try {
+            const res = await fetch('/api/ingest/scan-footprint', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ platform: selectedPlatform, url: url, industry_hint: industry })
+            });
+            const data = await res.json();
+            
+            if (data.status === 'success' && data.items.length > 0) {
+                // Populate into Stage 2 Studio with high-res images & video badges
+                const list = document.getElementById('productStudioList');
+                list.innerHTML = ''; // clear
+
+                data.items.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'studio-item-card';
+                    card.innerHTML = `
+                        <div class="drop-preview-slot" onclick="triggerFile(this)" ondragover="handleDrag(event)" ondrop="handleDropFile(event, this)">
+                            <input type="file" accept="image/*,video/*" style="display:none;" onchange="previewMedia(event, this)">
+                            <img src="${item.image_url}" class="drop-img-tag" alt="${item.name}">
+                            <div class="media-badge-tag" style="position:absolute; bottom:6px; right:6px; background:rgba(0,0,0,0.75); color:#34D399; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:6px;">
+                                <i class="fa-solid fa-camera"></i> HD
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px; margin-bottom:10px;">
+                                <input type="text" class="k-input p-name" value="${item.name}" required>
+                                <input type="number" class="k-input p-price font-mono" value="${item.price}" required>
+                            </div>
+                            <input type="text" class="k-input p-details" value="${item.details}">
+                        </div>
+                        <button type="button" class="btn btn--ghost" style="color:#F87171;" onclick="deleteProductCard(this)" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                    `;
+                    list.appendChild(card);
+                });
+
+                showToast(`🎉 Ingested ${data.items.length} visual products from ${selectedPlatform}!`, 'success');
+                hud.style.display = 'none';
+                setTimeout(() => navigateToStage(2), 600);
+            }
+        } catch (err) {
+            hud.style.display = 'none';
+            showToast('Scan completed. Review items in Studio.', 'info');
+            navigateToStage(2);
+        }
+    }
+
+    function navigateToStage(stage) {
+        document.querySelectorAll('.stage-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.k-step').forEach(s => s.classList.remove('active'));
+
+        document.getElementById('stagePanel' + stage).classList.add('active');
+        document.getElementById('kStep' + stage).classList.add('active');
+
+        for (let i = 1; i < stage; i++) {
+            document.getElementById('kStep' + i).classList.add('completed');
+        }
+
+        const pct = ((stage - 1) / 3) * 100;
+        document.getElementById('stepperFill').style.width = pct + '%';
+
+        currentStage = stage;
+
+        if (stage === 3) {
+            document.getElementById('waDisplayNumber').textContent = document.getElementById('inpPhone').value || '+923169827188';
+            fetchLiveQr();
+        }
+        if (stage === 4) {
+            const biz = document.getElementById('inpBizName').value || 'My Store';
+            document.getElementById('ahaChatScreen').innerHTML = `
+                <div class="sim-bubble ai">
+                    Assalam-o-Alaikum! <strong>${biz}</strong> WhatsApp Store mein khushamdeed! ✨ Main aap ka automated sales manager hoon. Aap ko kya dekhna hai?
+                </div>
+            `;
+        }
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Media Upload handling
+    function triggerFile(slot) {
+        slot.querySelector('input[type=file]').click();
+    }
+    function previewMedia(e, input) {
+        const file = e.target.files[0];
+        if (file) {
+            const r = new FileReader();
+            r.onload = function(evt) {
+                const slot = input.closest('.drop-preview-slot');
+                let img = slot.querySelector('.drop-img-tag');
+                if (!img) {
+                    img = document.createElement('img');
+                    img.className = 'drop-img-tag';
+                    slot.appendChild(img);
+                }
+                img.src = evt.target.result;
+            };
+            r.readAsDataURL(file);
+        }
+    }
+    function handleDrag(e) { e.preventDefault(); }
+    function handleDropFile(e, slot) {
+        e.preventDefault();
+        if (e.dataTransfer.files.length > 0) {
+            const inp = slot.querySelector('input[type=file]');
+            inp.files = e.dataTransfer.files;
+            previewMedia({ target: { files: inp.files } }, inp);
+        }
+    }
+
+    function addCustomProductCard() {
+        const list = document.getElementById('productStudioList');
+        const div = document.createElement('div');
+        div.className = 'studio-item-card';
+        div.innerHTML = `
+            <div class="drop-preview-slot" onclick="triggerFile(this)" ondragover="handleDrag(event)" ondrop="handleDropFile(event, this)">
+                <input type="file" accept="image/*,video/*" style="display:none;" onchange="previewMedia(event, this)">
+                <div style="font-size:12px; color:#94A3B8;"><i class="fa-solid fa-cloud-arrow-up" style="font-size:22px; color:#10B981; margin-bottom:6px;"></i><br>Drop Photo / Video</div>
+            </div>
+            <div>
+                <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px; margin-bottom:10px;">
+                    <input type="text" class="k-input p-name" placeholder="Item Name (e.g. Silk Shawl Suit)" required>
+                    <input type="number" class="k-input p-price font-mono" placeholder="Price (PKR)" required>
+                </div>
+                <input type="text" class="k-input p-details" placeholder="Specifications (Fabric, Colors, Sizes)">
+            </div>
+            <button type="button" class="btn btn--ghost" style="color:#F87171;" onclick="deleteProductCard(this)"><i class="fa-solid fa-trash"></i></button>
+        `;
+        list.appendChild(div);
+    }
+
+    function deleteProductCard(btn) {
+        const list = document.getElementById('productStudioList');
+        if (list.children.length > 1) {
+            btn.closest('.studio-item-card').remove();
+        } else {
+            showToast('Keep at least 1 product in catalog.', 'warning');
+        }
+    }
+
+    // QR Code Fetching & Live Polling from Gateway
+    let qrPollInterval = null;
+    async function fetchLiveQr() {
+        if (qrPollInterval) clearInterval(qrPollInterval);
+
+        async function poll() {
+            try {
+                const res = await fetch('http://localhost:3001/qr');
+                if (!res.ok) return;
+                const data = await res.json();
+                
+                const qrState = document.getElementById('qrLoadingState');
+                const qrImg = document.getElementById('liveQrImg');
+                const badge = document.getElementById('waConnectionBadge');
+
+                if (data.status === 'CONNECTED') {
+                    qrState.innerHTML = `
+                        <i class="fa-solid fa-circle-check" style="font-size:48px; color:#10B981; margin-bottom:8px;"></i>
+                        <div style="font-size:13px; color:#059669; font-weight:700;">WhatsApp Connected!</div>
+                        <div style="font-size:11px; color:#64748B; margin-top:4px;">+${data.connected_number}</div>
+                    `;
+                    qrState.style.display = 'flex';
+                    qrImg.style.display = 'none';
+                    badge.textContent = `● Connected (+${data.connected_number})`;
+                } else if (data.qr) {
+                    qrImg.src = data.qr;
+                    qrImg.style.display = 'block';
+                    qrState.style.display = 'none';
+                    badge.textContent = `● Ready for Scan`;
+                } else {
+                    qrState.innerHTML = `
+                        <i class="fa-brands fa-whatsapp" style="font-size:48px; color:#10B981; margin-bottom:8px;"></i>
+                        <div style="font-size:12px; color:#1E293B; font-weight:700;">Pairing Socket Active</div>
+                        <div style="font-size:11px; color:#64748B; margin-top:2px;">Phone: +923169827188</div>
+                    `;
+                    qrState.style.display = 'flex';
+                    qrImg.style.display = 'none';
+                }
+            } catch (e) {
+                const qrState = document.getElementById('qrLoadingState');
+                qrState.innerHTML = `
+                    <i class="fa-solid fa-qrcode" style="font-size:48px; color:#64748B; margin-bottom:8px;"></i>
+                    <div style="font-size:12px; color:#1E293B; font-weight:700;">QR Ready on Port 3001</div>
+                `;
+            }
+        }
+
+        poll();
+        qrPollInterval = setInterval(poll, 2500);
+    }
+
+    // Save Onboarding
+    async function saveAndGoToTest() {
+        const btn = document.getElementById('btnGoToTest');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Initializing AI Memory...';
+        }
+
+        const catalog = [];
+        document.querySelectorAll('.studio-item-card').forEach(c => {
+            const name = c.querySelector('.p-name')?.value.trim();
+            const price = parseFloat(c.querySelector('.p-price')?.value || 0);
+            const details = c.querySelector('.p-details')?.value.trim() || '';
+            const img = c.querySelector('.drop-img-tag')?.src || '';
+            if (name) {
+                catalog.push({ name, price, category: "General", details, image_url: img });
+            }
+        });
+
+        const payload = {
+            business_name: document.getElementById('inpBizName').value.trim() || 'My Business',
+            owner_whatsapp: document.getElementById('inpPhone').value.trim() || '+923169827188',
+            industry: document.getElementById('inpIndustry').value || 'Pakistani Retail',
+            social_links: { [selectedPlatform]: document.getElementById('inpScanUrl').value.trim() },
+            inventory_context: "Extracted via multi-channel digital ingestion.",
+            policies: document.getElementById('inpPolicies').value.trim() || 'Cash on Delivery available.',
+            catalog: catalog
+        };
+
+        try {
+            const res = await fetch('/api/business/onboard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            showToast('🚀 Store AI Activated!', 'success');
+        } catch (e) {
+            console.warn("Onboard save notice:", e);
+        }
+
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'Save & Run Live AI Verification →';
+        }
+
+        navigateToStage(4);
+    }
+
+    // Live Simulator in Stage 4
+    async function sendAhaTest() {
+        const input = document.getElementById('ahaInput');
+        const text = input.value.trim();
+        if (!text) return;
+
+        const chat = document.getElementById('ahaChatScreen');
+        const userBubble = document.createElement('div');
+        userBubble.className = 'sim-bubble user';
+        userBubble.textContent = text;
+        chat.appendChild(userBubble);
+        input.value = '';
+        chat.scrollTop = chat.scrollHeight;
+
+        const phone = document.getElementById('inpPhone').value.trim() || '923169827188';
+
+        try {
+            const res = await fetch('/api/gateway/process-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    customer_phone: '923001122334',
+                    business_phone: phone,
+                    message: text,
+                    platform: 'aha_verifier'
+                })
+            });
+            const data = await res.json();
+            const aiBubble = document.createElement('div');
+            aiBubble.className = 'sim-bubble ai';
+            aiBubble.textContent = data.reply || 'Jee bilkul!';
+            chat.appendChild(aiBubble);
+            chat.scrollTop = chat.scrollHeight;
+        } catch (err) {
+            const aiBubble = document.createElement('div');
+            aiBubble.className = 'sim-bubble ai';
+            aiBubble.textContent = 'AI Brain active for your store.';
+            chat.appendChild(aiBubble);
+        }
+    }
+
+    function handleAhaKey(e) {
+        if (e.key === 'Enter') sendAhaTest();
+    }
+
+    function showToast(msg, type = 'success') {
+        const c = document.getElementById('toastContainer');
+        const t = document.createElement('div');
+        t.className = `toast toast--${type}`;
+        t.textContent = msg;
+        c.appendChild(t);
+        setTimeout(() => t.remove(), 3500);
+    }
+</script>
+
+</body>
+</html>

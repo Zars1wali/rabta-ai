@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RABTA AI — Merchant Dashboard</title>
+    <meta name="description" content="Manage your AI sales employee, products, subscriptions, and WhatsApp connection from one dashboard.">
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        /* ── Dashboard-specific styles ── */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            min-height: calc(100vh - 64px);
+            margin-top: 64px;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border);
+            padding: 24px 0;
+            position: sticky;
+            top: 64px;
+            height: calc(100vh - 64px);
+            overflow-y: auto;
+            transition: background var(--duration-normal) var(--ease-out);
+        }
+
+        @media (max-width: 900px) {
+            .sidebar {
+                display: none;
+                position: fixed;
+                top: 64px;
+                left: 0;
+                bottom: 0;
+                width: 260px;
+                z-index: 500;
+                box-shadow: var(--shadow-xl);
+            }
+            .sidebar.open { display: block; animation: fadeIn 0.2s var(--ease-out); }
+        }
+
+        .sidebar__section {
+            padding: 0 16px;
+            margin-bottom: 32px;
+        }
+
+        .sidebar__section-label {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            padding: 0 12px;
+            margin-bottom: 8px;
+        }
+
+        .sidebar__item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s var(--ease-out);
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            font-family: var(--font-sans);
+        }
+
+        .sidebar__item:hover {
+            background: var(--bg-surface-elevated);
+            color: var(--text-primary);
+        }
+
+        .sidebar__item.active {
+            background: var(--accent-surface);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .sidebar__item-icon {
+            font-size: 18px;
+            width: 24px;
+            text-align: center;
+        }
+
+        .sidebar__biz-info {
+            padding: 16px;
+            margin: 0 16px 24px;
+            background: var(--bg-surface-elevated);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+        }
+
+        .sidebar__biz-name {
+            font-weight: 700;
+            font-size: 0.9375rem;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sidebar__biz-phone {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .sidebar__biz-status {
+            margin-top: 8px;
+        }
+
+        /* ── Main Content ── */
+        .main-content {
+            padding: 32px;
+            max-width: 960px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content { padding: 20px 16px; }
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .page-header__title {
+            font-size: 1.75rem;
+            font-weight: 800;
+        }
+
+        .page-header__actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        /* Stats row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        @media (max-width: 768px) {
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* Products grid */
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 20px;
+        }
+
+        /* Product form modal */
+        .product-form-modal .modal {
+            max-width: 560px;
+        }
+
+        .product-form-modal .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 500px) {
+            .product-form-modal .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ── Subscription Cards ── */
+        .sub-current {
+            background: var(--accent-surface);
+            border: 1px solid var(--accent);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .sub-current__info h3 {
+            font-size: 1.125rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .sub-current__info p {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .plans-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .plans-grid {
+                grid-template-columns: 1fr;
+                max-width: 380px;
+            }
+        }
+
+        /* ── Settings ── */
+        .settings-section {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .settings-section__title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ── AI Auto-Sense ── */
+        .sense-flow {
+            max-width: 600px;
+        }
+
+        .sense-flow__step {
+            display: none;
+        }
+        .sense-flow__step.active {
+            display: block;
+            animation: fadeIn 0.3s var(--ease-out);
+        }
+
+        .sense-results {
+            display: grid;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .sense-result-card {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            transition: all 0.2s var(--ease-out);
+        }
+
+        .sense-result-card:hover {
+            border-color: var(--accent);
+        }
+
+        .sense-result-card__info {
+            flex: 1;
+        }
+
+        .sense-result-card__name {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .sense-result-card__price {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            color: var(--accent);
+        }
+
+        .sense-result-card__confidence {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .sense-result-card__actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Mobile sidebar toggle */
+        .mobile-sidebar-btn {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            z-index: 400;
+            width: 48px;
+            height: 48px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+        }
+
+        @media (max-width: 900px) {
+            .mobile-sidebar-btn { display: flex; align-items: center; justify-content: center; }
+        }
+
+        /* Login gate */
+        .login-gate {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .login-card {
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .login-card .onboard-header__logo {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .login-card .onboard-header__logo-dot {
+            width: 8px; height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════ Navigation ═══════ -->
+<nav class="nav" id="dashNav">
+    <div class="nav__inner">
+        <a href="/" class="nav__logo" id="dashNavLogo">
+            <span class="nav__logo-dot"></span>
+            RABTA AI
+        </a>
+        <div class="nav__actions">
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode">
+                <div class="theme-toggle__thumb" id="themeThumb">🌙</div>
+            </button>
+            <a href="/" class="btn btn--ghost btn--sm" id="navBackToSite">← Back to Site</a>
+        </div>
+    </div>
+</nav>
+
+<!-- ═══════ Login Gate ═══════ -->
+<div class="login-gate" id="loginGate">
+    <div class="card login-card" id="loginCard">
+        <div class="onboard-header__logo">
+            <span class="onboard-header__logo-dot"></span>
+            RABTA AI
+        </div>
+        <p class="text-secondary" style="margin-bottom:24px; font-size:0.9375rem;">Enter your business WhatsApp number to access your dashboard.</p>
+        <div class="form-group" style="text-align:left;">
+            <label class="form-label" for="loginPhone">Business WhatsApp Number</label>
+            <input type="tel" class="form-input" id="loginPhone" placeholder="+923001234567">
+        </div>
+        <button class="btn btn--primary" style="width:100%;" id="loginBtn" onclick="loginToDashboard()">Access Dashboard</button>
+        <p class="text-muted" style="margin-top:16px;font-size:0.8125rem;">Don't have an account? <a href="/onboard">Onboard your business</a></p>
+    </div>
+</div>
+
+<!-- ═══════ Dashboard (hidden until login) ═══════ -->
+<div class="dashboard-grid" id="dashboardMain" style="display: none;">
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar__biz-info" id="sidebarBizInfo">
+            <div class="sidebar__biz-name" id="sidebarBizName">Loading...</div>
+            <div class="sidebar__biz-phone" id="sidebarBizPhone"></div>
+            <div class="sidebar__biz-status">
+                <span class="badge badge--accent" id="sidebarStatus">● AI Active</span>
+            </div>
+        </div>
+
+        <div class="sidebar__section">
+            <div class="sidebar__section-label">Dashboard</div>
+            <button class="sidebar__item active" data-tab="overview" onclick="switchTab('overview', this)">
+                <span class="sidebar__item-icon">📊</span> Overview
+            </button>
+            <button class="sidebar__item" data-tab="products" onclick="switchTab('products', this)">
+                <span class="sidebar__item-icon">📦</span> Products
+            </button>
+            <button class="sidebar__item" data-tab="subscription" onclick="switchTab('subscription', this)">
+                <span class="sidebar__item-icon">💳</span> Subscription
+            </button>
+        </div>
+
+        <div class="sidebar__section">
+            <div class="sidebar__section-label">AI Tools</div>
+            <button class="sidebar__item" data-tab="autosense" onclick="switchTab('autosense', this)">
+                <span class="sidebar__item-icon">🧠</span> AI Auto-Sense
+            </button>
+            <button class="sidebar__item" data-tab="visual-search" onclick="switchTab('visual-search', this)">
+                <span class="sidebar__item-icon">📸</span> Customer Images
+            </button>
+            <button class="sidebar__item" data-tab="match-stats" onclick="switchTab('match-stats', this)">
+                <span class="sidebar__item-icon">📊</span> Match Stats
+            </button>
+        </div>
+
+        <div class="sidebar__section">
+            <div class="sidebar__section-label">Account</div>
+            <button class="sidebar__item" data-tab="settings" onclick="switchTab('settings', this)">
+                <span class="sidebar__item-icon">⚙️</span> Settings
+            </button>
+        </div>
+    </aside>
+
+    <!-- ── Main Content ── -->
+    <main class="main-content" id="mainContent">
+
+        <!-- ══ Overview Tab ══ -->
+        <div class="tab-panel active" id="tab-overview">
+            <div class="page-header">
+                <h1 class="page-header__title">Dashboard</h1>
+                <div class="page-header__actions">
+                    <a href="http://localhost:3001" target="_blank" class="btn btn--secondary btn--sm" id="connectWABtn">🔗 Connect WhatsApp</a>
+                </div>
+            </div>
+
+            <div class="stats-row" id="statsRow">
+                <div class="stat-card" id="statProducts">
+                    <div class="stat-card__label">Total Products</div>
+                    <div class="stat-card__value" id="statProductsVal">0</div>
+                </div>
+                <div class="stat-card" id="statAIStatus">
+                    <div class="stat-card__label">AI Status</div>
+                    <div class="stat-card__value" style="color: var(--accent); font-size:1.5rem;" id="statAIStatusVal">● Active</div>
+                </div>
+                <div class="stat-card" id="statPlan">
+                    <div class="stat-card__label">Current Plan</div>
+                    <div class="stat-card__value" style="font-size:1.5rem;" id="statPlanVal">Free</div>
+                </div>
+                <div class="stat-card" id="statIndustry">
+                    <div class="stat-card__label">Industry</div>
+                    <div class="stat-card__value" style="font-size:1.125rem;" id="statIndustryVal">—</div>
+                </div>
+            </div>
+
+            <div class="card card--flat" style="padding: 32px; text-align:center; border: 1px dashed var(--border);">
+                <h3 style="margin-bottom: 8px;">Quick Actions</h3>
+                <p class="text-muted" style="margin-bottom: 20px; font-size: 0.9375rem;">Manage your AI store from here.</p>
+                <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+                    <button class="btn btn--primary btn--sm" onclick="switchTab('products', document.querySelector('[data-tab=products]'))" id="quickAddProduct">📦 Manage Products</button>
+                    <button class="btn btn--secondary btn--sm" onclick="switchTab('autosense', document.querySelector('[data-tab=autosense]'))" id="quickAutoSense">🧠 AI Auto-Sense</button>
+                    <button class="btn btn--secondary btn--sm" onclick="switchTab('settings', document.querySelector('[data-tab=settings]'))" id="quickSettings">⚙️ Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ Products Tab ══ -->
+        <div class="tab-panel" id="tab-products">
+            <div class="page-header">
+                <h1 class="page-header__title">Products</h1>
+                <div class="page-header__actions">
+                    <button class="btn btn--primary btn--sm" onclick="openProductModal()" id="addProductBtn">+ Add Product</button>
+                </div>
+            </div>
+
+            <div id="productsContainer">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- ══ Subscription Tab ══ -->
+        <div class="tab-panel" id="tab-subscription">
+            <div class="page-header">
+                <h1 class="page-header__title">Subscription</h1>
+            </div>
+
+            <div class="sub-current" id="subCurrent">
+                <div class="sub-current__info">
+                    <h3 id="subCurrentPlan">Free Starter Plan</h3>
+                    <p>You're using the free tier. Upgrade anytime to unlock unlimited features.</p>
+                </div>
+                <span class="badge badge--accent">Active</span>
+            </div>
+
+            <h3 style="margin-bottom: 20px;">Available Plans</h3>
+            <div class="plans-grid">
+                <div class="pricing-card" id="subFree">
+                    <div class="pricing-card__name">Starter</div>
+                    <div class="pricing-card__price">Free</div>
+                    <ul class="pricing-card__features">
+                        <li>1 WhatsApp number</li>
+                        <li>Up to 20 products</li>
+                        <li>100 AI replies/month</li>
+                        <li>Urdu + English</li>
+                    </ul>
+                    <button class="btn btn--secondary" style="width:100%;" disabled>Current Plan</button>
+                </div>
+                <div class="pricing-card pricing-card--featured" id="subGrowth">
+                    <div class="pricing-card__name">Growth</div>
+                    <div class="pricing-card__price">PKR 2,999<span class="pricing-card__period">/mo</span></div>
+                    <ul class="pricing-card__features">
+                        <li>2 WhatsApp numbers</li>
+                        <li>Unlimited products</li>
+                        <li>Unlimited AI replies</li>
+                        <li>Instagram + TikTok</li>
+                        <li>AI auto-sense</li>
+                    </ul>
+                    <button class="btn btn--primary" style="width:100%;" onclick="showToast('Payment integration coming soon!', 'info')" id="upgradeGrowthBtn">Upgrade</button>
+                </div>
+                <div class="pricing-card" id="subPro">
+                    <div class="pricing-card__name">Pro</div>
+                    <div class="pricing-card__price">PKR 7,999<span class="pricing-card__period">/mo</span></div>
+                    <ul class="pricing-card__features">
+                        <li>5 WhatsApp numbers</li>
+                        <li>Unlimited everything</li>
+                        <li>Voice call AI</li>
+                        <li>Custom AI personality</li>
+                        <li>API access</li>
+                    </ul>
+                    <button class="btn btn--secondary" style="width:100%;" onclick="showToast('Contact us for Pro plan!', 'info')" id="upgradeProBtn">Contact Sales</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ AI Auto-Sense Tab ══ -->
+        <div class="tab-panel" id="tab-autosense">
+            <div class="page-header">
+                <h1 class="page-header__title">AI Auto-Sense</h1>
+            </div>
+
+            <p class="text-secondary" style="margin-bottom: 32px;">
+                Connect your social media profile and let AI automatically find and import your products.
+                Review each product before it goes live.
+            </p>
+
+            <div class="sense-flow" id="senseFlow">
+                <!-- Step 1: Connect -->
+                <div class="sense-flow__step active" id="senseStep1">
+                    <h3 style="margin-bottom: 20px;">Choose a platform to scan</h3>
+
+                    <div style="display:grid; gap:12px; margin-bottom:24px;">
+                        <div class="sense-card" onclick="selectSensePlatform('instagram')" id="senseInstagram" style="cursor:pointer;">
+                            <div class="sense-card__icon">📸</div>
+                            <div class="sense-card__info">
+                                <div class="sense-card__title">Instagram Profile</div>
+                                <div class="sense-card__desc">Scan your posts and reels for product listings</div>
+                            </div>
+                        </div>
+                        <div class="sense-card" onclick="selectSensePlatform('facebook')" id="senseFacebook" style="cursor:pointer;">
+                            <div class="sense-card__icon">📘</div>
+                            <div class="sense-card__info">
+                                <div class="sense-card__title">Facebook Page</div>
+                                <div class="sense-card__desc">Import products from your Facebook shop or posts</div>
+                            </div>
+                        </div>
+                        <div class="sense-card" onclick="selectSensePlatform('tiktok')" id="senseTikTok" style="cursor:pointer;">
+                            <div class="sense-card__icon">🎵</div>
+                            <div class="sense-card__info">
+                                <div class="sense-card__title">TikTok Profile</div>
+                                <div class="sense-card__desc">Find products featured in your TikTok videos</div>
+                            </div>
+                        </div>
+                        <div class="sense-card" onclick="selectSensePlatform('whatsapp_catalog')" id="senseWhatsApp" style="cursor:pointer;">
+                            <div class="sense-card__icon">💬</div>
+                            <div class="sense-card__info">
+                                <div class="sense-card__title">WhatsApp Business Catalog</div>
+                                <div class="sense-card__desc">Import your existing WhatsApp Business product catalog</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Enter URL & Scan -->
+                <div class="sense-flow__step" id="senseStep2">
+                    <button class="btn btn--ghost" onclick="goSenseStep(1)" style="margin-bottom:20px;">← Back</button>
+                    <h3 style="margin-bottom:20px;" id="senseStep2Title">Enter your profile URL</h3>
+                    <div class="form-group">
+                        <label class="form-label" for="senseUrl">Profile URL</label>
+                        <input type="url" class="form-input" id="senseUrl" placeholder="https://instagram.com/your_shop">
+                    </div>
+                    <button class="btn btn--primary" onclick="startSenseScan()" id="startScanBtn">🧠 Start AI Scan</button>
+                </div>
+
+                <!-- Step 3: Scanning Animation -->
+                <div class="sense-flow__step" id="senseStep3">
+                    <div class="scan-animation">
+                        <div class="scan-animation__rings">
+                            <div class="scan-animation__ring"></div>
+                            <div class="scan-animation__ring"></div>
+                            <div class="scan-animation__ring"></div>
+                            <div class="scan-animation__icon">🧠</div>
+                        </div>
+                        <h3>AI is scanning your profile...</h3>
+                        <p class="text-muted">Looking for products, prices, and descriptions. This usually takes 5–15 seconds.</p>
+                    </div>
+                </div>
+
+                <!-- Step 4: Results -->
+                <div class="sense-flow__step" id="senseStep4">
+                    <h3 style="margin-bottom:8px;">Products Found</h3>
+                    <p class="text-muted" style="margin-bottom:24px;">Review each product. Approve to add to your catalog, or skip items you don't want.</p>
+
+                    <div class="sense-results" id="senseResults">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <div style="margin-top:24px; display:flex; gap:12px; flex-wrap:wrap;">
+                        <button class="btn btn--primary" onclick="approveAllSenseProducts()" id="approveAllBtn">✓ Approve All & Import</button>
+                        <button class="btn btn--ghost" onclick="goSenseStep(1)" id="senseScanAgain">Scan Another Profile</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ Customer Images Tab ══ -->
+        <div class="tab-panel" id="tab-visual-search">
+            <div class="page-header">
+                <h1 class="page-header__title">Customer Images</h1>
+            </div>
+            <p class="text-secondary" style="margin-bottom: 24px;">
+                When a customer sends a photo and your AI can't confidently match it to your catalog, it's logged here.
+                These are real purchase signals — customers asking about something you might sell.
+            </p>
+            <div id="unmatchedImagesContainer">
+                <p class="text-muted" style="text-align: center; padding: 48px 0;">No unmatched images found yet.</p>
+            </div>
+        </div>
+
+        <!-- ══ Match Stats Tab ══ -->
+        <div class="tab-panel" id="tab-match-stats">
+            <div class="page-header">
+                <h1 class="page-header__title">Match Stats</h1>
+            </div>
+            <div id="matchStatsContainer">
+                <div class="stats-row" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 24px;">
+                    <div class="stat-card">
+                        <div class="stat-card__label">Total Searches</div>
+                        <div class="stat-card__value" id="statTotalSearches">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card__label">High Match Rate</div>
+                        <div class="stat-card__value" id="statHighMatchRate">0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card__label">Avg Confidence</div>
+                        <div class="stat-card__value" id="statAvgConfidence">0.00</div>
+                    </div>
+                </div>
+                <div id="matchHealthAlert"></div>
+                <div class="card card--flat" style="padding: 32px; text-align: center; border: 1px dashed var(--border); margin-top: 24px;">
+                    <h3 style="margin-bottom: 8px;">Distribution</h3>
+                    <div id="matchDistribution" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px;">
+                        <div>
+                            <div style="font-size: 2rem; font-weight: 800; color: var(--accent);" id="distHigh">0</div>
+                            <div class="text-muted" style="font-size: 0.8125rem;">High</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 2rem; font-weight: 800; color: var(--accent);" id="distMedium">0</div>
+                            <div class="text-muted" style="font-size: 0.8125rem;">Medium</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 2rem; font-weight: 800; color: var(--accent);" id="distLow">0</div>
+                            <div class="text-muted" style="font-size: 0.8125rem;">Low</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 2rem; font-weight: 800; color: var(--accent);" id="distNone">0</div>
+                            <div class="text-muted" style="font-size: 0.8125rem;">None</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ Settings Tab ══ -->
+        <div class="tab-panel" id="tab-settings">
+            <div class="page-header">
+                <h1 class="page-header__title">Settings</h1>
+            </div>
+
+            <div class="settings-section" id="settingsBizInfo">
+                <div class="settings-section__title">🏪 Business Information</div>
+                <div class="form-group">
+                    <label class="form-label" for="settBizName">Business Name</label>
+                    <input type="text" class="form-input" id="settBizName">
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                    <div class="form-group">
+                        <label class="form-label" for="settBizPhone">Business WhatsApp</label>
+                        <input type="tel" class="form-input" id="settBizPhone" disabled style="opacity:0.6;">
+                        <div class="form-hint">Cannot be changed. Contact support.</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="settOwnerPhone">Owner WhatsApp</label>
+                        <input type="tel" class="form-input" id="settOwnerPhone">
+                    </div>
+                </div>
+                <button class="btn btn--primary btn--sm" onclick="saveSettings()" id="saveSettingsBtn">Save Changes</button>
+            </div>
+
+            <div class="settings-section" id="settingsWhatsApp">
+                <div class="settings-section__title">🔗 WhatsApp Connection</div>
+                <p class="text-secondary" style="margin-bottom:16px; font-size:0.9375rem;">
+                    Your WhatsApp is connected via QR code. If you need to reconnect or link a different phone, open the QR page.
+                </p>
+                <a href="http://localhost:3001" target="_blank" class="btn btn--secondary btn--sm" id="reconnectWABtn">Open QR Scanner</a>
+            </div>
+
+            <div class="settings-section" id="settingsPolicies">
+                <div class="settings-section__title">📋 Store Policies</div>
+                <div class="form-group">
+                    <label class="form-label" for="settPolicies">Delivery, Returns, COD Policies</label>
+                    <textarea class="form-input" id="settPolicies" rows="3" placeholder="Enter your store policies..."></textarea>
+                </div>
+                <button class="btn btn--primary btn--sm" onclick="savePolicies()" id="savePoliciesBtn">Update Policies</button>
+            </div>
+
+            <div class="settings-section" style="border-color: var(--danger); opacity:0.6;">
+                <div class="settings-section__title" style="color: var(--danger);">⚠️ Danger Zone</div>
+                <p class="text-muted" style="margin-bottom:16px; font-size:0.875rem;">Disconnecting will stop the AI from replying to your customers.</p>
+                <button class="btn btn--danger btn--sm" onclick="showToast('Contact support to deactivate.', 'warning')" id="deactivateBtn">Deactivate AI</button>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Mobile sidebar toggle -->
+<button class="mobile-sidebar-btn" id="mobileSidebarBtn" onclick="toggleMobileSidebar()" aria-label="Toggle sidebar">☰</button>
+
+<!-- ═══════ Product Modal ═══════ -->
+<div class="modal-overlay" id="productModal">
+    <div class="modal product-form-modal">
+        <h3 class="modal__title" id="productModalTitle">Add Product</h3>
+        <div class="modal__body" style="color: var(--text-secondary); margin-bottom:24px;">
+            <div class="form-group">
+                <label class="form-label" for="modalProdName">Product Name *</label>
+                <input type="text" class="form-input" id="modalProdName" placeholder="e.g. Premium Lawn 3-Piece">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="modalProdPrice">Price (PKR) *</label>
+                    <input type="number" class="form-input" id="modalProdPrice" placeholder="4500">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="modalProdCategory">Category</label>
+                    <input type="text" class="form-input" id="modalProdCategory" placeholder="Women's Wear">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="modalProdDetails">Description (optional)</label>
+                <textarea class="form-input" id="modalProdDetails" rows="2" placeholder="Embroidered lawn with chiffon dupatta..."></textarea>
+            </div>
+        </div>
+        <div class="modal__actions">
+            <button class="btn btn--ghost" onclick="closeProductModal()" id="modalCancelBtn">Cancel</button>
+            <button class="btn btn--primary" onclick="saveProduct()" id="modalSaveBtn">Add Product</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════ Delete Confirm Modal ═══════ -->
+<div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+        <h3 class="modal__title">Delete Product</h3>
+        <p class="modal__body">Are you sure you want to delete <strong id="deleteProductName"></strong>? This action cannot be undone.</p>
+        <div class="modal__actions">
+            <button class="btn btn--ghost" onclick="closeDeleteModal()" id="deleteCancelBtn">Cancel</button>
+            <button class="btn btn--danger" onclick="confirmDelete()" id="deleteConfirmBtn">Delete Product</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/static/dashboard.js"></script>
+
+</body>
+</html>

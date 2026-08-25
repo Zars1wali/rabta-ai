@@ -1,0 +1,118 @@
+{
+ "conversations": {
+  "923009998888_923040124445": [
+   {
+    "role": "customer",
+    "text": "bhai ye Canik pistol kitne ki hai?"
+   },
+   {
+    "role": "assistant",
+    "text": "Pistols ke exact price ke liye call ya license verification"
+   }
+  ],
+  "923005551234_923040124445": [
+   {
+    "role": "customer",
+    "text": "bhai ye Canik pistol kitne ki hai?"
+   },
+   {
+    "role": "assistant",
+    "text": "Firearms ki pricing aur stock details ke liye"
+   },
+   {
+    "role": "customer",
+    "text": "iska kya scene hai? deal ho jayegi kya?"
+   },
+   {
+    "role": "assistant",
+    "text": "Deal bilkul ho jayegi lekin pehle"
+   },
+   {
+    "role": "customer",
+    "text": "ok bhai dikha do jo hai budget mein"
+   },
+   {
+    "role": "assistant",
+    "text": "Tactical gear aur accessories mein kafi options hain budget"
+   }
+  ],
+  "923005559999_923169827188": [
+   {
+    "role": "customer",
+    "text": "kya haal hai? lawn suit hai kya?"
+   },
+   {
+    "role": "assistant",
+    "text": "Alhamdulillah main theek thak! Haan"
+   }
+  ],
+  "61379545444551_923040124445": [
+   {
+    "role": "customer",
+    "text": "mujhe gun chaiye?"
+   },
+   {
+    "role": "assistant",
+    "text": "(Roman Urdu):\n       Option"
+   },
+   {
+    "role": "customer",
+    "text": "hello"
+   },
+   {
+    "role": "assistant",
+    "text": "Hello! What are you looking for today?"
+   },
+   {
+    "role": "customer",
+    "text": "hello"
+   },
+   {
+    "role": "assistant",
+    "text": "Haan ji, bolain? Gun ke ba"
+   },
+   {
+    "role": "customer",
+    "text": "apke pass konse guns hain?"
+   },
+   {
+    "role": "assistant",
+    "text": "Hamare paas Canik MET"
+   },
+   {
+    "role": "customer",
+    "text": "iske ilawa"
+   },
+   {
+    "role": "assistant",
+    "text": "Pistols mein toh filhal yahi major"
+   },
+   {
+    "role": "customer",
+    "text": "assault rifles mil jaengay?"
+   },
+   {
+    "role": "assistant",
+    "text": "Filhal humare paas 9mm handguns"
+   },
+   {
+    "role": "customer",
+    "text": "kon kon se"
+   },
+   {
+    "role": "assistant",
+    "text": "Canik METE SFx, Beretta 9"
+   },
+   {
+    "role": "customer",
+    "text": "kia rate hain inke?"
+   }
+  ]
+ },
+ "timestamps": {
+  "923009998888_923040124445": 1787663322.9953384,
+  "923005551234_923040124445": 1787663360.8404152,
+  "923005559999_923169827188": 1787663388.785677,
+  "61379545444551_923040124445": 1787668256.5331452
+ }
+}
