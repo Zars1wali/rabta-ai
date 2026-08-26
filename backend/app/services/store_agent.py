@@ -74,9 +74,12 @@ Silently analyze the customer's state before answering (Curious, Ready to Buy, C
 3. ZERO EMOJI SPAM & PLAIN TEXT:
    - Absolutely NO decorative emojis.
    - Do NOT use markdown bold/headers/bullets (*, **, #, -). Type like a human on a phone keyboard.
-4. LANGUAGE MATCHING:
-   - Match the customer's language: Roman Urdu for Roman Urdu, Urdu for Urdu, English for English, Pashto for Pashto.
-   - Do not overuse "sir" or force "bhai" into every single sentence. Use natural Pakistani retail phrasing.
+4. LANGUAGE & SCRIPT RULES (PAKISTANI URDU ONLY):
+   - ABSOLUTE BAN ON DEVANAGARI / HINDI SCRIPT:
+     * NEVER EVER output Devanagari script characters (e.g. जानी, है, के, क्या).
+     * NEVER use Hindi vocabulary (e.g. 'namaste', 'dhanyawad', 'kripya', 'mitra', 'shuddh').
+     * Always communicate in natural Pakistani Roman Urdu (English alphabet like "kya haal hai", "mashhoor hai", "jaani jaati hai"), authentic Urdu script (اردو), or English.
+   - Do not overuse "sir" or force "bhai" into every sentence. Use natural Pakistani retail phrasing.
 5. NO INVENTED INFORMATION:
    - Never invent stock, prices, or specs not present in the verified catalog below.
    - If asked directly if you are AI, be transparent and helpful without being defensive.
@@ -99,12 +102,27 @@ Use ONLY this verified data for factual prices, specs, and policies:
 """
 
     # ------------------------------------------------------------------
-    # Post-processing: strip any markdown or emojis that slipped through
+    # Post-processing: strip any markdown, emojis, or Devanagari Hindi artifacts
     # ------------------------------------------------------------------
 
     @staticmethod
     def _strip_markdown(text: str) -> str:
-        """Remove markdown formatting and decorative emoji spam that looks bot-like on WhatsApp."""
+        """Remove markdown formatting, decorative emoji spam, and Devanagari script."""
+        # 1. Eliminate any Devanagari / Hindi script artifacts if model tokenizes them
+        if re.search(r'[\u0900-\u097F]', text):
+            hindi_fixes = {
+                'जानी': 'jaani', 'जाती': 'jaati', 'है': 'hai', 'हैं': 'hain',
+                'के': 'ke', 'की': 'ki', 'का': 'ka', 'में': 'mein', 'से': 'se',
+                'को': 'ko', 'पर': 'par', 'नहीं': 'nahi', 'भी': 'bhi', 'और': 'aur',
+                'यह': 'yeh', 'वह': 'woh', 'आप': 'aap', 'लिए': 'liye', 'किया': 'kiya',
+                'गया': 'gaya', 'थी': 'thi', 'था': 'tha', 'थे': 'the'
+            }
+            for h_word, r_word in hindi_fixes.items():
+                text = text.replace(h_word, r_word)
+            # Remove any remaining stray Devanagari characters
+            text = re.sub(r'[\u0900-\u097F]+', '', text)
+
+        # 2. Markdown stripping
         text = re.sub(r'\*{1,2}(.*?)\*{1,2}', r'\1', text)  # *bold* and **bold**
         text = re.sub(r'_{1,2}(.*?)_{1,2}', r'\1', text)    # _italic_ and __italic__
         text = re.sub(r'^#{1,3}\s+', '', text, flags=re.MULTILINE)  # ### headers
@@ -112,7 +130,8 @@ Use ONLY this verified data for factual prices, specs, and policies:
         text = re.sub(r'^\d+\.\s+', '', text, flags=re.MULTILINE)    # numbered lists
         text = re.sub(r'`{1,3}[^`]*`{1,3}', '', text)               # code blocks
         text = re.sub(r'\n{3,}', '\n\n', text)                       # excess newlines
-        # Strip common decorative emojis if model outputted them
+
+        # 3. Strip decorative emojis
         emoji_pattern = re.compile(
             r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F700-\U0001F77F'
             r'\U0001F780-\U0001F7FF\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FA6F'
