@@ -135,6 +135,7 @@ describe('Web Server API Routes', () => {
       } as unknown as MessageRepository;
 
       const mockSessionRepo = {
+        getSession: vi.fn().mockResolvedValue({ id: sessionId, tenantId: REWILT_TENANT_ID, tokensUsed: 0, costMinor: 0 }),
         updateTurn: vi.fn().mockResolvedValue({ id: sessionId })
       } as unknown as SessionRepository;
 

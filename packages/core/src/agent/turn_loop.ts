@@ -14,6 +14,7 @@ import type {
 } from '../db/repositories.js';
 import { renderSystemPolicy } from './policy.js';
 import { sanitizeReply } from './sanitizer.js';
+import { defaultBudgetGuard } from '../abuse/budget_guard.js';
 
 export type ToolExecutionHandler = (
   toolCall: LlmToolCall,
@@ -56,10 +57,56 @@ export class AgentTurnExecutor {
     const persona = tenant?.config.persona;
     const storePolicy = tenant?.config.policy;
 
-    // 2. Fetch last 15 history messages
+    // 2. Budget & Abuse Guard Check
+    const session = await this.sessionRepo.getSession(input.tenantId, input.sessionId);
+    if (tenant && session) {
+      const budgetCheck = defaultBudgetGuard.check({
+        tenantConfig: tenant.config,
+        sessionTokensUsed: session.tokensUsed,
+        locale: input.locale
+      });
+
+      if (!budgetCheck.allowed && budgetCheck.fallbackMessage) {
+        // Persist visitor input and degraded agent reply
+        await this.messageRepo.addMessage({
+          tenantId: input.tenantId,
+          sessionId: input.sessionId,
+          role: 'visitor',
+          content: input.message.content
+        });
+
+        await this.messageRepo.addMessage({
+          tenantId: input.tenantId,
+          sessionId: input.sessionId,
+          role: 'agent',
+          content: budgetCheck.fallbackMessage
+        });
+
+        await this.sessionRepo.updateTurn(input.tenantId, input.sessionId, {
+          stage: 'handoff',
+          tokensUsed: 0,
+          costMinor: 0
+        });
+
+        return {
+          chunks: [budgetCheck.fallbackMessage],
+          stage: 'handoff',
+          toolCalls: [],
+          events: [],
+          leadDelta: null,
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            costMinor: 0
+          }
+        };
+      }
+    }
+
+    // 3. Fetch last 15 history messages
     const history = await this.messageRepo.getRecentHistory(input.tenantId, input.sessionId, 15);
 
-    // 3. Render dynamic system policy (Catalog is strictly NOT in prompt)
+    // 4. Render dynamic system policy (Catalog is strictly NOT in prompt)
     const allowedTransitions: FunnelStage[] = this.getAllowedTransitions(input.stage);
     const systemPrompt = renderSystemPolicy({
       tenantName,

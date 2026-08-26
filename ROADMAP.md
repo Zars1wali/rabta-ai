@@ -130,11 +130,11 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Add factual objection blocks (refusal to fabricate scarcity or false urgency).
   - [x] *Acceptance:* Agent advances through stages sequentially and refuses fake discount/urgency tactics.
 
-- [ ] **WP-10: Abuse Layer & Session Budget Guardrails**
-  - [ ] Implement session token budgets (`tokenBudgetPerSession`), IP rate limiting, and origin protection.
-  - [ ] Global spend cap check (`SALESOPS_GLOBAL_SPEND_CAP_EUR`).
-  - [ ] Degradation fallback when token budget is exhausted.
-  - [ ] *Acceptance:* Session exceeding 40k tokens gracefully degrades without throwing unhandled errors.
+- [x] **WP-10: Abuse Layer & Session Budget Guardrails**
+  - [x] Implement session token budgets (`tokenBudgetPerSession`), IP rate limiting, and origin protection.
+  - [x] Global spend cap check (`SALESOPS_GLOBAL_SPEND_CAP_EUR`).
+  - [x] Degradation fallback when token budget is exhausted.
+  - [x] *Acceptance:* Session exceeding 40k tokens gracefully degrades without throwing unhandled errors.
 
 - [ ] **WP-11: CI Integrity & Adversarial Eval Suites**
   - [ ] Build `packages/eval` test runner for automated CI execution:
