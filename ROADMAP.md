@@ -110,15 +110,19 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
 ### Milestone 1: M1 — The Close (Tools, Funnel, Abuse Controls & Stripe)
 > **Goal:** Enable the agent to autonomously qualify leads, execute tool-based lookups, handle objections, and close into Stripe subscriptions or €50 previews with full CI eval suites.
 
-- [ ] **WP-08: Server-Resolved Tools & Audit Trail**
-  - [ ] Implement server-side tools in `core/agent/tools`:
-    - [ ] `search_catalog(query, category, price_range)`
-    - [ ] `quote(sku, quantity, billing_interval)`
-    - [ ] `get_policy(topic)`
-  - [ ] Zod schema validation for all tool inputs and outputs.
-  - [ ] Record every tool invocation into `tool_calls` table (input, output, latency, status).
-  - [ ] Cap at max 2 model roundtrips per user turn.
-  - [ ] *Acceptance:* Model correctly answers pricing questions only via `quote`/`search_catalog` tool results.
+- [x] **WP-08: Server-Resolved Tools & Audit Trail**
+  - [x] Implement server-side tools in `core/agent/tools`:
+    - [x] `search_catalog(query, category, price_range)`
+    - [x] `quote(sku, quantity, billing_interval)`
+    - [x] `get_policy(topic)`
+    - [x] `create_subscription_checkout(sku, email, locale)`
+    - [x] `create_preview_checkout(email, shop_url, locale)`
+    - [x] `capture_lead(delta)` (strictly consent-gated)
+    - [x] `request_human(reason)` (transitions stage to handoff)
+  - [x] Zod schema validation for all tool inputs and outputs.
+  - [x] Record every tool invocation into `tool_calls` table (input, output, latency, status).
+  - [x] Cap at max 2 model roundtrips per user turn.
+  - [x] *Acceptance:* Model correctly answers pricing questions only via `quote`/`search_catalog` tool results.
 
 - [ ] **WP-09: Funnel State Machine & Objection Handling**
   - [ ] Implement server-controlled funnel stage progression:
