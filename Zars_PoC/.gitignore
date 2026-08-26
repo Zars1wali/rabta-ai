@@ -1,33 +1,9 @@
 # Environment and Secrets
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
 .env.*.local
 *.pem
 *.key
-
-# Next.js
-.next/
-out/
-build/
-.vercel
-*.tsbuildinfo
-
-# Node.js
-node_modules/
-jspm_packages/
-.npm
-.eslintcache
-.stylelintcache
-.rzcache
-yarn-debug.log*
-yarn-error.log*
-npm-debug.log*
-pnpm-debug.log*
-lerna-debug.log*
-.pnpm-debug.log*
 
 # Python
 venv/
@@ -40,19 +16,26 @@ __pycache__/
 .coverage
 htmlcov/
 dist/
+build/
 *.egg-info/
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
 # WhatsApp Gateway Session & State (CRITICAL: Contains linked WhatsApp credentials)
-**/auth_session/
-**/gateway.log
-**/gateway_err.log
+whatsapp-gateway/auth_session/
+whatsapp-gateway/gateway.log
+whatsapp-gateway/gateway_err.log
 auth_session/
 
 # Logs & Temporary Files
 *.log
-**/backend_run.log
-**/backups/*.sql
-**/backups/*.gz
+backend/backend_run.log
+backend/backups/*.sql
+backend/backups/*.gz
 backups/
 
 # Database / SQLite / Local storage
@@ -67,9 +50,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# Docker volume data mounts
+# Docker volume data mounts (if any created locally)
 caddy_data/
 caddy_config/
 postgres_data/
-qdrant_data/
-redis_data/
