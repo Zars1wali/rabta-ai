@@ -98,12 +98,12 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Persist turns, tokens used, cost minor, and messages to PostgreSQL.
   - [x] *Acceptance:* `curl` to `/chat` yields valid SSE stream with tokens and updates session state in DB.
 
-- [ ] **WP-07: Web Widget UI & Compliance Embed**
-  - [ ] Build headless React hook `useSalesOpsChat` and embeddable UI widget in `packages/web/ui`.
-  - [ ] Guarantee EU AI Act Art. 50 disclosure on first message ("AI sales assistant" badge/header).
-  - [ ] Build embed script with typing animation and responsive modal.
-  - [ ] Automated build artifact audit checking for leaked environment variables or API keys.
-  - [ ] *Acceptance:* Widget runs embedded on staging site, starts chat, shows AI badge, and stores transcripts.
+- [x] **WP-07: Web Widget UI & Compliance Embed**
+  - [x] Build headless React hook `useSalesOpsChat` and embeddable UI widget in `packages/web/ui`.
+  - [x] Guarantee EU AI Act Art. 50 disclosure on first message ("AI sales assistant" badge/header).
+  - [x] Build embed script with typing animation and responsive modal.
+  - [x] Automated build artifact audit checking for leaked environment variables or API keys.
+  - [x] *Acceptance:* Widget runs embedded on staging site, starts chat, shows AI badge, and stores transcripts.
 
 ---
 
