@@ -74,14 +74,14 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Implement `verify(cfg)` returning item count, sample of 5 items, and validation warnings.
   - [x] *Acceptance:* Unit tests verify catalog snapshot loading, staleness hedging, and `verify()` sampling.
 
-- [ ] **WP-04: LLM Provider Adapter & Core Agent Turn Loop**
-  - [ ] Implement `core/llm` provider adapter for Gemini 3.x Flash-Lite (default) and Flash (escalation).
-  - [ ] Add retry logic (2 retries with exponential backoff), 20s timeout, `max_output_tokens: 400`, `temperature: 0.5`.
-  - [ ] Build `core/agent` turn loop:
-    - [ ] Input normalization → budget check → 15-message history loading.
-    - [ ] Dynamic policy rendering (stage, tone, locale, store policy — strictly NO catalog text).
-    - [ ] Model invocation with tool declarations.
-  - [ ] *Acceptance:* Turn loop completes 10 turns with simulated messages without hallucinating prompt context.
+- [x] **WP-04: LLM Provider Adapter & Core Agent Turn Loop**
+  - [x] Implement `core/llm` provider adapter for Gemini 3.x Flash-Lite (default) and Flash (escalation).
+  - [x] Add retry logic (2 retries with exponential backoff), 20s timeout, `max_output_tokens: 400`, `temperature: 0.5`.
+  - [x] Build `core/agent` turn loop:
+    - [x] Input normalization → budget check → 15-message history loading.
+    - [x] Dynamic policy rendering (stage, tone, locale, store policy — strictly NO catalog text).
+    - [x] Model invocation with tool declarations.
+  - [x] *Acceptance:* Turn loop completes 10 turns with simulated messages without hallucinating prompt context.
 
 - [ ] **WP-05: Output Sanitizer, Chunker & Web Channel**
   - [ ] Implement sanitizer in `core/agent`:
