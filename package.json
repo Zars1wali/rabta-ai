@@ -1,0 +1,30 @@
+{
+  "name": "rabta-ai-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r --filter=!./Zars_PoC/** run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:boundaries": "eslint .",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "@types/node": "^22.13.4",
+    "eslint": "^9.20.0",
+    "eslint-plugin-import-x": "^4.6.1",
+    "globals": "^15.15.0",
+    "prettier": "^3.5.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.0",
+    "vitest": "^3.0.5",
+    "zod": "^3.24.2"
+  },
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

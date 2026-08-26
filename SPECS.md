@@ -311,6 +311,18 @@ export interface Channel {
 The chunker and typing behaviour live behind this, not in the agent. WhatsApp gets 280-char
 bursts with a 1200 ms gap; web gets one bubble with a typing indicator.
 
+#### 1.5 `StoreIdentity` — how merchants and shoppers authenticate
+
+```ts
+export interface StoreIdentityVerifier {
+  readonly kind: "estore_jwt" | "woocommerce_oauth" | "shopify_oauth" | "magic_link";
+  verifyMerchantSession(payload: unknown): Promise<{ ok: boolean; tenantId: string; ownerEmail: string }>;
+  verifyShopperSession?(token: string, tenantId: string): Promise<{ customerId: string; email?: string } | null>;
+}
+```
+
+Decouples the core agent from specific store auth engines while enabling seamless e-store checkout auto-provisioning, merchant single sign-on (SSO), and authenticated shopper personalization.
+
 ---
 
 ### 2. What is shared, always
@@ -601,6 +613,13 @@ export interface Channel {
   readonly supportsMedia: { image: boolean; audio: boolean };
   normalize(raw: unknown): Promise<InboundMessage>;
   deliver(sessionId: string, chunks: string[]): Promise<void>;
+}
+
+// ---------- identity / auth ----------
+export interface StoreIdentityVerifier {
+  readonly kind: "estore_jwt" | "woocommerce_oauth" | "shopify_oauth" | "magic_link";
+  verifyMerchantSession(payload: unknown): Promise<{ ok: boolean; tenantId: string; ownerEmail: string }>;
+  verifyShopperSession?(token: string, tenantId: string): Promise<{ customerId: string; email?: string } | null>;
 }
 
 // ---------- agent ----------
@@ -1818,6 +1837,18 @@ Options to script before the first sales call:
 2. Migrate the existing number. Higher value to them, more risk, charge more.
 3. Web widget only. No number, no blocker — which is why Starter exists and why the widget
    ships before WhatsApp.
+
+---
+
+### 13. E-Store Distribution & Embedded Auth Handshake
+
+Selling Sales Ops directly through an e-store (or marketplace/plugin platform) unlocks an automated **"Checkout → Auto-Provision → SSO Onboard"** journey:
+
+1. **Product Listing & Checkout**: The e-store lists Sales Ops plans (Lite, Standard, Europe, €50 Preview) as digital subscription/service products.
+2. **Order Webhook (`POST /api/salesops/provision`)**: Upon order completion, the e-store emits a signed webhook payload with `{ orderId, userId, sellerId, tenantId, tier, customerEmail }`.
+3. **Auto-Provisioning**: SalesOps provisions a `tenants` record, establishes `entitlements`, and generates a time-limited signed launch token (`JWT`).
+4. **Merchant SSO**: The merchant is redirected into the Onboarding Wizard (or embeds the agent portal in the e-store merchant dashboard) authenticated via the launch token.
+5. **Logged-in Shopper Context**: On storefront PDP/cart pages, the widget can optionally receive an HMAC-signed shopper token (`customer_id`, `name`) for contextual assistance.
 
 ---
 
