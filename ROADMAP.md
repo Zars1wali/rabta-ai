@@ -90,13 +90,13 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Build `channels/web` formatting for single-bubble stream with typing indicators.
   - [x] *Acceptance:* Sanitizer test suite passes regex edge cases and emoji constraints.
 
-- [ ] **WP-06: API Routes & SSE Streaming**
-  - [ ] Implement Next.js App Router API routes under `/api/salesops`:
-    - [ ] `POST /session`: origin-based tenant resolution (`allowedOrigins`), session creation, returns `sessionId` and opening message.
-    - [ ] `POST /chat`: turn execution with SSE stream (`token`, `event`, `done` frames).
-    - [ ] `GET /health`: liveness and provider ping.
-  - [ ] Persist turns, tokens used, cost minor, and messages to PostgreSQL.
-  - [ ] *Acceptance:* `curl` to `/chat` yields valid SSE stream with tokens and updates session state in DB.
+- [x] **WP-06: API Routes & SSE Streaming**
+  - [x] Implement Next.js App Router API routes under `/api/salesops`:
+    - [x] `POST /session`: origin-based tenant resolution (`allowedOrigins`), session creation, returns `sessionId` and opening message.
+    - [x] `POST /chat`: turn execution with SSE stream (`token`, `event`, `done` frames).
+    - [x] `GET /health`: liveness and provider ping.
+  - [x] Persist turns, tokens used, cost minor, and messages to PostgreSQL.
+  - [x] *Acceptance:* `curl` to `/chat` yields valid SSE stream with tokens and updates session state in DB.
 
 - [ ] **WP-07: Web Widget UI & Compliance Embed**
   - [ ] Build headless React hook `useSalesOpsChat` and embeddable UI widget in `packages/web/ui`.
