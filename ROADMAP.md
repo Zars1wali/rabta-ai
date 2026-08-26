@@ -124,11 +124,11 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Cap at max 2 model roundtrips per user turn.
   - [x] *Acceptance:* Model correctly answers pricing questions only via `quote`/`search_catalog` tool results.
 
-- [ ] **WP-09: Funnel State Machine & Objection Handling**
-  - [ ] Implement server-controlled funnel stage progression:
-    - [ ] `greet` → `discover` → `qualify` → `present` → `objection` → `close` → `won`/`handoff`/`lost`.
-  - [ ] Add factual objection blocks (refusal to fabricate scarcity or false urgency).
-  - [ ] *Acceptance:* Agent advances through stages sequentially and refuses fake discount/urgency tactics.
+- [x] **WP-09: Funnel State Machine & Objection Handling**
+  - [x] Implement server-controlled funnel stage progression:
+    - [x] `greet` → `discover` → `qualify` → `present` → `objection` → `close` → `won`/`handoff`/`lost`.
+  - [x] Add factual objection blocks (refusal to fabricate scarcity or false urgency).
+  - [x] *Acceptance:* Agent advances through stages sequentially and refuses fake discount/urgency tactics.
 
 - [ ] **WP-10: Abuse Layer & Session Budget Guardrails**
   - [ ] Implement session token budgets (`tokenBudgetPerSession`), IP rate limiting, and origin protection.
