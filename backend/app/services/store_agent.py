@@ -231,8 +231,7 @@ Use ONLY this verified data for factual prices, specs, and policies:
         )
 
         try:
-            response = await asyncio.to_thread(
-                self.client.models.generate_content,
+            response = await self.client.aio.models.generate_content(
                 model=settings.GEMINI_MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(

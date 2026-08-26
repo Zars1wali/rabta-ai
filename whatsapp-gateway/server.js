@@ -155,6 +155,131 @@ async function connectToWhatsApp(forceClean = false) {
         }
     });
 
+    // Per-customer async queue: allows distinct customers to be processed in parallel
+    // while keeping messages from the same customer strictly in-order.
+    const customerQueues = new Map();
+
+    function enqueueCustomerMessage(phone, taskFn) {
+        const prev = customerQueues.get(phone) || Promise.resolve();
+        const next = prev.then(taskFn).catch(err => {
+            console.error(`[${phone}] Queue task error:`, err.message);
+        });
+        customerQueues.set(phone, next);
+        next.finally(() => {
+            if (customerQueues.get(phone) === next) {
+                customerQueues.delete(phone);
+            }
+        });
+    }
+
+    // Process a single incoming customer message
+    async function handleIncomingMessage(msg) {
+        const sender = msg.key.remoteJid;
+        if (!sender || sender.includes('@g.us')) return; // Ignore groups
+        if (sender.includes('@broadcast') || sender.includes('@newsletter')) return; // Ignore status/newsletters
+        if (connectedNumber && sender.split('@')[0] === connectedNumber) return; // Ignore self-chat
+
+        const senderPhone = sender.split('@')[0];
+        const msgId = msg.key.id;
+
+        // Extract text message (handles ephemeral / view-once wrappers)
+        const textMessage = extractTextMessage(msg.message);
+
+        // Extract image or audio
+        let imageBase64 = null;
+        let audioBase64 = null;
+        let audioMime = null;
+        let m = msg.message;
+        if (m.ephemeralMessage) m = m.ephemeralMessage.message;
+        if (m.viewOnceMessage) m = m.viewOnceMessage.message;
+        if (m.viewOnceMessageV2) m = m.viewOnceMessageV2.message;
+
+        const isImage = !!m.imageMessage;
+        const isQuotedImage = !!m.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+        const isAudio = !!m.audioMessage;
+
+        if (isAudio) {
+            try {
+                const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                if (buffer && buffer.length > 0) {
+                    audioBase64 = buffer.toString('base64');
+                    audioMime = m.audioMessage?.mimetype || 'audio/ogg; codecs=opus';
+                    console.log(`🎙️ Downloaded voice note (${Math.round(buffer.length / 1024)} KB) mime=${audioMime}`);
+                }
+            } catch (e) {
+                console.warn(`[${senderPhone}] Could not download audio:`, e.message);
+            }
+        } else if (isImage) {
+            try {
+                const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                if (buffer && buffer.length > 0) {
+                    imageBase64 = buffer.toString('base64');
+                    console.log(`📸 Downloaded customer image (${Math.round(buffer.length / 1024)} KB)`);
+                }
+            } catch (e) {
+                console.warn(`[${senderPhone}] Could not download image:`, e.message);
+            }
+        } else if (isQuotedImage) {
+            try {
+                const quotedMsg = {
+                    key: { remoteJid: sender },
+                    message: m.extendedTextMessage.contextInfo.quotedMessage
+                };
+                const buffer = await downloadMediaMessage(quotedMsg, 'buffer', {});
+                if (buffer && buffer.length > 0) {
+                    imageBase64 = buffer.toString('base64');
+                    console.log(`📸 Downloaded quoted image (${Math.round(buffer.length / 1024)} KB)`);
+                }
+            } catch (e) {
+                console.warn(`[${senderPhone}] Could not download quoted image:`, e.message);
+            }
+        }
+
+        const promptText = textMessage
+            || (imageBase64 ? 'Ye photo mein konsi product hai aur iski price kya hai?' : '')
+            || (audioBase64 ? '[VOICE NOTE — transcribe and respond]' : '');
+        if (!promptText && !imageBase64 && !audioBase64) return;
+
+        console.log(`📩 [CONCURRENT] Incoming WhatsApp from [${senderPhone}]: "${promptText.substring(0, 60)}" ${imageBase64 ? '[WITH IMAGE]' : ''}`);
+
+        try {
+            // Forward to Python Gemini AI Brain with image and audio support
+            const response = await axios.post(`${PYTHON_BACKEND_URL}/api/gateway/process-message`, {
+                customer_phone: senderPhone,
+                business_phone: connectedNumber || 'default',
+                message: promptText,
+                image_base64: imageBase64,
+                audio_base64: audioBase64,
+                audio_mime: audioMime,
+                platform: 'baileys_qr'
+            }, { timeout: 35000 });
+
+            const replyChunks = response.data?.reply_chunks;
+            const replyText = response.data?.reply;
+
+            if (replyChunks && replyChunks.length > 0) {
+                for (let i = 0; i < replyChunks.length; i++) {
+                    if (i > 0) await new Promise(r => setTimeout(r, 800)); // Natural typing pause
+                    console.log(`🤖 [${i+1}/${replyChunks.length}] Replying to [${senderPhone}]: "${replyChunks[i].substring(0, 80)}..."`);
+                    await sock.sendMessage(sender, { text: replyChunks[i] });
+                }
+            } else if (replyText) {
+                console.log(`🤖 Replying to [${senderPhone}]: "${replyText.substring(0, 100)}..."`);
+                await sock.sendMessage(sender, { text: replyText });
+            }
+        } catch (error) {
+            console.error(`[${senderPhone}] Backend error: ${error.message}`);
+            try {
+                const fallback = "Maaf kijiye, abhi technical issue hai. Thori der mein dobara try karein ya hum aap se rabta karenge.";
+                await sock.sendMessage(sender, { text: fallback });
+                console.log(`⚠️ Fallback reply sent to [${senderPhone}]`);
+            } catch (sendErr) {
+                console.error(`[${senderPhone}] Failed to send fallback: ${sendErr.message}`);
+            }
+            processedMsgIds.delete(msgId); // Allow retry on next delivery
+        }
+    }
+
     // Listen for incoming WhatsApp messages
     sock.ev.on('messages.upsert', async (m) => {
         if (m.type !== 'notify') return; // Ignore history sync / app state dumps
@@ -172,113 +297,11 @@ async function connectToWhatsApp(forceClean = false) {
             }
 
             const sender = msg.key.remoteJid;
-            if (!sender || sender.includes('@g.us')) continue; // Ignore groups
-            if (sender.includes('@broadcast') || sender.includes('@newsletter')) continue; // Ignore status/newsletters
-            if (connectedNumber && sender.split('@')[0] === connectedNumber) continue; // Ignore self-chat
-
+            if (!sender || sender.includes('@g.us')) continue;
             const senderPhone = sender.split('@')[0];
 
-            // Extract text message (handles ephemeral / view-once wrappers)
-            const textMessage = extractTextMessage(msg.message);
-
-            // Extract image if attached or quoted
-            let imageBase64 = null;
-            let audioBase64 = null;
-            let audioMime = null;
-            let m = msg.message;
-            if (m.ephemeralMessage) m = m.ephemeralMessage.message;
-            if (m.viewOnceMessage) m = m.viewOnceMessage.message;
-            if (m.viewOnceMessageV2) m = m.viewOnceMessageV2.message;
-
-            const isImage = !!m.imageMessage;
-            const isQuotedImage = !!m.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
-            const isAudio = !!m.audioMessage;
-
-            if (isAudio) {
-                try {
-                    const buffer = await downloadMediaMessage(msg, 'buffer', {});
-                    if (buffer && buffer.length > 0) {
-                        audioBase64 = buffer.toString('base64');
-                        audioMime = m.audioMessage?.mimetype || 'audio/ogg; codecs=opus';
-                        console.log(`🎙️ Downloaded voice note (${Math.round(buffer.length / 1024)} KB) mime=${audioMime}`);
-                    }
-                } catch (e) {
-                    console.warn(`[${senderPhone}] Could not download audio:`, e.message);
-                }
-            } else if (isImage) {
-                try {
-                    const buffer = await downloadMediaMessage(msg, 'buffer', {});
-                    if (buffer && buffer.length > 0) {
-                        imageBase64 = buffer.toString('base64');
-                        console.log(`📸 Downloaded customer image (${Math.round(buffer.length / 1024)} KB)`);
-                    }
-                } catch (e) {
-                    console.warn(`[${senderPhone}] Could not download image:`, e.message);
-                }
-            } else if (isQuotedImage) {
-                try {
-                    const quotedMsg = {
-                        key: { remoteJid: sender },
-                        message: m.extendedTextMessage.contextInfo.quotedMessage
-                    };
-                    const buffer = await downloadMediaMessage(quotedMsg, 'buffer', {});
-                    if (buffer && buffer.length > 0) {
-                        imageBase64 = buffer.toString('base64');
-                        console.log(`📸 Downloaded quoted image (${Math.round(buffer.length / 1024)} KB)`);
-                    }
-                } catch (e) {
-                    console.warn(`[${senderPhone}] Could not download quoted image:`, e.message);
-                }
-            }
-
-            const promptText = textMessage
-                || (imageBase64 ? 'Ye photo mein konsi product hai aur iski price kya hai?' : '')
-                || (audioBase64 ? '[VOICE NOTE — transcribe and respond]' : '');
-            if (!promptText && !imageBase64 && !audioBase64) continue;
-
-            console.log(`📩 Incoming WhatsApp from [${senderPhone}]: "${promptText}" ${imageBase64 ? '[WITH IMAGE]' : ''}`);
-
-            try {
-                // Forward to Python Gemini AI Brain with image and audio support
-                const response = await axios.post(`${PYTHON_BACKEND_URL}/api/gateway/process-message`, {
-                    customer_phone: senderPhone,
-                    business_phone: connectedNumber || 'default',
-                    message: promptText,
-                    image_base64: imageBase64,
-                    audio_base64: audioBase64,
-                    audio_mime: audioMime,
-                    platform: 'baileys_qr'
-                }, { timeout: 60000 });
-
-                const replyChunks = response.data?.reply_chunks;
-                const replyText = response.data?.reply;
-
-                if (replyChunks && replyChunks.length > 0) {
-                    // Send each chunk as a separate short WhatsApp message
-                    // with a natural typing delay between them
-                    for (let i = 0; i < replyChunks.length; i++) {
-                        if (i > 0) await new Promise(r => setTimeout(r, 1200)); // natural pause
-                        console.log(`🤖 [${i+1}/${replyChunks.length}] Replying to [${senderPhone}]: "${replyChunks[i].substring(0, 80)}..."`);
-                        await sock.sendMessage(sender, { text: replyChunks[i] });
-                    }
-                } else if (replyText) {
-                    console.log(`🤖 Replying to [${senderPhone}]: "${replyText.substring(0, 100)}..."`);
-                    await sock.sendMessage(sender, { text: replyText });
-                }
-            } catch (error) {
-                console.error(`[${senderPhone}] Backend error: ${error.message}`);
-
-                // CRITICAL: Always send a fallback reply — never leave customer in silence
-                try {
-                    const fallback = "Maaf kijiye, abhi technical issue hai. Thori der mein dobara try karein ya hum aap se rabta karenge.";
-                    await sock.sendMessage(sender, { text: fallback });
-                    console.log(`⚠️ Fallback reply sent to [${senderPhone}]`);
-                } catch (sendErr) {
-                    console.error(`[${senderPhone}] Failed to send fallback: ${sendErr.message}`);
-                }
-
-                processedMsgIds.delete(msgId); // Allow retry on next delivery
-            }
+            // Enqueue task for this specific customer without blocking other customers!
+            enqueueCustomerMessage(senderPhone, () => handleIncomingMessage(msg));
         }
     });
 }

@@ -32,6 +32,19 @@ _metrics = {
     "recent_failures": [],
 }
 
+# In-memory catalog cache with 60s TTL to eliminate redundant DB queries on concurrent messages
+_catalog_cache = {}  # {tenant_id: {"text": str, "expires": float}}
+
+
+async def _get_cached_catalog(session, tenant_id: str) -> str:
+    now = time.time()
+    cached = _catalog_cache.get(tenant_id)
+    if cached and cached["expires"] > now:
+        return cached["text"]
+    text = await catalog_repo.format_catalog_context_for_ai(session, tenant_id)
+    _catalog_cache[tenant_id] = {"text": text, "expires": now + 60.0}
+    return text
+
 
 def _track(phone: str, event: str, latency_ms: int = 0):
     key = "total_incoming" if event == "in" else "total_replies" if event == "out" else "total_errors"
@@ -174,8 +187,8 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                     "business_name": biz_name,
                 }
 
-            # 4. Scoped catalog context and conversation history from DB
-            catalog_context = await catalog_repo.format_catalog_context_for_ai(session, tenant_id)
+            # 4. Scoped catalog context and conversation history from DB (using 60s cache)
+            catalog_context = await _get_cached_catalog(session, tenant_id)
             policies = (tenant.ai_persona_config or {}).get("policies", "")
             if policies:
                 catalog_context += f"\n\nStore Policies:\n{policies}"
