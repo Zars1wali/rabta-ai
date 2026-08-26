@@ -136,12 +136,13 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Degradation fallback when token budget is exhausted.
   - [x] *Acceptance:* Session exceeding 40k tokens gracefully degrades without throwing unhandled errors.
 
-- [ ] **WP-11: CI Integrity & Adversarial Eval Suites**
-  - [ ] Build `packages/eval` test runner for automated CI execution:
-    - [ ] **Price Integrity**: Exact numeric match assertions against catalog prices.
-    - [ ] **Negative Probing**: Assert model refuses products not in the catalog.
-    - [ ] **Adversarial / Jailbreak Suite**: Prompt injection, prompt leakage, out-of-scope policies, limit queries.
-  - [ ] *Acceptance:* Eval suite runs in GitHub Actions CI; 100% pass required for deployment.
+- [x] **WP-11: CI Integrity & Adversarial Eval Suites**
+  - [x] Build `packages/eval` test runner for automated CI execution:
+    - [x] **Price Integrity**: Exact numeric match assertions against catalog prices.
+    - [x] **Negative Probing**: Assert model refuses products not in the catalog.
+    - [x] **Adversarial / Jailbreak Suite**: Prompt injection, prompt leakage, out-of-scope policies, limit queries.
+    - [x] **AI Act Disclosure**: Assert first message disclosure in every supported language (EN, PT, ES, IT, DE, FR).
+  - [x] *Acceptance:* Eval suite runs in GitHub Actions CI; 100% pass required for deployment.
 
 - [ ] **WP-12: Stripe Integration & Checkout Tools**
   - [ ] Implement `stripe_checkout` close action using Stripe Checkout Sessions.
