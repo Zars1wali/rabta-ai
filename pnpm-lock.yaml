@@ -39,7 +39,45 @@ importers:
         specifier: ^3.24.2
         version: 3.25.76
 
+  adapters/catalog-csv:
+    dependencies:
+      '@salesops/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.13.4
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(supports-color@7.2.0)
+
   adapters/catalog-json:
+    dependencies:
+      '@salesops/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.13.4
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(supports-color@7.2.0)
+
+  adapters/catalog-woocommerce:
     dependencies:
       '@salesops/types':
         specifier: workspace:*

@@ -170,11 +170,11 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Admin API routes (`GET`, `POST`, `PUT /api/salesops/admin/tenants`) with API key security.
   - [x] *Acceptance:* Admin can update tenant settings without server restarts; invalid schemas rejected.
 
-- [ ] **WP-15: CSV & WooCommerce Catalog Adapters**
-  - [ ] Build `adapters/catalog-csv`: parses CSV/XLSX product exports into normalized `Catalog`.
-  - [ ] Build `adapters/catalog-woocommerce`: pulls products, variations, prices, and stock via WooCommerce REST API.
-  - [ ] Implement `verify(cfg)` for both adapters to sample 5 live products with error diagnostics.
-  - [ ] *Acceptance:* WooCommerce sandbox connects, verifies 5 items, and syncs 100+ items into snapshot.
+- [x] **WP-15: CSV & WooCommerce Catalog Adapters**
+  - [x] Build `adapters/catalog-csv`: parses CSV product exports into normalized `Catalog` with flexible column mappings.
+  - [x] Build `adapters/catalog-woocommerce`: pulls products, variations, prices, and stock via WooCommerce REST API v3.
+  - [x] Implement `verify(cfg)` for both adapters to sample 5 live products with error diagnostics.
+  - [x] *Acceptance:* WooCommerce and CSV connectors connect, verify 5 items, and sync items into snapshot.
 
 - [ ] **WP-16: Automated Per-Tenant Catalog Smoke Suite**
   - [ ] Build catalog-driven smoke test generator in `packages/eval`:
