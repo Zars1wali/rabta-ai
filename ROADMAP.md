@@ -60,13 +60,13 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Configure ESLint import-boundary rules enforcing strict architectural direction (`types ← core ← web ← apps`).
   - [x] *Acceptance:* `pnpm test` and `pnpm lint` pass across the workspace; types package builds cleanly.
 
-- [ ] **WP-02: PostgreSQL Database & Tenant-Scoped Repositories**
-  - [ ] Configure PostgreSQL 16 + Drizzle ORM schema:
-    - [ ] `tenants`, `catalog_snapshots`, `catalog_items`, `sessions`, `messages`, `tool_calls`, `leads`, `subscriptions`, `eval_runs`.
-  - [ ] Implement append-only catalog snapshots (replaces defective PoC delete-then-insert pattern).
-  - [ ] Seed script: create initial tenant `rewilt`, its `TenantConfig`, and seed package items.
-  - [ ] Write CI test asserting every query in the data layer explicitly filters by `tenant_id`.
-  - [ ] *Acceptance:* Migrations apply cleanly; seed runs idempotently; AST/query test fails if a query lacks `tenant_id`.
+- [x] **WP-02: PostgreSQL Database & Tenant-Scoped Repositories**
+  - [x] Configure PostgreSQL 16 + Drizzle ORM schema:
+    - [x] `tenants`, `catalog_snapshots`, `catalog_items`, `sessions`, `messages`, `tool_calls`, `leads`, `subscriptions`, `eval_runs`.
+  - [x] Implement append-only catalog snapshots (replaces defective PoC delete-then-insert pattern).
+  - [x] Seed script: create initial tenant `rewilt`, its `TenantConfig`, and seed package items.
+  - [x] Write CI test asserting every query in the data layer explicitly filters by `tenant_id`.
+  - [x] *Acceptance:* Migrations apply cleanly; seed runs idempotently; AST/query test fails if a query lacks `tenant_id`.
 
 - [ ] **WP-03: Catalog Engine & Static JSON Adapter**
   - [ ] Build `core/catalog` engine with staleness detection (`maxAgeMinutes`, `onStale: hedge_price`).
