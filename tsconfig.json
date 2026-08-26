@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "*.ts",
+    "packages/*/src/**/*",
+    "packages/*/test/**/*",
+    "packages/*/drizzle.config.ts",
+    "adapters/*/src/**/*",
+    "adapters/*/test/**/*"
+  ],
+  "exclude": ["node_modules", "**/dist/**", "Zars_PoC"]
+}

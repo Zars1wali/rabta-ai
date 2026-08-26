@@ -68,11 +68,11 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Write CI test asserting every query in the data layer explicitly filters by `tenant_id`.
   - [x] *Acceptance:* Migrations apply cleanly; seed runs idempotently; AST/query test fails if a query lacks `tenant_id`.
 
-- [ ] **WP-03: Catalog Engine & Static JSON Adapter**
-  - [ ] Build `core/catalog` engine with staleness detection (`maxAgeMinutes`, `onStale: hedge_price`).
-  - [ ] Build `adapters/catalog-json` implementing `CatalogSource` interface.
-  - [ ] Implement `verify(cfg)` returning item count, sample of 5 items, and validation warnings.
-  - [ ] *Acceptance:* Unit tests verify catalog snapshot loading, staleness hedging, and `verify()` sampling.
+- [x] **WP-03: Catalog Engine & Static JSON Adapter**
+  - [x] Build `core/catalog` engine with staleness detection (`maxAgeMinutes`, `onStale: hedge_price`).
+  - [x] Build `adapters/catalog-json` implementing `CatalogSource` interface.
+  - [x] Implement `verify(cfg)` returning item count, sample of 5 items, and validation warnings.
+  - [x] *Acceptance:* Unit tests verify catalog snapshot loading, staleness hedging, and `verify()` sampling.
 
 - [ ] **WP-04: LLM Provider Adapter & Core Agent Turn Loop**
   - [ ] Implement `core/llm` provider adapter for Gemini 3.x Flash-Lite (default) and Flash (escalation).

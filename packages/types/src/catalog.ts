@@ -9,8 +9,8 @@ export type BillingInterval = z.infer<typeof BillingIntervalSchema>;
 export const CatalogItemSchema = z.object({
   sku: z.string().min(1, 'SKU must not be empty'),
   name: z.string().min(1, 'Name must not be empty'),
-  category: z.string().nullable(),
-  description: z.string().nullable(),
+  category: z.string().nullable().default(null),
+  description: z.string().nullable().default(null),
   priceMinor: z.number().int().nonnegative('Price must be an integer minor unit (e.g. cents)'),
   currency: CurrencySchema,
   billing: BillingIntervalSchema.default('month'),
