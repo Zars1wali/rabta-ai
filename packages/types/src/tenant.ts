@@ -38,6 +38,7 @@ export const ChannelConfigSchema = z.discriminatedUnion('kind', [
 export type ChannelConfig = z.infer<typeof ChannelConfigSchema>;
 
 export const TenantConfigSchema = z.object({
+  version: z.number().int().positive().default(1),
   tenantId: z.string().uuid(),
   displayName: z.string().min(1),
   tier: TierSchema.default('standard'),

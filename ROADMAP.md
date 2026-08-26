@@ -164,10 +164,11 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
 ### Milestone 2: M2 — Other People’s Shops & Multi-Tenancy
 > **Goal:** Turn the system into a true multi-tenant SaaS. Self-service onboarding wizard, WooCommerce/CSV catalog sync, automated smoke evals, and robust metering/depletion.
 
-- [ ] **WP-14: TenantConfig Admin Surface & Versioning**
-  - [ ] Implement admin API and guarded JSON editor for `TenantConfig`.
-  - [ ] Schema validation on write with version history audit log.
-  - [ ] *Acceptance:* Admin can update tenant settings without server restarts; invalid schemas rejected.
+- [x] **WP-14: TenantConfig Admin Surface & Versioning**
+  - [x] Implement admin API and guarded JSON manager for `TenantConfig`.
+  - [x] Schema validation on write with version auto-incrementing and optimistic locking.
+  - [x] Admin API routes (`GET`, `POST`, `PUT /api/salesops/admin/tenants`) with API key security.
+  - [x] *Acceptance:* Admin can update tenant settings without server restarts; invalid schemas rejected.
 
 - [ ] **WP-15: CSV & WooCommerce Catalog Adapters**
   - [ ] Build `adapters/catalog-csv`: parses CSV/XLSX product exports into normalized `Catalog`.

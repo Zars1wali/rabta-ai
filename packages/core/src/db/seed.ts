@@ -5,6 +5,7 @@ import type { Database } from './client.js';
 export const REWILT_TENANT_ID = '00000000-0000-4000-8000-000000000001';
 
 export const REWILT_TENANT_CONFIG: TenantConfig = {
+  version: 1,
   tenantId: REWILT_TENANT_ID,
   displayName: 'Rewilt Sales Ops',
   tier: 'standard',
