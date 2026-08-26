@@ -4,3 +4,4 @@ export * from './chat.js';
 export * from './health.js';
 export * from './stripe_webhook.js';
 export * from './portal.js';
+export * from './lead.js';

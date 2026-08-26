@@ -153,11 +153,11 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Generate Stripe Customer Portal session URLs (`POST /api/salesops/billing/portal`).
   - [x] *Acceptance:* Live Stripe test checkout completes, triggers webhook, and provisions subscription.
 
-- [ ] **WP-13: Lead Capture, Consent & Human Handoff**
-  - [ ] Build `POST /api/salesops/lead` route with explicit GDPR consent checkbox recording.
-  - [ ] Implement `capture_lead` and `handoff` close actions.
-  - [ ] Outbound notification dispatcher (`NOTIFY_WEBHOOK_URL`) for newly captured leads or human escalation.
-  - [ ] *Acceptance:* Submitting lead form sends webhook payload with timestamped consent to notification target.
+- [x] **WP-13: Lead Capture, Consent & Human Handoff**
+  - [x] Build `POST /api/salesops/lead` route with explicit GDPR consent checkbox recording.
+  - [x] Implement `capture_lead` and `handoff` close actions.
+  - [x] Outbound notification dispatcher (`NOTIFY_WEBHOOK_URL` / email targets) for newly captured leads or human escalation.
+  - [x] *Acceptance:* Submitting lead form sends webhook payload with timestamped consent to notification target.
 
 ---
 
