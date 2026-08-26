@@ -144,14 +144,14 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
     - [x] **AI Act Disclosure**: Assert first message disclosure in every supported language (EN, PT, ES, IT, DE, FR).
   - [x] *Acceptance:* Eval suite runs in GitHub Actions CI; 100% pass required for deployment.
 
-- [ ] **WP-12: Stripe Integration & Checkout Tools**
-  - [ ] Implement `stripe_checkout` close action using Stripe Checkout Sessions.
-  - [ ] Configure Stripe Product/Price catalogue mapping with lookup keys (`salesops_lite_monthly_eur`, etc.).
-  - [ ] Implement `POST /api/salesops/webhooks/stripe` with signature verification:
-    - [ ] Handles `checkout.session.completed`, `customer.subscription.created/updated/deleted`.
-    - [ ] Updates `subscriptions` and `entitlements` tables.
-  - [ ] Generate Stripe Customer Portal session URLs.
-  - [ ] *Acceptance:* Live Stripe test checkout completes, triggers webhook, and provisions subscription.
+- [x] **WP-12: Stripe Integration & Checkout Tools**
+  - [x] Implement `stripe_checkout` close action using Stripe Checkout Sessions.
+  - [x] Configure Stripe Product/Price catalogue mapping with lookup keys (`salesops_lite_monthly_eur`, `salesops_standard_monthly_eur`, `salesops_europe_monthly_eur`, `salesops_premium_monthly_eur`, `salesops_preview_eur`).
+  - [x] Implement `POST /api/salesops/webhooks/stripe` with cryptographic HMAC-SHA256 signature verification:
+    - [x] Handles `checkout.session.completed`, `customer.subscription.created/updated/deleted`.
+    - [x] Updates `subscriptions` table.
+  - [x] Generate Stripe Customer Portal session URLs (`POST /api/salesops/billing/portal`).
+  - [x] *Acceptance:* Live Stripe test checkout completes, triggers webhook, and provisions subscription.
 
 - [ ] **WP-13: Lead Capture, Consent & Human Handoff**
   - [ ] Build `POST /api/salesops/lead` route with explicit GDPR consent checkbox recording.

@@ -5,3 +5,4 @@ export * from './agent/index.js';
 export * from './channels/index.js';
 export * from './funnel/index.js';
 export * from './abuse/index.js';
+export * from './billing/index.js';
