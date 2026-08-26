@@ -1,5 +1,6 @@
 import time
 import uuid
+import base64
 import logging
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
@@ -7,11 +8,13 @@ from fastapi import APIRouter
 from app.services.store_agent import WhatsAppStoreAgent
 from app.services.owner_copilot import OwnerCopilotService
 from app.services.conversation_store import conversation_store
+from app.services.deepgram import DeepgramService
 from app.db.session import AsyncSessionLocal
 from app.db.repositories import tenant_repo, catalog_repo
 from app.db.repositories.tenant_repo import normalize_phone
 
 owner_copilot = OwnerCopilotService()
+deepgram_service = DeepgramService()
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/gateway", tags=["WhatsApp QR Gateway Bridge"])
 store_agent = WhatsAppStoreAgent()
@@ -55,6 +58,8 @@ class GatewayMessagePayload(BaseModel):
     business_phone: str
     message: str
     image_base64: Optional[str] = None
+    audio_base64: Optional[str] = None   # raw voice note bytes as base64
+    audio_mime: Optional[str] = None     # e.g. "audio/ogg; codecs=opus"
     platform: str = "baileys_qr"
 
 
@@ -68,9 +73,30 @@ async def process_gateway_message(payload: GatewayMessagePayload):
     start_time = time.time()
     _track(payload.business_phone, "in")
 
+    # --- Voice Note: Transcribe with Deepgram BEFORE anything else ---
+    effective_message = payload.message
+    is_voice_note = bool(payload.audio_base64)
+    if is_voice_note:
+        logger.info("[%s] Voice note received (%d bytes) — transcribing with Deepgram",
+                    request_id, len(payload.audio_base64))
+        try:
+            audio_bytes = base64.b64decode(payload.audio_base64)
+            mime = payload.audio_mime or "audio/ogg; codecs=opus"
+            transcript = await deepgram_service.transcribe_audio_bytes(audio_bytes, mime)
+            if transcript and transcript.strip():
+                effective_message = transcript.strip()
+                logger.info("[%s] Deepgram transcript: %s", request_id, effective_message[:120])
+            else:
+                effective_message = "Customer ne voice note bheja, lekin transcript nahi mila."
+                logger.warning("[%s] Deepgram returned empty transcript", request_id)
+        except Exception as e:
+            logger.error("[%s] Deepgram transcription failed: %s", request_id, e)
+            effective_message = "Customer ne voice message bheja."
+
     logger.info(
-        "[%s] Inbound gateway message from customer %s for business %s: %s (has_image=%s)",
-        request_id, payload.customer_phone, payload.business_phone, payload.message[:60], bool(payload.image_base64)
+        "[%s] Inbound gateway message from customer %s for business %s: %s (has_image=%s, is_voice=%s)",
+        request_id, payload.customer_phone, payload.business_phone,
+        effective_message[:60], bool(payload.image_base64), is_voice_note
     )
 
     try:
@@ -97,9 +123,9 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             norm_owner = normalize_phone(owner_phone) if owner_phone else ""
 
             if norm_owner and norm_from and norm_from == norm_owner:
-                logger.info("[%s] Gateway message is from OWNER (%s): %s", request_id, payload.customer_phone, payload.message[:60])
+                logger.info("[%s] Gateway message is from OWNER (%s): %s", request_id, payload.customer_phone, effective_message[:60])
 
-                if owner_copilot.is_owner_command(payload.message):
+                if owner_copilot.is_owner_command(effective_message):
                     cmd_res = await owner_copilot.handle_command(
                         command_text=payload.message,
                         business_name=biz_name,
@@ -158,7 +184,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
 
             gemini_start = time.time()
             interaction = await store_agent.handle_customer_interaction(
-                customer_message=payload.message,
+                customer_message=effective_message,
                 business_name=biz_name,
                 industry=industry,
                 catalog_context=catalog_context,
@@ -171,8 +197,8 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             reply_chunks = interaction.get("reply_chunks") or [reply_text]
             is_order = interaction.get("is_order_intent", False)
 
-            # Persist to DB
-            await conversation_store.add_message_async(tenant_id, payload.customer_phone, "customer", payload.message)
+            # Persist to DB — store the effective (transcribed) message
+            await conversation_store.add_message_async(tenant_id, payload.customer_phone, "customer", effective_message)
             await conversation_store.add_message_async(tenant_id, payload.customer_phone, "assistant", reply_text)
 
             total_latency = int((time.time() - start_time) * 1000)

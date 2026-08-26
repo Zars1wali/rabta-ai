@@ -15,6 +15,9 @@ from app.db.repositories import tenant_repo, catalog_repo
 
 async def import_haider_excel():
     excel_path = r"C:\Users\waliz\Downloads\Haider Arms Data.xlsx"
+    if not os.path.exists(excel_path):
+        excel_path = os.path.join(os.path.dirname(__file__), "Haider Arms Data.xlsx")
+
     print("=" * 80)
     print(f"IMPORTING REAL HAIDER ARMS CATALOG FROM: {excel_path}")
     print("=" * 80)

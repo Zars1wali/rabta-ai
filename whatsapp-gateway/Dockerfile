@@ -14,12 +14,10 @@ RUN npm ci --only=production
 COPY server.js ./
 COPY approved_numbers.json ./
 
-# Create non-root user
-RUN useradd -m -u 1001 gateway && chown -R gateway:gateway /app
-USER gateway
+# Prepare auth_session directory
+RUN mkdir -p /app/auth_session && chmod 777 /app/auth_session
 
 # The auth_session directory is mounted as a named volume in compose
-# so WhatsApp QR session survives container restarts
 VOLUME ["/app/auth_session"]
 
 EXPOSE 3001

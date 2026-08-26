@@ -183,6 +183,8 @@ async function connectToWhatsApp(forceClean = false) {
 
             // Extract image if attached or quoted
             let imageBase64 = null;
+            let audioBase64 = null;
+            let audioMime = null;
             let m = msg.message;
             if (m.ephemeralMessage) m = m.ephemeralMessage.message;
             if (m.viewOnceMessage) m = m.viewOnceMessage.message;
@@ -190,8 +192,20 @@ async function connectToWhatsApp(forceClean = false) {
 
             const isImage = !!m.imageMessage;
             const isQuotedImage = !!m.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+            const isAudio = !!m.audioMessage;
 
-            if (isImage) {
+            if (isAudio) {
+                try {
+                    const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                    if (buffer && buffer.length > 0) {
+                        audioBase64 = buffer.toString('base64');
+                        audioMime = m.audioMessage?.mimetype || 'audio/ogg; codecs=opus';
+                        console.log(`🎙️ Downloaded voice note (${Math.round(buffer.length / 1024)} KB) mime=${audioMime}`);
+                    }
+                } catch (e) {
+                    console.warn(`[${senderPhone}] Could not download audio:`, e.message);
+                }
+            } else if (isImage) {
                 try {
                     const buffer = await downloadMediaMessage(msg, 'buffer', {});
                     if (buffer && buffer.length > 0) {
@@ -217,18 +231,22 @@ async function connectToWhatsApp(forceClean = false) {
                 }
             }
 
-            const promptText = textMessage || (imageBase64 ? 'Ye photo mein konsi product hai aur iski price kya hai?' : '');
-            if (!promptText && !imageBase64) continue;
+            const promptText = textMessage
+                || (imageBase64 ? 'Ye photo mein konsi product hai aur iski price kya hai?' : '')
+                || (audioBase64 ? '[VOICE NOTE — transcribe and respond]' : '');
+            if (!promptText && !imageBase64 && !audioBase64) continue;
 
             console.log(`📩 Incoming WhatsApp from [${senderPhone}]: "${promptText}" ${imageBase64 ? '[WITH IMAGE]' : ''}`);
 
             try {
-                // Forward to Python Gemini AI Brain with image support
+                // Forward to Python Gemini AI Brain with image and audio support
                 const response = await axios.post(`${PYTHON_BACKEND_URL}/api/gateway/process-message`, {
                     customer_phone: senderPhone,
                     business_phone: connectedNumber || 'default',
                     message: promptText,
                     image_base64: imageBase64,
+                    audio_base64: audioBase64,
+                    audio_mime: audioMime,
                     platform: 'baileys_qr'
                 }, { timeout: 60000 });
 
@@ -266,7 +284,7 @@ async function connectToWhatsApp(forceClean = false) {
 }
 
 // Reset endpoint to generate new QR on demand
-app.post('/reset', async (req, res) => {
+app.post(['/reset', '/gateway/reset'], async (req, res) => {
     console.log('🔄 Manual QR reset requested.');
     currentQR = null;
     connectionStatus = 'DISCONNECTED';
@@ -277,8 +295,29 @@ app.post('/reset', async (req, res) => {
     res.json({ status: 'RESETTING', message: 'Generating fresh QR code...' });
 });
 
+// Request 8-digit Pairing Code for manual phone connection (No QR camera scan needed)
+app.post(['/pair', '/gateway/pair'], async (req, res) => {
+    try {
+        let phone = req.body.phone;
+        let clean = cleanPhoneNumber(phone);
+        if (!clean) {
+            return res.status(400).json({ error: 'Please enter a valid phone number (e.g. 03040124445 or 923040124445)' });
+        }
+        if (!sock) {
+            await connectToWhatsApp(false);
+        }
+        console.log(`📱 Requesting pairing code for +${clean}...`);
+        const code = await sock.requestPairingCode(clean);
+        console.log(`🔑 Pairing Code generated: ${code}`);
+        res.json({ status: 'CODE_GENERATED', phone: clean, code: code });
+    } catch(e) {
+        console.error('Error generating pairing code:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // API endpoint to get the live QR code
-app.get('/qr', (req, res) => {
+app.get(['/qr', '/gateway/qr'], (req, res) => {
     res.json({
         status: connectionStatus,
         qr: currentQR,
@@ -286,8 +325,8 @@ app.get('/qr', (req, res) => {
     });
 });
 
-// Web UI to display the QR code with Live Polling & Force Refresh Button
-app.get('/', (req, res) => {
+// Web UI to display the QR code with Live Polling, Manual Pairing Code & Force Refresh Button
+app.get(['/', '/gateway', '/gateway/'], (req, res) => {
     res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -298,49 +337,80 @@ app.get('/', (req, res) => {
         <style>
             * { margin:0; padding:0; box-sizing:border-box; font-family:'Plus Jakarta Sans',sans-serif; }
             body { background:#070B14; color:#F3F4F6; display:flex; justify-content:center; align-items:center; min-height:100vh; padding:20px; }
-            .card { background:#0F172A; border:1px solid #1E293B; border-radius:24px; padding:40px; max-width:480px; width:100%; text-align:center; box-shadow:0 30px 70px rgba(0,0,0,0.6); }
-            .logo { font-size:26px; font-weight:800; color:#10B981; margin-bottom:8px; }
-            .subtitle { color:#94A3B8; font-size:14px; margin-bottom:24px; line-height:1.5; }
-            .qr-box { background:#FFFFFF; padding:16px; border-radius:18px; width:260px; height:260px; margin:0 auto 20px auto; display:flex; justify-content:center; align-items:center; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
+            .card { background:#0F172A; border:1px solid #1E293B; border-radius:24px; padding:36px; max-width:500px; width:100%; text-align:center; box-shadow:0 30px 70px rgba(0,0,0,0.6); }
+            .logo { font-size:26px; font-weight:800; color:#10B981; margin-bottom:6px; }
+            .subtitle { color:#94A3B8; font-size:13px; margin-bottom:20px; line-height:1.5; }
+            .qr-box { background:#FFFFFF; padding:16px; border-radius:18px; width:250px; height:250px; margin:0 auto 16px auto; display:flex; justify-content:center; align-items:center; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
             .qr-box img { width:100%; height:100%; border-radius:10px; }
-            .status-badge { display:inline-block; padding:6px 16px; border-radius:9999px; font-size:13px; font-weight:700; margin-bottom:16px; }
+            .status-badge { display:inline-block; padding:6px 16px; border-radius:9999px; font-size:13px; font-weight:700; margin-bottom:14px; }
             .status-SCANNING { background:rgba(245, 158, 11, 0.15); color:#FBBF24; border:1px solid rgba(245, 158, 11, 0.3); }
             .status-CONNECTED { background:rgba(16, 185, 129, 0.15); color:#34D399; border:1px solid rgba(16, 185, 129, 0.3); }
             .status-DISCONNECTED { background:rgba(239, 68, 68, 0.15); color:#F87171; border:1px solid rgba(239, 68, 68, 0.3); }
-            .btn-refresh { background:#1E293B; color:#E2E8F0; border:1px solid #334155; padding:10px 20px; border-radius:12px; font-weight:600; font-size:13px; cursor:pointer; margin-top:14px; transition:all 0.2s; }
+            .divider { display:flex; align-items:center; color:#64748B; font-size:12px; font-weight:700; margin:20px 0; text-transform:uppercase; letter-spacing:1px; }
+            .divider::before, .divider::after { content:''; flex:1; height:1px; background:#1E293B; }
+            .divider span { padding:0 12px; }
+            .pair-section { background:#0B0F19; border:1px solid #1E293B; border-radius:16px; padding:18px; text-align:left; }
+            .pair-title { font-size:13px; font-weight:700; color:#E2E8F0; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+            .pair-input-group { display:flex; gap:8px; }
+            .pair-input { flex:1; background:#0F172A; border:1px solid #334155; border-radius:10px; padding:10px 14px; color:#FFF; font-size:14px; outline:none; }
+            .pair-input:focus { border-color:#10B981; }
+            .pair-btn { background:#10B981; color:#000; border:none; border-radius:10px; padding:10px 16px; font-weight:700; font-size:13px; cursor:pointer; transition:0.2s; white-space:nowrap; }
+            .pair-btn:hover { background:#34D399; }
+            .code-display { display:none; margin-top:14px; background:#1E293B; border:1px solid #334155; border-radius:12px; padding:14px; text-align:center; }
+            .code-digits { font-size:28px; font-weight:800; letter-spacing:4px; color:#34D399; font-family:monospace; margin:8px 0; }
+            .btn-refresh { background:#1E293B; color:#E2E8F0; border:1px solid #334155; padding:8px 16px; border-radius:10px; font-weight:600; font-size:12px; cursor:pointer; margin-top:12px; transition:all 0.2s; }
             .btn-refresh:hover { background:#334155; color:#FFF; }
-            .instructions { text-align:left; background:#0B0F19; border:1px solid #1E293B; border-radius:14px; padding:16px; font-size:13px; color:#CBD5E1; margin-top:20px; }
-            .instructions ol { padding-left:20px; line-height:1.8; }
+            .instructions { text-align:left; background:#0B0F19; border:1px solid #1E293B; border-radius:14px; padding:14px; font-size:12px; color:#CBD5E1; margin-top:16px; }
+            .instructions ol { padding-left:18px; line-height:1.7; }
         </style>
     </head>
     <body>
         <div class="card">
             <div class="logo">RABTA AI ⚡</div>
-            <div class="subtitle">Scan this QR code with WhatsApp on your phone to connect in 10 seconds.</div>
+            <div class="subtitle">Connect Haider Arms WhatsApp in 10 seconds.</div>
             
             <div id="statusBadge" class="status-badge status-SCANNING">Generating QR Code...</div>
 
+            <!-- Method 1: QR Code -->
             <div class="qr-box" id="qrContainer">
                 <p style="color:#64748B; font-size:13px; font-weight:600;">Loading QR Code...</p>
             </div>
+            <div>
+                <button class="btn-refresh" onclick="forceResetQR()">🔄 Refresh QR Code</button>
+            </div>
 
-            <button class="btn-refresh" onclick="forceResetQR()">🔄 Generate Fresh QR Code</button>
+            <!-- Method 2: Manual Pairing Code -->
+            <div class="divider"><span>OR CONNECT BY PHONE NUMBER</span></div>
+
+            <div class="pair-section">
+                <div class="pair-title">🔢 Manual 8-Digit Pairing Code (No Camera Needed)</div>
+                <div class="pair-input-group">
+                    <input type="text" id="phoneInput" class="pair-input" placeholder="e.g. 03040124445" value="03040124445">
+                    <button class="pair-btn" onclick="requestPairingCode()">Get Code</button>
+                </div>
+                <div id="codeDisplay" class="code-display">
+                    <div style="font-size:12px; color:#94A3B8;">Enter this 8-digit code on WhatsApp:</div>
+                    <div id="pairingCode" class="code-digits">---- ----</div>
+                    <div style="font-size:11px; color:#64748B;">WhatsApp &gt; Linked Devices &gt; Link with phone number instead</div>
+                </div>
+            </div>
 
             <div class="instructions">
-                <strong>How to connect:</strong>
+                <strong>How to link on WhatsApp:</strong>
                 <ol>
                     <li>Open <strong>WhatsApp</strong> on your phone</li>
-                    <li>Tap <strong>Settings</strong> or <strong>Three Dots (⋮)</strong></li>
-                    <li>Tap <strong>Linked Devices</strong> &gt; <strong>Link a Device</strong></li>
-                    <li>Scan this QR code with your camera</li>
+                    <li>Tap <strong>Settings</strong> or <strong>Three Dots (⋮)</strong> &gt; <strong>Linked Devices</strong></li>
+                    <li>Tap <strong>Link a Device</strong> &gt; Scan QR code <strong>OR</strong> tap <em>"Link with phone number instead"</em> and type the 8-digit code</li>
                 </ol>
             </div>
         </div>
 
         <script>
+            const baseUrl = window.location.pathname.startsWith('/gateway') ? '/gateway' : '';
+
             async function checkStatus() {
                 try {
-                    const res = await fetch('/qr');
+                    const res = await fetch(baseUrl + '/qr');
                     const data = await res.json();
                     
                     const badge = document.getElementById('statusBadge');
@@ -361,8 +431,37 @@ app.get('/', (req, res) => {
             async function forceResetQR() {
                 document.getElementById('statusBadge').innerText = 'Resetting & Generating Fresh QR...';
                 document.getElementById('qrContainer').innerHTML = '<p style="color:#64748B; font-size:13px;">Generating...</p>';
-                await fetch('/reset', { method: 'POST' });
+                await fetch(baseUrl + '/reset', { method: 'POST' });
                 setTimeout(checkStatus, 1500);
+            }
+
+            async function requestPairingCode() {
+                const phone = document.getElementById('phoneInput').value.trim();
+                if (!phone) return alert('Please enter phone number');
+                
+                const btn = event.target;
+                btn.innerText = 'Requesting...';
+                btn.disabled = true;
+                
+                try {
+                    const res = await fetch(baseUrl + '/pair', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone: phone })
+                    });
+                    const data = await res.json();
+                    if (data.code) {
+                        document.getElementById('codeDisplay').style.display = 'block';
+                        document.getElementById('pairingCode').innerText = data.code;
+                    } else {
+                        alert(data.error || 'Failed to get pairing code');
+                    }
+                } catch(e) {
+                    alert('Error: ' + e.message);
+                } finally {
+                    btn.innerText = 'Get Code';
+                    btn.disabled = false;
+                }
             }
 
             setInterval(checkStatus, 2000);
