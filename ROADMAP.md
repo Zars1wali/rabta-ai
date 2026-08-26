@@ -83,12 +83,12 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
     - [x] Model invocation with tool declarations.
   - [x] *Acceptance:* Turn loop completes 10 turns with simulated messages without hallucinating prompt context.
 
-- [ ] **WP-05: Output Sanitizer, Chunker & Web Channel**
-  - [ ] Implement sanitizer in `core/agent`:
-    - [ ] Punctuation normalization, markdown safety, whitespace collapse.
-    - [ ] Emoji limiter (max 1 emoji per message, not strip-all).
-  - [ ] Build `channels/web` formatting for single-bubble stream with typing indicators.
-  - [ ] *Acceptance:* Sanitizer test suite passes regex edge cases and emoji constraints.
+- [x] **WP-05: Output Sanitizer, Chunker & Web Channel**
+  - [x] Implement sanitizer in `core/agent`:
+    - [x] Punctuation normalization, markdown safety, whitespace collapse.
+    - [x] Emoji limiter (max 1 emoji per message, not strip-all).
+  - [x] Build `channels/web` formatting for single-bubble stream with typing indicators.
+  - [x] *Acceptance:* Sanitizer test suite passes regex edge cases and emoji constraints.
 
 - [ ] **WP-06: API Routes & SSE Streaming**
   - [ ] Implement Next.js App Router API routes under `/api/salesops`:
