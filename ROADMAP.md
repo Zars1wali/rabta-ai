@@ -1,4 +1,4 @@
-# Rewilt Sales Ops — Master Roadmap & Implementation Plan
+# SalesOps — Master Roadmap & Implementation Plan
 
 **v1.0 — 2026-08-26** · Authoritative execution roadmap derived from `SPECS.md`, `ARCHITECTURE.md`, `Metering_and_plans_SPEC.md`, and `Salesops_token_costs_and_catalogue.md`.
 

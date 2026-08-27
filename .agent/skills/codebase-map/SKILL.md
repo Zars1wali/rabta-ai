@@ -3,13 +3,13 @@ name: codebase-map
 description: >
   Project-specific orientation: where every kind of thing lives in this
   codebase. Fill in with concrete paths, package names, and conventions
-  for Rabta AI. Load at the start of every session to know where to look
+  for SalesOps. Load at the start of every session to know where to look
   and where to put things.
 ---
 
 # Codebase Map
 
-> This codebase map is configured specifically for Rabta AI. Keep this file
+> This codebase map is configured specifically for SalesOps. Keep this file
 > short, accurate, and current — when the structure changes, this file
 > changes in the same commit.
 
@@ -17,18 +17,15 @@ description: >
 
 ## Project Identity
 
-- **Name:** Rabta AI
-- **Purpose (one sentence):** Multi-tenant, multi-channel AI employee platform for Pakistani SMEs with low-resource language voice and chat capabilities.
-- **Primary stack:** Python (FastAPI 3.11+), Node.js, PostgreSQL (Neon/Docker), Qdrant Cloud, Redis, Deepgram, Gemini Flash.
-- **Repository layout:** Monorepo
+- **Name:** SalesOps
+- **Purpose (one sentence):** High-assurance autonomous conversational commerce platform with strict catalog price integrity, GDPR/EU AI Act transparency, and multi-channel coverage (Web Widget, WhatsApp Cloud API).
+- **Primary stack:** TypeScript, Node.js 20+, Next.js App Router, React 19, Drizzle ORM, PostgreSQL, Gemini 2.5, Mistral EU, Deepgram, Stripe.
+- **Repository layout:** Monorepo (pnpm workspaces)
 
 ### Monorepo details:
 
-- **Package manager:** pip (backend), npm (whatsapp-gateway)
-- **Workspace manifest:** N/A (independent service package structures)
-- **Build orchestrator:** Docker Compose
-- **Versioning mode:** Unversioned, continuous deployment
-- **Workspace glob(s):** `Zars_PoC/backend/`, `Zars_PoC/whatsapp-gateway/`
+- **Package manager:** pnpm v11
+- **Workspace glob(s):** `packages/*`, `adapters/*`, `apps/*`
 
 See `monorepo/SKILL.md` for the discipline that applies inside the workspace.
 

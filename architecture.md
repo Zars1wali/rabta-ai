@@ -1,6 +1,6 @@
-# Rewilt Sales Ops — Platform Architecture
+# SalesOps — Platform Architecture
 
-**v0.1 — 2026-08-26** · companion to `rewilt-sales-ops-spec.md`
+**v0.1 — 2026-08-26** · companion to `SPECS.md`
 
 The question: how hard is it to make this work for any website, given the sources?
 
