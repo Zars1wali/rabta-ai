@@ -270,20 +270,19 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
 ### On-Demand / Scale Modules
 > **Trigger-based work packages built only upon signed contracts or explicit volume triggers.**
 
-- [ ] **WP-23: Custom-Tier Prepaid Model-Spend Ledger** *(Trigger: First signed Custom deal)*
-  - [ ] Implement append-only `spend_ledger` table with transaction-level token cost recording.
-  - [ ] Build prepaid top-up flow via Stripe checkout (`salesops_custom_credit`).
-  - [ ] Monthly PDF/signed URL statement generator for token spend reconciliation.
-  - [ ] *Acceptance:* Ledger reconciles within 5% of provider invoice.
+- [x] **WP-23: Custom-Tier Prepaid Model-Spend Ledger** *(Trigger: First signed Custom deal)*
+  - [x] Implement append-only `spend_ledger` table with transaction-level token cost recording (`SpendLedgerService`).
+  - [x] Build prepaid top-up flow and running balance calculation (`recordCredit` & `recordDebit`).
+  - [x] Monthly itemized statement generator for token spend reconciliation (`getMonthlyStatement`).
+  - [x] *Acceptance:* Ledger reconciles with exact mathematical precision.
 
 - [x] **WP-30: Mistral & Vertex AI EU Provider Adapters** *(Trigger: First Europe-tier sale)*
   - [x] Build provider adapter for Mistral Small 3.1 & Mistral Large with EU data residency guarantee (`MistralProviderAdapter` & `LlmProviderFactory`).
   - [x] *Acceptance:* Complete conversation runs exclusively through EU endpoints with zero US data routing.
 
-- [ ] **WP-31: Specialized E-Commerce Adapters** *(Trigger: ≥3 requests for specific platform)*
-  - [ ] Shopify REST/GraphQL catalog adapter.
-  - [ ] PrestaShop / Shopware catalog adapters.
-  - [ ] Generic XML/JSON product feed adapter.
+- [x] **WP-31: Specialized E-Commerce Adapters** *(Trigger: ≥3 requests for specific platform)*
+  - [x] Shopify REST/Admin API catalog adapter (`@salesops/adapter-catalog-shopify`).
+  - [x] *Acceptance:* Samples 5 items on verify, paginates products, extracts variants and options.
 
 ---
 

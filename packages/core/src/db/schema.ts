@@ -251,3 +251,26 @@ export const depletionAlerts = pgTable(
   ]
 );
 
+export const spendLedger = pgTable(
+  'spend_ledger',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    entryType: text('entry_type').notNull(), // 'credit_topup' | 'turn_debit' | 'refund' | 'adjustment'
+    amountMinor: integer('amount_minor').notNull(), // positive for credit, negative for debit
+    balanceAfterMinor: integer('balance_after_minor').notNull(),
+    model: text('model'),
+    inputTokens: integer('input_tokens').default(0),
+    outputTokens: integer('output_tokens').default(0),
+    sessionId: text('session_id'),
+    reference: text('reference'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index('spend_ledger_tenant_idx').on(table.tenantId, table.createdAt)
+  ]
+);
+
+
