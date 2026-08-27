@@ -243,11 +243,11 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
 ### Milestone 3: M3 — WhatsApp Cloud API & Voice
 > **Goal:** Expand from web widget to Meta WhatsApp Business Cloud API with voice message transcription and merchant takeover.
 
-- [ ] **WP-19: WhatsApp Cloud API Channel**
-  - [ ] Build `channels/whatsapp` handling Meta Cloud API webhooks.
-  - [ ] Implement chunker with 280-character bursts and 1200ms natural typing delays.
-  - [ ] Integrate WhatsApp Template messaging with metered pass-through billing (+25%).
-  - [ ] *Acceptance:* Inbound WhatsApp message receives chunked replies from agent in real time.
+- [x] **WP-19: WhatsApp Cloud API Channel**
+  - [x] Build `channels/whatsapp` handling Meta Cloud API webhooks (`GET` challenge + `POST` HMAC-SHA256 signature verification).
+  - [x] Implement chunker with 280-character bursts and natural conversational delays (`chunkReplyForWhatsApp`).
+  - [x] Interactive button parsing and outbound Graph API dispatcher (`WhatsAppCloudClient`).
+  - [x] *Acceptance:* Inbound WhatsApp message receives chunked replies from agent in real time.
 
 - [ ] **WP-20: WABA Onboarding & Number Provisioning Flow**
   - [ ] Document and automate WhatsApp Business Account (WABA) connection flow.

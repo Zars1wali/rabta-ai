@@ -8,3 +8,4 @@ export * from './lead.js';
 export * from './admin.js';
 export * from './onboarding.js';
 export * from './billing_actions.js';
+export * from './whatsapp.js';
