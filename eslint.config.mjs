@@ -77,6 +77,7 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/.next/**',
       '**/coverage/**',
       '**/Zars_PoC/**',
       '**/*.d.ts',

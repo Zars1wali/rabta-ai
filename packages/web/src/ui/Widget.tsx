@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useSalesOpsChat } from './useSalesOpsChat.js';
 import type { WidgetConfig } from './types.js';

@@ -10,6 +10,7 @@ export interface ChatMessage {
 }
 
 export interface WidgetConfig {
+  tenantId?: string;
   apiBaseUrl?: string;
   locale?: string;
   storeName?: string;

@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useCallback, useRef } from 'react';
 import type { ChatMessage, WidgetConfig, ChatStatus } from './types.js';
 import type { FunnelStage, AgentEvent } from '@salesops/types';
