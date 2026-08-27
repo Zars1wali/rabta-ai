@@ -9,3 +9,4 @@ export * from './admin.js';
 export * from './onboarding.js';
 export * from './billing_actions.js';
 export * from './whatsapp.js';
+export * from './waba_onboarding.js';

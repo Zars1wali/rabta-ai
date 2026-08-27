@@ -249,16 +249,16 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Interactive button parsing and outbound Graph API dispatcher (`WhatsAppCloudClient`).
   - [x] *Acceptance:* Inbound WhatsApp message receives chunked replies from agent in real time.
 
-- [ ] **WP-20: WABA Onboarding & Number Provisioning Flow**
-  - [ ] Document and automate WhatsApp Business Account (WABA) connection flow.
-  - [ ] Support dedicated number provisioning (avoiding app migration friction).
-  - [ ] *Acceptance:* Step-by-step onboarding wizard links a new Meta phone number ID.
+- [x] **WP-20: WABA Onboarding & Number Provisioning Flow**
+  - [x] Document and automate WhatsApp Business Account (WABA) connection flow.
+  - [x] Support dedicated number registration and status polling (`WabaOnboardingService` & API routes).
+  - [x] *Acceptance:* Step-by-step onboarding wizard links and registers a Meta phone number ID.
 
-- [ ] **WP-21: Deepgram Voice Note Processing**
-  - [ ] Integrate Deepgram `nova-3` for inbound audio note transcription.
-  - [ ] Per-tenant language selection (`pt`, `es`, `en`, `ur`).
-  - [ ] **Enforce Europe-tier constraint**: block voice notes on Europe tier until EU STT provider is configured.
-  - [ ] *Acceptance:* Inbound voice note transcribes and passes into agent turn loop seamlessly.
+- [x] **WP-21: Deepgram Voice Note Processing**
+  - [x] Integrate Deepgram `nova-3` for inbound audio note transcription (`DeepgramTranscriber`).
+  - [x] Per-tenant language selection (`pt`, `es`, `en`, `ur`).
+  - [x] **Enforce Europe-tier constraint**: strictly block voice notes on Europe tier unless EU-resident STT provider is configured.
+  - [x] *Acceptance:* Inbound voice note transcribes and passes into agent turn loop seamlessly with hard EU data residency guarantees.
 
 - [ ] **WP-22: Owner WhatsApp Control Plane**
   - [ ] Parse merchant owner commands: `/pause`, `/resume`, `/status`, `/takeover`.
