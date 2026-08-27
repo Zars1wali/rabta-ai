@@ -195,13 +195,13 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
     - [x] Atomic counter increment when a new conversation window opens.
   - [x] *Acceptance:* Duplicate messages within 24h count as 1 conversation; message at 24h+1m counts as new.
 
-- [ ] **WP-26: Depletion State Machine & Route Degradation**
-  - [ ] Implement depletion states: `ok` (<50%), `notice` (≥50%), `warning` (≥80%), `critical` (≥95%), `grace` (≥100%), `depleted`.
-  - [ ] Degradation policy execution:
-    - [ ] `degrade`: switches route to Lite configuration (Flash-Lite, history 8, output 300).
-    - [ ] **Europe-tier rule**: must degrade to EU-resident small model (Mistral Small), NEVER non-EU endpoints.
-    - [ ] Pin model route at session start so route does not change mid-conversation.
-  - [ ] *Acceptance:* Unit test verifies session route pinning and EU residency guarantee under depletion.
+- [x] **WP-26: Depletion State Machine & Route Degradation**
+  - [x] Implement depletion states: `ok` (<50%), `notice` (≥50%), `warning` (≥80%), `critical` (≥95%), `grace` (≥100%), `depleted`.
+  - [x] Degradation policy execution:
+    - [x] `degrade`: switches route to Lite configuration (Flash-Lite, history 8, output 300).
+    - [x] **Europe-tier rule**: must degrade to EU-resident small model (Mistral Small), NEVER non-EU endpoints.
+    - [x] Pin model route at session start so route does not change mid-conversation (`SessionRouteStore`).
+  - [x] *Acceptance:* Unit test verifies session route pinning and EU residency guarantee under depletion.
 
 - [ ] **WP-17: Self-Service 30-Minute Onboarding Wizard**
   - [ ] Build streamlined onboarding flow:
