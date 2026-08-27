@@ -176,12 +176,12 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] Implement `verify(cfg)` for both adapters to sample 5 live products with error diagnostics.
   - [x] *Acceptance:* WooCommerce and CSV connectors connect, verify 5 items, and sync items into snapshot.
 
-- [ ] **WP-16: Automated Per-Tenant Catalog Smoke Suite**
-  - [ ] Build catalog-driven smoke test generator in `packages/eval`:
-    - [ ] Generates 10 derived Q&A test cases from newly synced catalog items.
-    - [ ] Executes turns and asserts exact match on price, stock, and non-existent SKU refusals.
-    - [ ] Logs results to `eval_runs` and blocks catalog activation if smoke tests fail.
-  - [ ] *Acceptance:* Syncing a catalog automatically runs smoke tests and fails if price is misquoted.
+- [x] **WP-16: Automated Per-Tenant Catalog Smoke Suite**
+  - [x] Build catalog-driven smoke test generator in `packages/eval`:
+    - [x] Generates derived Q&A test cases from newly synced catalog items.
+    - [x] Executes turns and asserts exact match on price, stock, and non-existent SKU refusals.
+    - [x] Logs results to `eval_runs` and blocks catalog activation if smoke tests fail via `CatalogSyncService`.
+  - [x] *Acceptance:* Syncing a catalog automatically runs smoke tests and fails if price is misquoted.
 
 - [ ] **WP-24: Metering Schema & Hot-Path Counter Engine**
   - [ ] Create Drizzle migration for metering: `entitlements`, `usage_events`, `usage_counters`, `plan_changes`, `depletion_alerts`.
