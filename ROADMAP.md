@@ -276,9 +276,9 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [ ] Monthly PDF/signed URL statement generator for token spend reconciliation.
   - [ ] *Acceptance:* Ledger reconciles within 5% of provider invoice.
 
-- [ ] **WP-30: Mistral & Vertex AI EU Provider Adapters** *(Trigger: First Europe-tier sale)*
-  - [ ] Build provider adapter for Mistral Small 3.1 & Mistral Medium with EU data residency guarantee.
-  - [ ] *Acceptance:* Complete conversation runs exclusively through EU endpoints with zero US data routing.
+- [x] **WP-30: Mistral & Vertex AI EU Provider Adapters** *(Trigger: First Europe-tier sale)*
+  - [x] Build provider adapter for Mistral Small 3.1 & Mistral Large with EU data residency guarantee (`MistralProviderAdapter` & `LlmProviderFactory`).
+  - [x] *Acceptance:* Complete conversation runs exclusively through EU endpoints with zero US data routing.
 
 - [ ] **WP-31: Specialized E-Commerce Adapters** *(Trigger: ≥3 requests for specific platform)*
   - [ ] Shopify REST/GraphQL catalog adapter.
