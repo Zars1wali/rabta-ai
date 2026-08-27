@@ -293,16 +293,18 @@ export class SessionRepository {
     sessionId: string,
     data: {
       stage: FunnelStage;
-      tokensUsed: number;
-      costMinor: number;
+      tokensUsed?: number;
+      costMinor?: number;
     }
   ) {
+    const tokens = data.tokensUsed ?? 0;
+    const cost = data.costMinor ?? 0;
     const [updated] = await this.db
       .update(sessions)
       .set({
         stage: data.stage,
-        tokensUsed: sql`${sessions.tokensUsed} + ${data.tokensUsed}`,
-        costMinor: sql`${sessions.costMinor} + ${data.costMinor}`,
+        tokensUsed: sql`${sessions.tokensUsed} + ${tokens}`,
+        costMinor: sql`${sessions.costMinor} + ${cost}`,
         lastMessageAt: new Date()
       })
       .where(and(eq(sessions.tenantId, tenantId), eq(sessions.id, sessionId)))

@@ -5,3 +5,4 @@ export * from './whatsapp.js';
 export * from './whatsapp_client.js';
 export * from './waba_onboarding.js';
 export * from './deepgram.js';
+export * from './owner_control.js';

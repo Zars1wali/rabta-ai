@@ -1,9 +1,14 @@
 import type {
   WhatsAppCloudClient,
   AgentTurnExecutor,
-  SessionRepository
+  SessionRepository,
+  TenantRepository
 } from '@salesops/core';
-import { chunkReplyForWhatsApp } from '@salesops/core';
+import {
+  chunkReplyForWhatsApp,
+  OwnerControlPlane,
+  parseOwnerCommand
+} from '@salesops/core';
 
 export interface WhatsAppRouteOptions {
   verifyToken: string;
@@ -12,6 +17,8 @@ export interface WhatsAppRouteOptions {
   whatsappClient: WhatsAppCloudClient;
   turnExecutor: AgentTurnExecutor;
   sessionRepo: SessionRepository;
+  tenantRepo?: TenantRepository;
+  ownerControlPlane?: OwnerControlPlane;
 }
 
 export async function handleWhatsAppGetRoute(
@@ -68,9 +75,27 @@ export async function handleWhatsAppPostRoute(
 
   // 2. Parse inbound WhatsApp messages
   const inboundMessages = options.whatsappClient.parseInboundWebhookPayload(payload);
+  const controlPlane = options.ownerControlPlane || new OwnerControlPlane();
 
-  // 3. Process each message asynchronously
+  // 3. Process each message
   for (const msg of inboundMessages) {
+    // Check if message is a merchant owner slash command
+    const ownerCmd = parseOwnerCommand(msg.text);
+    if (ownerCmd && options.tenantRepo) {
+      const tenant = await options.tenantRepo.getById(options.tenantId);
+      if (tenant && controlPlane.isOwnerPhone(tenant.config, msg.from)) {
+        const cmdResult = await controlPlane.executeCommand({
+          command: ownerCmd,
+          tenantConfig: tenant.config,
+          sessionRepo: options.sessionRepo,
+          tenantRepo: options.tenantRepo
+        });
+
+        await options.whatsappClient.sendTextMessage(msg.from, cmdResult.replyText);
+        continue;
+      }
+    }
+
     let session = await options.sessionRepo.getSession(options.tenantId, `wa_${msg.from}`);
     const sessionId = session?.id || crypto.randomUUID();
 
@@ -82,6 +107,9 @@ export async function handleWhatsAppPostRoute(
         stage: 'greet',
         externalRef: msg.from
       });
+    } else if (session.stage === 'handoff') {
+      // Human manager takeover in effect: suppress automatic AI replies
+      continue;
     }
 
     // Execute turn via AgentTurnExecutor

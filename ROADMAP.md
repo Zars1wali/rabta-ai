@@ -260,10 +260,10 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
   - [x] **Enforce Europe-tier constraint**: strictly block voice notes on Europe tier unless EU-resident STT provider is configured.
   - [x] *Acceptance:* Inbound voice note transcribes and passes into agent turn loop seamlessly with hard EU data residency guarantees.
 
-- [ ] **WP-22: Owner WhatsApp Control Plane**
-  - [ ] Parse merchant owner commands: `/pause`, `/resume`, `/status`, `/takeover`.
-  - [ ] Strict phone number isolation between merchant owner controls and customer conversations.
-  - [ ] *Acceptance:* Merchant sending `/pause` halts automated AI replies for that conversation.
+- [x] **WP-22: Owner WhatsApp Control Plane**
+  - [x] Parse merchant owner commands: `/pause`, `/resume`, `/status`, `/takeover`, `/help` (`OwnerControlPlane`).
+  - [x] Strict phone number isolation between merchant owner controls and customer conversations.
+  - [x] *Acceptance:* Merchant sending `/pause` halts automated AI replies for that conversation and suppresses AI during handoff.
 
 ---
 
