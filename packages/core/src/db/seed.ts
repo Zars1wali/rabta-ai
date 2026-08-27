@@ -259,7 +259,10 @@ export const ZPI_TENANT_CONFIG: TenantConfig = {
       kind: 'stripe_checkout',
       priceMap: {
         ai_act_audit: 'zpi_ai_act_audit_eur',
-        agent_soc_monthly: 'zpi_agent_soc_monthly_eur'
+        agent_soc_monthly: 'zpi_agent_soc_monthly_eur',
+        salesops_preview: 'salesops_preview_eur',
+        salesops_standard: 'salesops_standard_monthly_eur',
+        salesops_europe: 'salesops_europe_monthly_eur'
       }
     },
     {
@@ -293,6 +296,55 @@ export const ZPI_CATALOG: Catalog = {
   sourceKind: 'json',
   fetchedAt: new Date().toISOString(),
   items: [
+    {
+      sku: 'salesops_preview',
+      name: 'SalesOps 24h Store Preview Agent',
+      category: 'AI Sales Agents',
+      description:
+        'A private live sales agent connected to your real WooCommerce, Shopify, or CSV catalog within 24 hours. 100% credited toward your first month subscription.',
+      priceMinor: 5000, // €50.00
+      currency: 'EUR',
+      billing: 'once',
+      attributes: {
+        turnaround: '24 hours',
+        creditGuarantee: '100% credited to first month'
+      },
+      available: true,
+      url: 'https://zeropointintel.com/preview'
+    },
+    {
+      sku: 'salesops_standard',
+      name: 'SalesOps Standard AI Sales Employee (Monthly)',
+      category: 'AI Sales Agents',
+      description:
+        '24/7 automated sales closing agent for your website with 500 included conversations, live stock checks, and direct Stripe checkout generation.',
+      priceMinor: 7900, // €79.00 / month
+      currency: 'EUR',
+      billing: 'month',
+      attributes: {
+        conversationsIncluded: 500,
+        channels: 'Web Widget'
+      },
+      available: true,
+      url: 'https://zeropointintel.com/standard'
+    },
+    {
+      sku: 'salesops_europe',
+      name: 'SalesOps Europe & WhatsApp AI Sales Employee (Monthly)',
+      category: 'AI Sales Agents',
+      description:
+        'Full omnichannel coverage on Web and Meta WhatsApp Business Cloud API with voice note transcription, human WhatsApp takeover (/pause), and 100% EU data residency.',
+      priceMinor: 9900, // €99.00 / month
+      currency: 'EUR',
+      billing: 'month',
+      attributes: {
+        conversationsIncluded: 500,
+        channels: 'Web Widget + Meta WhatsApp Cloud API',
+        dataResidency: 'Paris/Frankfurt EU Datacenters'
+      },
+      available: true,
+      url: 'https://zeropointintel.com/europe'
+    },
     {
       sku: 'zpi_ai_act_audit',
       name: 'EU AI Act Article 50 & 52 Comprehensive Audit',
