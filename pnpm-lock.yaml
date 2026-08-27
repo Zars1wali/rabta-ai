@@ -98,6 +98,15 @@ importers:
 
   packages/core:
     dependencies:
+      '@salesops/adapter-catalog-csv':
+        specifier: workspace:*
+        version: link:../../adapters/catalog-csv
+      '@salesops/adapter-catalog-json':
+        specifier: workspace:*
+        version: link:../../adapters/catalog-json
+      '@salesops/adapter-catalog-woocommerce':
+        specifier: workspace:*
+        version: link:../../adapters/catalog-woocommerce
       '@salesops/types':
         specifier: workspace:*
         version: link:../types

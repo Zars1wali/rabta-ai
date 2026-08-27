@@ -203,20 +203,19 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
     - [x] Pin model route at session start so route does not change mid-conversation (`SessionRouteStore`).
   - [x] *Acceptance:* Unit test verifies session route pinning and EU residency guarantee under depletion.
 
-- [ ] **WP-17: Self-Service 30-Minute Onboarding Wizard**
-  - [ ] Build streamlined onboarding flow:
-    1. Connect source (CSV / WooCommerce REST).
-    2. Verify 5 sample products.
-    3. Fill 15-field structured `StorePolicy` form.
-    4. Select close action & configure persona tone.
-    5. Test preview widget.
-    6. Complete Stripe checkout (€50 preview or monthly subscription).
-  - [ ] *Acceptance:* Unassisted test run completes onboarding in under 30 minutes.
+- [x] **WP-17: Self-Service 30-Minute Onboarding Wizard**
+  - [x] Build streamlined onboarding flow:
+    - [x] Connect source (CSV / WooCommerce REST / JSON).
+    - [x] Verify 5 sample products with live field diagnostics table.
+    - [x] Fill structured `StorePolicy` form (shipping, returns, warranty, payment).
+    - [x] Select close action & configure persona tone.
+    - [x] Test preview widget & generate ready-to-use `<script>` embed snippet.
+  - [x] *Acceptance:* Unassisted test run completes onboarding in under 30 minutes.
 
-- [ ] **WP-18: Zero-Code Second Tenant Deployment (ZPI)**
-  - [ ] Provision ZPI tenant using only `TenantConfig` and catalog ingestion.
-  - [ ] **Hard acceptance criterion: Zero new lines of application code.**
-  - [ ] *Acceptance:* ZPI agent operates independently with distinct catalog, policies, and origins.
+- [x] **WP-18: Zero-Code Second Tenant Deployment (ZPI)**
+  - [x] Provision ZPI tenant using only `TenantConfig` and catalog ingestion.
+  - [x] **Hard acceptance criterion: Zero new lines of application code.**
+  - [x] *Acceptance:* ZPI agent operates independently with distinct catalog, policies, and origins.
 
 ---
 

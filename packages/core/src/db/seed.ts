@@ -198,23 +198,164 @@ export const REWILT_CATALOG: Catalog = {
   ]
 };
 
+export const ZPI_TENANT_ID = '00000000-0000-4000-8000-000000000002';
+
+export const ZPI_TENANT_CONFIG: TenantConfig = {
+  version: 1,
+  tenantId: ZPI_TENANT_ID,
+  displayName: 'ZeroPointIntel Cybersecurity & AI Ops',
+  tier: 'europe',
+  locales: ['en', 'pt-PT'],
+  currency: 'EUR',
+  timezone: 'Europe/Lisbon',
+
+  persona: {
+    tone: 'professional_technical',
+    greeting:
+      'Welcome to ZeroPointIntel. We deliver high-assurance autonomous agent security, EU AI Act compliance, and AI Ops architecture.',
+    escalationPhrase:
+      'I will connect you directly with a ZeroPointIntel principal security engineer.'
+  },
+
+  catalog: {
+    source: 'json',
+    config: { path: 'zpi-packages.json' },
+    refresh: { mode: 'poll', ttlMinutes: 60 },
+    staleness: { maxAgeMinutes: 240, onStale: 'hedge_price' }
+  },
+
+  policy: {
+    shipping: null,
+    returns: {
+      windowDays: 30,
+      conditions: 'Satisfaction guarantee on all architecture assessments and security audits.',
+      whoPaysReturn: 'store'
+    },
+    warranty: {
+      months: 24,
+      scope: 'Continuous automated EU AI Act conformity monitoring and enterprise SLA.'
+    },
+    payment: {
+      methods: ['Stripe', 'Bank Wire Transfer', 'Crypto USDC'],
+      installments: false
+    },
+    hours: {
+      timezone: 'Europe/Lisbon',
+      note: '24/7 autonomous monitoring with global dedicated engineering response within 1 hour.'
+    },
+    contact: {
+      humanEscalation: 'security@zeropointintel.com'
+    },
+    custom: [
+      {
+        question: 'What is the turnaround time for an EU AI Act Article 50 & 52 audit?',
+        answer: 'Comprehensive assessment reports and technical documentation are delivered within 48 business hours.'
+      }
+    ]
+  },
+
+  closes: [
+    {
+      kind: 'stripe_checkout',
+      priceMap: {
+        ai_act_audit: 'zpi_ai_act_audit_eur',
+        agent_soc_monthly: 'zpi_agent_soc_monthly_eur'
+      }
+    },
+    {
+      kind: 'capture_lead',
+      fields: ['name', 'email', 'phone', 'company_url', 'notes'],
+      notify: { type: 'email', to: 'security@zeropointintel.com' }
+    }
+  ],
+
+  channels: [
+    {
+      kind: 'web',
+      allowedOrigins: ['https://zeropointintel.com', 'https://www.zeropointintel.com', 'http://localhost:3000']
+    }
+  ],
+
+  limits: {
+    conversationsPerMonth: 1000,
+    tokenBudgetPerSession: 60000,
+    monthlySpendCapEur: 100
+  },
+
+  compliance: {
+    aiDisclosure: true,
+    retentionDays: 90
+  }
+};
+
+export const ZPI_CATALOG: Catalog = {
+  tenantId: ZPI_TENANT_ID,
+  sourceKind: 'json',
+  fetchedAt: new Date().toISOString(),
+  items: [
+    {
+      sku: 'zpi_ai_act_audit',
+      name: 'EU AI Act Article 50 & 52 Comprehensive Audit',
+      category: 'Compliance & Safety',
+      description:
+        'End-to-end transparency, watermarking, risk classification, and technical documentation assessment with certified audit report.',
+      priceMinor: 150000, // €1,500.00
+      currency: 'EUR',
+      billing: 'once',
+      attributes: {
+        slaHours: 48,
+        deliverable: 'Certified PDF + remediation checklist'
+      },
+      available: true,
+      url: 'https://zeropointintel.com/audit'
+    },
+    {
+      sku: 'zpi_agent_soc_monthly',
+      name: 'ZeroPoint Autonomous Agent SOC & Guardrails (Monthly)',
+      category: 'Managed Security',
+      description:
+        'Continuous red-teaming, prompt injection monitoring, runtime budget guardrails, and real-time hallucination prevention.',
+      priceMinor: 49000, // €490.00 / month
+      currency: 'EUR',
+      billing: 'month',
+      attributes: {
+        realTimeAlerts: true,
+        guardrailLatencyMs: 15
+      },
+      available: true,
+      url: 'https://zeropointintel.com/soc'
+    }
+  ]
+};
+
 export async function seedDatabase(db: Database) {
   const tenantRepo = new TenantRepository(db);
   const catalogRepo = new CatalogRepository(db);
 
   // 1. Upsert rewilt tenant
-  const tenant = await tenantRepo.upsert({
+  const tenantRewilt = await tenantRepo.upsert({
     id: REWILT_TENANT_ID,
     slug: 'rewilt',
     displayName: REWILT_TENANT_CONFIG.displayName,
     config: REWILT_TENANT_CONFIG
   });
 
-  // 2. Save initial catalog snapshot
-  const snapshot = await catalogRepo.saveSnapshot(tenant.id, REWILT_CATALOG);
+  // 2. Save rewilt catalog snapshot
+  const snapshotRewilt = await catalogRepo.saveSnapshot(tenantRewilt.id, REWILT_CATALOG);
+
+  // 3. Upsert ZeroPointIntel (ZPI) tenant (Zero new lines of application code!)
+  const tenantZpi = await tenantRepo.upsert({
+    id: ZPI_TENANT_ID,
+    slug: 'zeropointintel',
+    displayName: ZPI_TENANT_CONFIG.displayName,
+    config: ZPI_TENANT_CONFIG
+  });
+
+  // 4. Save ZPI catalog snapshot
+  const snapshotZpi = await catalogRepo.saveSnapshot(tenantZpi.id, ZPI_CATALOG);
 
   return {
-    tenant,
-    snapshot
+    rewilt: { tenant: tenantRewilt, snapshot: snapshotRewilt },
+    zpi: { tenant: tenantZpi, snapshot: snapshotZpi }
   };
 }
