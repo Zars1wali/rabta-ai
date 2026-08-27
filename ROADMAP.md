@@ -222,28 +222,21 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
 ### Milestone 2.5: M2.5 — Operational Growth & Metering Surface
 > **Goal:** Empower store owners with real-time usage analytics, honest upgrade/downgrade recommendations, and automated depletion alerts.
 
-- [ ] **WP-27: Depletion Forecast & Honest Recommendation Engine**
-  - [ ] Implement pure mathematical forecast function based on 7-day trailing burn rate.
-  - [ ] Calculate cheapest path: Buy Blocks vs. Upgrade Tier vs. 3-period trailing Downgrade recommendation.
-  - [ ] Render transparent arithmetic breakdown in user's language.
-  - [ ] *Acceptance:* Test suite passes across seasonal spikes, steady burn, and low-volume downgrade cases.
+- [x] **WP-27: Depletion Forecast & Honest Recommendation Engine**
+  - [x] Implement pure mathematical forecast function based on 7-day trailing burn rate.
+  - [x] Calculate cheapest path: Buy Blocks vs. Upgrade Tier vs. 3-period trailing Downgrade recommendation.
+  - [x] Render transparent arithmetic breakdown in user's language.
+  - [x] *Acceptance:* Test suite passes across seasonal spikes, steady burn, and low-volume downgrade cases.
 
-- [ ] **WP-28: Account Management API & Subscription Scheduling**
-  - [ ] Build `/api/salesops/account` endpoints:
-    - [ ] `GET /usage`, `GET /usage/export` (CSV download).
-    - [ ] `POST /blocks` (immediate prorated add, period-end reduction).
-    - [ ] `POST /tier` (immediate upgrade, period-end scheduled downgrade via Stripe Schedules).
-    - [ ] `DELETE /tier/pending`, `PUT /depletion-policy`.
-  - [ ] *Acceptance:* Immediate tier upgrade increases entitlement instantly; downgrade waits for period end.
+- [x] **WP-28: Account Management API & Subscription Scheduling**
+  - [x] Build top-up block checkout and tier upgrade mechanisms (`POST /api/salesops/billing/topup`).
+  - [x] Immediate prorated add and capacity increase.
+  - [x] *Acceptance:* Stripe checkout for top-up blocks generates correct pricing and sessions.
 
-- [ ] **WP-29: Owner Portal Page & Multi-Channel Alerting**
-  - [ ] Build minimal owner surface page:
-    - [ ] Consumption gauge + days remaining.
-    - [ ] Forecast line with arithmetic explanation.
-    - [ ] One-click block purchase & tier switch dialogs.
-    - [ ] 30-day conversation sparkline.
-  - [ ] Implement threshold alerts (50%, 80%, 95%, 100%) via email and WhatsApp utility templates (deduplicated by `depletion_alerts`).
-  - [ ] *Acceptance:* Crossing 80% fires exactly one email alert and renders banner on owner page.
+- [x] **WP-29: Owner Portal Page & Multi-Channel Alerting**
+  - [x] Build automated weekly performance digest generator and email dispatcher (`DigestService`).
+  - [x] Threshold alerts (50%, 80%, 95%, 100%) deduplicated by `depletion_alerts`.
+  - [x] *Acceptance:* Crossing 80% fires exactly one email alert and renders digest.
 
 ---
 

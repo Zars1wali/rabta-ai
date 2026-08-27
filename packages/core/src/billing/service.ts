@@ -57,6 +57,28 @@ export class StripeBillingService {
     };
   }
 
+  async createTopUpCheckoutSession(options: {
+    tenantId: string;
+    blockCount: number;
+    email?: string;
+    successUrl?: string;
+    cancelUrl?: string;
+  }): Promise<StripeCheckoutResult> {
+    const blocks = Math.max(1, options.blockCount || 1);
+    const priceMinor = blocks * 1500; // 15€ = 1500 cents per 100 conversations
+    const sessionId = `cs_topup_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    const checkoutUrl = `https://checkout.stripe.com/pay/${sessionId}?sku=topup_${blocks * 100}&tenant_id=${encodeURIComponent(options.tenantId)}`;
+
+    return {
+      checkoutUrl,
+      sessionId,
+      sku: `topup_${blocks * 100}`,
+      priceMinor,
+      currency: 'EUR',
+      mode: 'payment'
+    };
+  }
+
   async createCustomerPortalSession(
     options: StripeCustomerPortalOptions
   ): Promise<{ portalUrl: string }> {

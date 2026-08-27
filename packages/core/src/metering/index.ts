@@ -3,3 +3,4 @@ export * from './identity.js';
 export * from './repository.js';
 export * from './service.js';
 export * from './depletion.js';
+export * from './forecast.js';
