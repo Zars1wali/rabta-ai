@@ -12,7 +12,7 @@ export type NotificationEvent =
       tenantId: string;
       sessionId: string;
       reason: string;
-      target: NotifyTarget;
+      target?: NotifyTarget;
       transcript?: Array<{ role: string; content: string }>;
     };
 

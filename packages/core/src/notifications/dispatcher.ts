@@ -63,8 +63,8 @@ export class OutboundNotificationDispatcher implements NotificationDispatcher {
       }
     }
 
-    if (event.type === 'handoff_requested' && event.target.type === 'email') {
-      const emailTarget = event.target.to || this.defaultEmailTarget || 'comercial@rewilt.com';
+    if (event.type === 'handoff_requested' && (!event.target || event.target.type === 'email')) {
+      const emailTarget = event.target?.to || this.defaultEmailTarget || 'comercial@rewilt.com';
       return {
         sent: true,
         channel: 'email',

@@ -177,3 +177,77 @@ export const evalRuns = pgTable(
   },
   (table) => [index('eval_runs_tenant_created_idx').on(table.tenantId, table.createdAt)]
 );
+
+export const entitlements = pgTable(
+  'entitlements',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+    periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+    includedConversations: integer('included_conversations').notNull().default(500),
+    overageRateMinor: integer('overage_rate_minor').notNull().default(10), // e.g. 10 cents per additional conversation
+    overageCapMinor: integer('overage_cap_minor').notNull().default(5000), // €50 max overage
+    status: text('status').notNull().default('active'), // 'active' | 'expired'
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [index('entitlements_tenant_period_idx').on(table.tenantId, table.periodStart, table.status)]
+);
+
+export const usageEvents = pgTable(
+  'usage_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    windowId: text('window_id').notNull().unique(), // e.g. "web:<hash>:2026-08-27T14"
+    identityHash: text('identity_hash').notNull(),
+    channel: text('channel').notNull(),
+    windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+    windowEnd: timestamp('window_end', { withTimezone: true }).notNull(),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index('usage_events_tenant_window_idx').on(table.tenantId, table.windowStart, table.windowEnd),
+    index('usage_events_identity_idx').on(table.tenantId, table.identityHash, table.windowEnd)
+  ]
+);
+
+export const usageCounters = pgTable(
+  'usage_counters',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+    conversationsUsed: integer('conversations_used').notNull().default(0),
+    tokensUsed: integer('tokens_used').notNull().default(0),
+    lastEventAt: timestamp('last_event_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index('usage_counters_tenant_period_idx').on(table.tenantId, table.periodStart)
+  ]
+);
+
+export const depletionAlerts = pgTable(
+  'depletion_alerts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+    threshold: integer('threshold').notNull(), // 80, 100, 120 (%)
+    triggeredAt: timestamp('triggered_at', { withTimezone: true }).notNull().defaultNow(),
+    channel: text('channel').notNull().default('email')
+  },
+  (table) => [
+    index('depletion_alerts_tenant_threshold_idx').on(table.tenantId, table.periodStart, table.threshold)
+  ]
+);
+

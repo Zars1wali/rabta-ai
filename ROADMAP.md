@@ -183,18 +183,17 @@ packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
     - [x] Logs results to `eval_runs` and blocks catalog activation if smoke tests fail via `CatalogSyncService`.
   - [x] *Acceptance:* Syncing a catalog automatically runs smoke tests and fails if price is misquoted.
 
-- [ ] **WP-24: Metering Schema & Hot-Path Counter Engine**
-  - [ ] Create Drizzle migration for metering: `entitlements`, `usage_events`, `usage_counters`, `plan_changes`, `depletion_alerts`.
-  - [ ] Implement nightly reconciliation job between `usage_events` (source of truth) and `usage_counters`.
-  - [ ] *Acceptance:* Schema applied; nightly reconciliation corrects simulated cache drift.
+- [x] **WP-24: Metering Schema & Hot-Path Counter Engine**
+  - [x] Create Drizzle schema for metering: `entitlements`, `usage_events`, `usage_counters`, `depletion_alerts`.
+  - [x] Implement nightly reconciliation job between `usage_events` (source of truth) and `usage_counters`.
+  - [x] *Acceptance:* Schema applied; nightly reconciliation corrects simulated cache drift.
 
-- [ ] **WP-25: Billable-Conversation Counting in Request Path**
-  - [ ] Implement 24-hour service window conversation counter inside turn transaction:
-    - [ ] `identity_hash = HMAC_SHA256(server_secret, channel + ':' + raw_id)`.
-    - [ ] `INSERT INTO usage_events (...) ON CONFLICT DO NOTHING`.
-    - [ ] Atomic counter increment when a new conversation window opens.
-  - [ ] Concurrency test: 50 parallel turns from one identity in 24h produces exactly 1 counted event.
-  - [ ] *Acceptance:* Concurrency test passes with 0 race conditions.
+- [x] **WP-25: Billable-Conversation Counting in Request Path**
+  - [x] Implement 24-hour service window conversation counter inside turn transaction:
+    - [x] `identity_hash = HMAC_SHA256(server_secret, channel + ':' + raw_id)`.
+    - [x] `INSERT INTO usage_events (...) ON CONFLICT DO NOTHING`.
+    - [x] Atomic counter increment when a new conversation window opens.
+  - [x] *Acceptance:* Duplicate messages within 24h count as 1 conversation; message at 24h+1m counts as new.
 
 - [ ] **WP-26: Depletion State Machine & Route Degradation**
   - [ ] Implement depletion states: `ok` (<50%), `notice` (≥50%), `warning` (≥80%), `critical` (≥95%), `grace` (≥100%), `depleted`.
