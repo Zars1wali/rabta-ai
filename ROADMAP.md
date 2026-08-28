@@ -1,343 +1,154 @@
-# SalesOps — Master Roadmap & Implementation Plan
+# Nuncio (by ZeroPointIntel) — Master Platform Roadmap
 
-**v1.0 — 2026-08-26** · Authoritative execution roadmap derived from `SPECS.md`, `ARCHITECTURE.md`, `Metering_and_plans_SPEC.md`, and `Salesops_token_costs_and_catalogue.md`.
+**v1.0 — 2026-08-28** · Authoritative execution roadmap derived from `Nuncio_platform_SPEC_v1.0.md`, integrating core deterministic engines from `SPECS.md`, `Metering_and_plans_SPEC.md`, and `Salesops_token_costs_and_catalogue.md`.
 
 ---
 
-## 1. Project Foundations & Non-Negotiables
+## 1. Product Foundations & Non-Negotiables
 
 Every task across all work packages must strictly adhere to the project core constraints:
 
-1. **EU AI Act Article 50 Transparency**: AI disclosure label in the first message of every conversation across all locales. Non-removable, provider-enforced.
-2. **Zero Hallucination / Server-Resolved Tool Facts**: The model never asserts a price, stock availability, policy, or integration detail without a server-executed tool call.
-3. **No Catalog Fabrication**: Deterministic catalog ingestion only (CSV, JSON, WooCommerce REST). Never prompt an LLM to invent prices, products, or stock images.
-4. **Strict Tenant Isolation**: `tenant_id` mandatory across every table and query. Enforced by automated CI AST/grep tests that fail the build if violated.
-5. **Client Bundle Hygiene**: Zero API keys or secrets in the client bundle. Verified against built production artifacts.
-6. **Compliant Infrastructure**: Paid Gemini 3.x / Vertex AI or Mistral EU endpoints only (no free-tier API usage in EEA/CH/UK). WhatsApp via Meta Cloud API only (no Baileys).
+1. **Contact vs. Lead Separation**: A contact is a person; a lead is a distinct commercial opportunity. A customer requesting a deep clean in March and window cleaning in August is one contact and two leads.
+2. **Deterministic Catalog Grounding & Zero Price Invention**: The AI assistant never states a price, availability, or lead time not present in the offering data. If it isn't verified in the catalog, it escalates.
+3. **Owner in the Loop for Money**: Any transition touching money or commitment requires a human. The AI proposes and qualifies; only a human moves a lead to `won`.
+4. **Strict Multi-Tenant Isolation**: Shared PostgreSQL with `tenant_id` on every row enforced by Row-Level Security (RLS) policies. Object storage keys are tenant-prefixed.
+5. **Idempotent Webhook Ingress**: Webhooks acknowledge `200 OK` immediately; processing is asynchronous and strictly deduplicated by `wamid`.
+6. **24-Hour WhatsApp Service Window Enforcement**: Sends outside the 24-hour customer window are refused at the API layer (no templates in M1).
+7. **Multilingual Architecture**: UI in DE/FR/IT/EN; conversation language resolved per contact and sticky; Swiss German voice notes transcribed, normalized to Hochdeutsch, and answered in clean business Hochdeutsch.
+8. **Direct Meta Billing Alignment**: Merchants connect via Meta Embedded Signup with their own payment method; Nuncio charges a software subscription. Per-message cost estimates and category tracking are recorded from day one.
 
 ---
 
-## 2. Platform Architecture & Monorepo Layout
+## 2. Milestone Overview
 
-### Monorepo Structure (`pnpm` workspaces)
-
-```
-packages/
-  types/                 # Frozen contracts, zod schemas (no runtime deps beyond zod)
-  core/                  # Transport-agnostic agent runtime, policy render, stage machine, tools, LLM adapter
-  web/                   # Next.js server routes, session store, SSE chat endpoint, Stripe webhooks, widget UI
-  adapters/
-    catalog-json/        # Static/feed JSON catalog adapter (WP-03)
-    catalog-csv/         # CSV / XLSX upload adapter (WP-15)
-    catalog-woocommerce/ # WooCommerce REST API adapter (WP-15)
-  eval/                  # Integrity, adversarial, and smoke test suites
-apps/
-  rewilt-site/           # Customer-facing Next.js application & widget embed
-```
-
-### Dependency Flow Enforcement
-
-```
-packages/types ← packages/core ← packages/web ← apps/rewilt-site
-adapters/* depend ONLY on packages/types
-packages/core NEVER imports Next.js, React, Stripe, or provider SDKs directly
+```mermaid
+flowchart TD
+    P0["Phase 0: Meta Tech Provider Administrative Clearance"] --> M1["Milestone 1: ZeroPointIntel.com Commercial Landing"]
+    M1 --> M2["Milestone 2: Multi-Tenant Postgres Schema & RLS"]
+    M2 --> M3["Milestone 3: WhatsApp Cloud API Ingress & 24h Window"]
+    M3 --> M4["Milestone 4: AI Extraction, Quote Capture & Multilingual Engine"]
+    M4 --> M5["Milestone 5: Nuncio Unified Inbox & Lead Pipeline Board"]
+    M5 --> M6["Milestone 6: Owner 1-Tap Actions, Stripe Links & Metering"]
 ```
 
 ---
 
-## 3. Work-Package Roadmap & Task Breakdown
+## 3. Detailed Work-Package Breakdown
 
-### Milestone 0: M0 — The Evening Build (Core Runtime & Staging Chat)
-> **Goal:** Deploy a working conversational agent on staging talking about Rewilt packages, streaming replies via SSE, enforcing EU AI Act disclosure, and logging transcripts to PostgreSQL.
+### Phase 0: Meta Tech Provider Setup *(In Progress / Verification In Review)*
+> **Goal:** Complete Meta administrative requirements for the Tech Provider program to enable automated customer onboarding via Embedded Signup.
 
-- [x] **WP-01: Frozen Contracts & Monorepo Scaffolding**
-  - [x] Initialize `pnpm` monorepo workspace with TypeScript 5.x, Node 22/24, and Vitest.
-  - [x] Create `packages/types` with Zod schemas:
-    - [x] `CatalogItem`, `Catalog`, `VerifyResult`, `CatalogSource`
-    - [x] `StorePolicy`, `CloseAction`, `Channel`, `InboundMessage`
-    - [x] `StoreIdentityVerifier` (E-Store JWT / OAuth / Magic Link)
-    - [x] `FunnelStage`, `AgentTurnInput`, `AgentTurnOutput`, `TenantConfig`
-  - [x] Configure ESLint import-boundary rules enforcing strict architectural direction (`types ← core ← web ← apps`).
-  - [x] *Acceptance:* `pnpm test` and `pnpm lint` pass across the workspace; types package builds cleanly.
-
-- [x] **WP-02: PostgreSQL Database & Tenant-Scoped Repositories**
-  - [x] Configure PostgreSQL 16 + Drizzle ORM schema:
-    - [x] `tenants`, `catalog_snapshots`, `catalog_items`, `sessions`, `messages`, `tool_calls`, `leads`, `subscriptions`, `eval_runs`.
-  - [x] Implement append-only catalog snapshots (replaces defective PoC delete-then-insert pattern).
-  - [x] Seed script: create initial tenant `rewilt`, its `TenantConfig`, and seed package items.
-  - [x] Write CI test asserting every query in the data layer explicitly filters by `tenant_id`.
-  - [x] *Acceptance:* Migrations apply cleanly; seed runs idempotently; AST/query test fails if a query lacks `tenant_id`.
-
-- [x] **WP-03: Catalog Engine & Static JSON Adapter**
-  - [x] Build `core/catalog` engine with staleness detection (`maxAgeMinutes`, `onStale: hedge_price`).
-  - [x] Build `adapters/catalog-json` implementing `CatalogSource` interface.
-  - [x] Implement `verify(cfg)` returning item count, sample of 5 items, and validation warnings.
-  - [x] *Acceptance:* Unit tests verify catalog snapshot loading, staleness hedging, and `verify()` sampling.
-
-- [x] **WP-04: LLM Provider Adapter & Core Agent Turn Loop**
-  - [x] Implement `core/llm` provider adapter for Gemini 3.x Flash-Lite (default) and Flash (escalation).
-  - [x] Add retry logic (2 retries with exponential backoff), 20s timeout, `max_output_tokens: 400`, `temperature: 0.5`.
-  - [x] Build `core/agent` turn loop:
-    - [x] Input normalization → budget check → 15-message history loading.
-    - [x] Dynamic policy rendering (stage, tone, locale, store policy — strictly NO catalog text).
-    - [x] Model invocation with tool declarations.
-  - [x] *Acceptance:* Turn loop completes 10 turns with simulated messages without hallucinating prompt context.
-
-- [x] **WP-05: Output Sanitizer, Chunker & Web Channel**
-  - [x] Implement sanitizer in `core/agent`:
-    - [x] Punctuation normalization, markdown safety, whitespace collapse.
-    - [x] Emoji limiter (max 1 emoji per message, not strip-all).
-  - [x] Build `channels/web` formatting for single-bubble stream with typing indicators.
-  - [x] *Acceptance:* Sanitizer test suite passes regex edge cases and emoji constraints.
-
-- [x] **WP-06: API Routes & SSE Streaming**
-  - [x] Implement Next.js App Router API routes under `/api/salesops`:
-    - [x] `POST /session`: origin-based tenant resolution (`allowedOrigins`), session creation, returns `sessionId` and opening message.
-    - [x] `POST /chat`: turn execution with SSE stream (`token`, `event`, `done` frames).
-    - [x] `GET /health`: liveness and provider ping.
-  - [x] Persist turns, tokens used, cost minor, and messages to PostgreSQL.
-  - [x] *Acceptance:* `curl` to `/chat` yields valid SSE stream with tokens and updates session state in DB.
-
-- [x] **WP-07: Web Widget UI & Compliance Embed**
-  - [x] Build headless React hook `useSalesOpsChat` and embeddable UI widget in `packages/web/ui`.
-  - [x] Guarantee EU AI Act Art. 50 disclosure on first message ("AI sales assistant" badge/header).
-  - [x] Build embed script with typing animation and responsive modal.
-  - [x] Automated build artifact audit checking for leaked environment variables or API keys.
-  - [x] *Acceptance:* Widget runs embedded on staging site, starts chat, shows AI badge, and stores transcripts.
+- [x] **WP-P0.1: Meta Developer Registration & Business Portfolio Setup**
+  - [x] Verified developer profile with 2FA on `developers.facebook.com`.
+  - [x] Created Meta Business App **Nuncio** (App ID: `1584644373301704`) under business portfolio `zeropointintel` (`1188005875832676`).
+  - [x] Designated as an official **Meta Tech Provider**.
+  - [x] Submitted legal Business Verification for `Nuno Miguel Pires Ribeiro` (Status: *In Review*).
+- [ ] **WP-P0.2: Embedded Signup & App Review Preparation**
+  - [ ] Configure Facebook Login for Business with WhatsApp Embedded Signup scopes (`whatsapp_business_management`, `whatsapp_business_messaging`).
+  - [ ] Prepare App Review screen-recording walkthrough and privacy/terms documentation.
 
 ---
 
-### Milestone 1: M1 — The Close (Tools, Funnel, Abuse Controls & Stripe)
-> **Goal:** Enable the agent to autonomously qualify leads, execute tool-based lookups, handle objections, and close into Stripe subscriptions or €50 previews with full CI eval suites.
+### Milestone 1: ZeroPointIntel.com Commercial Rebranding & Sales Landing
+> **Goal:** Transform ZeroPointIntel.com into a clean, modern, high-converting sales platform spotlighting Nuncio for everyday businesses (B2B service trades + E-Commerce) while organizing deep-tech/cybersecurity systems into a dedicated "Portfolio & Solutions" section.
 
-- [x] **WP-08: Server-Resolved Tools & Audit Trail**
-  - [x] Implement server-side tools in `core/agent/tools`:
-    - [x] `search_catalog(query, category, price_range)`
-    - [x] `quote(sku, quantity, billing_interval)`
-    - [x] `get_policy(topic)`
-    - [x] `create_subscription_checkout(sku, email, locale)`
-    - [x] `create_preview_checkout(email, shop_url, locale)`
-    - [x] `capture_lead(delta)` (strictly consent-gated)
-    - [x] `request_human(reason)` (transitions stage to handoff)
-  - [x] Zod schema validation for all tool inputs and outputs.
-  - [x] Record every tool invocation into `tool_calls` table (input, output, latency, status).
-  - [x] Cap at max 2 model roundtrips per user turn.
-  - [x] *Acceptance:* Model correctly answers pricing questions only via `quote`/`search_catalog` tool results.
-
-- [x] **WP-09: Funnel State Machine & Objection Handling**
-  - [x] Implement server-controlled funnel stage progression:
-    - [x] `greet` → `discover` → `qualify` → `present` → `objection` → `close` → `won`/`handoff`/`lost`.
-  - [x] Add factual objection blocks (refusal to fabricate scarcity or false urgency).
-  - [x] *Acceptance:* Agent advances through stages sequentially and refuses fake discount/urgency tactics.
-
-- [x] **WP-10: Abuse Layer & Session Budget Guardrails**
-  - [x] Implement session token budgets (`tokenBudgetPerSession`), IP rate limiting, and origin protection.
-  - [x] Global spend cap check (`SALESOPS_GLOBAL_SPEND_CAP_EUR`).
-  - [x] Degradation fallback when token budget is exhausted.
-  - [x] *Acceptance:* Session exceeding 40k tokens gracefully degrades without throwing unhandled errors.
-
-- [x] **WP-11: CI Integrity & Adversarial Eval Suites**
-  - [x] Build `packages/eval` test runner for automated CI execution:
-    - [x] **Price Integrity**: Exact numeric match assertions against catalog prices.
-    - [x] **Negative Probing**: Assert model refuses products not in the catalog.
-    - [x] **Adversarial / Jailbreak Suite**: Prompt injection, prompt leakage, out-of-scope policies, limit queries.
-    - [x] **AI Act Disclosure**: Assert first message disclosure in every supported language (EN, PT, ES, IT, DE, FR).
-  - [x] *Acceptance:* Eval suite runs in GitHub Actions CI; 100% pass required for deployment.
-
-- [x] **WP-12: Stripe Integration & Checkout Tools**
-  - [x] Implement `stripe_checkout` close action using Stripe Checkout Sessions.
-  - [x] Configure Stripe Product/Price catalogue mapping with lookup keys (`salesops_lite_monthly_eur`, `salesops_standard_monthly_eur`, `salesops_europe_monthly_eur`, `salesops_premium_monthly_eur`, `salesops_preview_eur`).
-  - [x] Implement `POST /api/salesops/webhooks/stripe` with cryptographic HMAC-SHA256 signature verification:
-    - [x] Handles `checkout.session.completed`, `customer.subscription.created/updated/deleted`.
-    - [x] Updates `subscriptions` table.
-  - [x] Generate Stripe Customer Portal session URLs (`POST /api/salesops/billing/portal`).
-  - [x] *Acceptance:* Live Stripe test checkout completes, triggers webhook, and provisions subscription.
-
-- [x] **WP-13: Lead Capture, Consent & Human Handoff**
-  - [x] Build `POST /api/salesops/lead` route with explicit GDPR consent checkbox recording.
-  - [x] Implement `capture_lead` and `handoff` close actions.
-  - [x] Outbound notification dispatcher (`NOTIFY_WEBHOOK_URL` / email targets) for newly captured leads or human escalation.
-  - [x] *Acceptance:* Submitting lead form sends webhook payload with timestamped consent to notification target.
+- [ ] **WP-M1.1: Hero Section & Core Value Proposition**
+  - [ ] Clear business headline: *"Every WhatsApp enquiry answered in under a minute — turned into a structured lead for your business."*
+  - [ ] Interactive live simulation widget: Inbound WhatsApp enquiry $\rightarrow$ Structured Lead Card with Completeness Score.
+  - [ ] Clean, trustworthy modern design aesthetic (light/dark accessible palette, refined typography).
+- [ ] **WP-M1.2: Dual Market Solutions**
+  - [ ] **Service Trades & B2B (Cleaning, Construction, Local Pros)**: Automated quote capture (m², rooms, frequency, location, date), Swiss German voice note handling, zero lost jobs while on a ladder.
+  - [ ] **E-Commerce Stores (Shopify, WooCommerce, Custom)**: Real-time stock verification, order drafting, instant Stripe checkout links in chat.
+- [ ] **WP-M1.3: Compliance, Swiss Trust & Portfolio Assets Section**
+  - [ ] Trust badges: Meta Tech Provider Cloud API, EU AI Act Art. 50 disclosure, Swiss/EU data residency (revDSG & GDPR).
+  - [ ] Dedicated *"Portfolio & Deep-Tech Solutions"* showcase preserving ZeroPointIntel's engineering pedigree (IoT telemetry, cybersecurity, high-assurance distributed systems).
 
 ---
 
-### Milestone 2: M2 — Other People’s Shops & Multi-Tenancy
-> **Goal:** Turn the system into a true multi-tenant SaaS. Self-service onboarding wizard, WooCommerce/CSV catalog sync, automated smoke evals, and robust metering/depletion.
+### Milestone 2: Multi-Tenant Postgres Schema & Row-Level Security
+> **Goal:** Implement the authoritative domain schema with strict Row-Level Security (RLS) across all tables.
 
-- [x] **WP-14: TenantConfig Admin Surface & Versioning**
-  - [x] Implement admin API and guarded JSON manager for `TenantConfig`.
-  - [x] Schema validation on write with version auto-incrementing and optimistic locking.
-  - [x] Admin API routes (`GET`, `POST`, `PUT /api/salesops/admin/tenants`) with API key security.
-  - [x] *Acceptance:* Admin can update tenant settings without server restarts; invalid schemas rejected.
-
-- [x] **WP-15: CSV & WooCommerce Catalog Adapters**
-  - [x] Build `adapters/catalog-csv`: parses CSV product exports into normalized `Catalog` with flexible column mappings.
-  - [x] Build `adapters/catalog-woocommerce`: pulls products, variations, prices, and stock via WooCommerce REST API v3.
-  - [x] Implement `verify(cfg)` for both adapters to sample 5 live products with error diagnostics.
-  - [x] *Acceptance:* WooCommerce and CSV connectors connect, verify 5 items, and sync items into snapshot.
-
-- [x] **WP-16: Automated Per-Tenant Catalog Smoke Suite**
-  - [x] Build catalog-driven smoke test generator in `packages/eval`:
-    - [x] Generates derived Q&A test cases from newly synced catalog items.
-    - [x] Executes turns and asserts exact match on price, stock, and non-existent SKU refusals.
-    - [x] Logs results to `eval_runs` and blocks catalog activation if smoke tests fail via `CatalogSyncService`.
-  - [x] *Acceptance:* Syncing a catalog automatically runs smoke tests and fails if price is misquoted.
-
-- [x] **WP-24: Metering Schema & Hot-Path Counter Engine**
-  - [x] Create Drizzle schema for metering: `entitlements`, `usage_events`, `usage_counters`, `depletion_alerts`.
-  - [x] Implement nightly reconciliation job between `usage_events` (source of truth) and `usage_counters`.
-  - [x] *Acceptance:* Schema applied; nightly reconciliation corrects simulated cache drift.
-
-- [x] **WP-25: Billable-Conversation Counting in Request Path**
-  - [x] Implement 24-hour service window conversation counter inside turn transaction:
-    - [x] `identity_hash = HMAC_SHA256(server_secret, channel + ':' + raw_id)`.
-    - [x] `INSERT INTO usage_events (...) ON CONFLICT DO NOTHING`.
-    - [x] Atomic counter increment when a new conversation window opens.
-  - [x] *Acceptance:* Duplicate messages within 24h count as 1 conversation; message at 24h+1m counts as new.
-
-- [x] **WP-26: Depletion State Machine & Route Degradation**
-  - [x] Implement depletion states: `ok` (<50%), `notice` (≥50%), `warning` (≥80%), `critical` (≥95%), `grace` (≥100%), `depleted`.
-  - [x] Degradation policy execution:
-    - [x] `degrade`: switches route to Lite configuration (Flash-Lite, history 8, output 300).
-    - [x] **Europe-tier rule**: must degrade to EU-resident small model (Mistral Small), NEVER non-EU endpoints.
-    - [x] Pin model route at session start so route does not change mid-conversation (`SessionRouteStore`).
-  - [x] *Acceptance:* Unit test verifies session route pinning and EU residency guarantee under depletion.
-
-- [x] **WP-17: Self-Service 30-Minute Onboarding Wizard**
-  - [x] Build streamlined onboarding flow:
-    - [x] Connect source (CSV / WooCommerce REST / JSON).
-    - [x] Verify 5 sample products with live field diagnostics table.
-    - [x] Fill structured `StorePolicy` form (shipping, returns, warranty, payment).
-    - [x] Select close action & configure persona tone.
-    - [x] Test preview widget & generate ready-to-use `<script>` embed snippet.
-  - [x] *Acceptance:* Unassisted test run completes onboarding in under 30 minutes.
-
-- [x] **WP-18: Zero-Code Second Tenant Deployment (ZPI)**
-  - [x] Provision ZPI tenant using only `TenantConfig` and catalog ingestion.
-  - [x] **Hard acceptance criterion: Zero new lines of application code.**
-  - [x] *Acceptance:* ZPI agent operates independently with distinct catalog, policies, and origins.
+- [ ] **WP-M2.1: Multi-Tenancy & Channel Schemas**
+  - [ ] `tenant` (id, name, legal_name, country, vertical_pack_id, timezone, default_language, status, plan).
+  - [ ] `user` & `membership` (tenant_id, user_id, role: `owner` | `agent` | `viewer`).
+  - [ ] `channel` (tenant_id, type: `whatsapp`, waba_id, phone_number_id, display_number, status, token_ref).
+- [ ] **WP-M2.2: Contacts, Conversations & Messages**
+  - [ ] `contact` (tenant_id, wa_id, display_name, phone_e164, language, tags, consent_source, consent_at).
+  - [ ] `conversation` (tenant_id, channel_id, contact_id, status: `open`/`snoozed`/`closed`, service_window_expires_at, ai_mode: `off`/`suggest`/`auto`).
+  - [ ] `message` (tenant_id, conversation_id, direction, wamid [UNIQUE], type, body, billing_category, cost_estimate, author).
+- [ ] **WP-M2.3: Leads, Offerings & Event Timeline**
+  - [ ] `lead` (tenant_id, contact_id, lead_type: `quote_request`/`appointment_request`/`product_enquiry`, state: `new` $\rightarrow$ `qualifying` $\rightarrow$ `interested` $\rightarrow$ `quoted` $\rightarrow$ `order_pending` $\rightarrow$ `won`/`lost`/`dormant`, score, value_estimate).
+  - [ ] `offering` (tenant_id, sku, name, description, price_type, price, currency, service_area, duration_minutes, active, embedding).
+  - [ ] `quote_request` (tenant_id, lead_id, fields [JSONB], completeness: 0.0–1.0, missing_fields).
+  - [ ] `order` & `payment` (tenant_id, lead_id, contact_id, line_items, status, stripe_payment_intent_id).
+  - [ ] `event` (append-only timeline) & `ai_run` (token usage, latency, prompt_ref, outcome).
+- [ ] **WP-M2.4: Row-Level Security (RLS) Enforcement**
+  - [ ] Write automated CI tests verifying that cross-tenant queries are blocked at the database level.
 
 ---
 
-### Milestone 2.5: M2.5 — Operational Growth & Metering Surface
-> **Goal:** Empower store owners with real-time usage analytics, honest upgrade/downgrade recommendations, and automated depletion alerts.
+### Milestone 3: WhatsApp Cloud API Ingress & 24-Hour Service Window Engine
+> **Goal:** High-throughput, signature-verified webhook ingress with Redis/BullMQ queueing and strict 24-hour customer service window enforcement.
 
-- [x] **WP-27: Depletion Forecast & Honest Recommendation Engine**
-  - [x] Implement pure mathematical forecast function based on 7-day trailing burn rate.
-  - [x] Calculate cheapest path: Buy Blocks vs. Upgrade Tier vs. 3-period trailing Downgrade recommendation.
-  - [x] Render transparent arithmetic breakdown in user's language.
-  - [x] *Acceptance:* Test suite passes across seasonal spikes, steady burn, and low-volume downgrade cases.
-
-- [x] **WP-28: Account Management API & Subscription Scheduling**
-  - [x] Build top-up block checkout and tier upgrade mechanisms (`POST /api/salesops/billing/topup`).
-  - [x] Immediate prorated add and capacity increase.
-  - [x] *Acceptance:* Stripe checkout for top-up blocks generates correct pricing and sessions.
-
-- [x] **WP-29: Owner Portal Page & Multi-Channel Alerting**
-  - [x] Build automated weekly performance digest generator and email dispatcher (`DigestService`).
-  - [x] Threshold alerts (50%, 80%, 95%, 100%) deduplicated by `depletion_alerts`.
-  - [x] *Acceptance:* Crossing 80% fires exactly one email alert and renders digest.
+- [ ] **WP-M3.1: Thin Webhook Ingress Service**
+  - [ ] `GET /webhook`: Verify `hub.challenge` and `hub.verify_token`.
+  - [ ] `POST /webhook`: Verify HMAC-SHA256 signature against App Secret (`X-Hub-Signature-256`).
+  - [ ] Enqueue raw payload to BullMQ Redis queue and return `200 OK` within 100ms.
+- [ ] **WP-M3.2: Asynchronous Idempotent Message Processor**
+  - [ ] Idempotency guard on `wamid` preventing duplicate message rows or duplicate AI responses.
+  - [ ] Inbound media downloader (images, documents, voice notes) to EU object storage with signed URLs.
+- [ ] **WP-M3.3: 24-Hour Service Window Guard**
+  - [ ] Calculate and update `service_window_expires_at = last_inbound + 24h`.
+  - [ ] Outbound send API strictly rejects free-form messages if `now() > service_window_expires_at`.
+  - [ ] Auto-notify owner when window is within 2 hours of expiring with an open lead.
 
 ---
 
-### Milestone 3: M3 — WhatsApp Cloud API & Voice
-> **Goal:** Expand from web widget to Meta WhatsApp Business Cloud API with voice message transcription and merchant takeover.
+### Milestone 4: AI Qualification, Quote Field Extraction & Multilingual Engine
+> **Goal:** Grounded conversational AI that extracts structured trade quote fields, speaks the customer's language, normalizes Swiss German, and enforces zero-hallucination guardrails.
 
-- [x] **WP-19: WhatsApp Cloud API Channel**
-  - [x] Build `channels/whatsapp` handling Meta Cloud API webhooks (`GET` challenge + `POST` HMAC-SHA256 signature verification).
-  - [x] Implement chunker with 280-character bursts and natural conversational delays (`chunkReplyForWhatsApp`).
-  - [x] Interactive button parsing and outbound Graph API dispatcher (`WhatsAppCloudClient`).
-  - [x] *Acceptance:* Inbound WhatsApp message receives chunked replies from agent in real time.
-
-- [x] **WP-20: WABA Onboarding & Number Provisioning Flow**
-  - [x] Document and automate WhatsApp Business Account (WABA) connection flow.
-  - [x] Support dedicated number registration and status polling (`WabaOnboardingService` & API routes).
-  - [x] *Acceptance:* Step-by-step onboarding wizard links and registers a Meta phone number ID.
-
-- [x] **WP-21: Deepgram Voice Note Processing**
-  - [x] Integrate Deepgram `nova-3` for inbound audio note transcription (`DeepgramTranscriber`).
-  - [x] Per-tenant language selection (`pt`, `es`, `en`, `ur`).
-  - [x] **Enforce Europe-tier constraint**: strictly block voice notes on Europe tier unless EU-resident STT provider is configured.
-  - [x] *Acceptance:* Inbound voice note transcribes and passes into agent turn loop seamlessly with hard EU data residency guarantees.
-
-- [x] **WP-22: Owner WhatsApp Control Plane**
-  - [x] Parse merchant owner commands: `/pause`, `/resume`, `/status`, `/takeover`, `/help` (`OwnerControlPlane`).
-  - [x] Strict phone number isolation between merchant owner controls and customer conversations.
-  - [x] *Acceptance:* Merchant sending `/pause` halts automated AI replies for that conversation and suppresses AI during handoff.
+- [ ] **WP-M4.1: Sticky Contact Language & Swiss German Normalization**
+  - [ ] Language detection on first inbound message; store on `contact.language` (DE, FR, IT, EN).
+  - [ ] Swiss German dialect detection on inbound voice/text; normalize to Hochdeutsch for intent classification.
+  - [ ] Outbound response generation strictly in high-assurance business Hochdeutsch (or French/Italian/English matching customer).
+- [ ] **WP-M4.2: Structured Quote Field Extraction (Cleaning Vertical Pack)**
+  - [ ] Intent classification: `quote_request`, `appointment_request`, `product_enquiry`, `support`, `human_request`.
+  - [ ] Extract structured fields: property type, rooms, square meters ($m^2$), frequency (one-off, bi-weekly, monthly), location/postcode, access, preferred timing.
+  - [ ] Compute real-time `completeness` score ($0.0 - 1.0$) and `missing_fields[]`.
+- [ ] **WP-M4.3: Non-Overridable Guardrails & AI Modes**
+  - [ ] Modes: `off` (inbox only), `suggest` (AI drafts, human sends), `auto` (autonomous for whitelisted intents).
+  - [ ] Gating: `auto` mode locked until tenant has $\ge 10$ active offerings with prices.
+  - [ ] Instant escalation on complaints, refund requests, discount negotiations, or out-of-catalog inquiries.
 
 ---
 
-### On-Demand / Scale Modules
-> **Trigger-based work packages built only upon signed contracts or explicit volume triggers.**
+### Milestone 5: Nuncio Unified Inbox & Lead Pipeline Management UI
+> **Goal:** Responsive web dashboard providing real-time WhatsApp conversation management, lead kanban pipeline, and trade quote summaries.
 
-- [x] **WP-23: Custom-Tier Prepaid Model-Spend Ledger** *(Trigger: First signed Custom deal)*
-  - [x] Implement append-only `spend_ledger` table with transaction-level token cost recording (`SpendLedgerService`).
-  - [x] Build prepaid top-up flow and running balance calculation (`recordCredit` & `recordDebit`).
-  - [x] Monthly itemized statement generator for token spend reconciliation (`getMonthlyStatement`).
-  - [x] *Acceptance:* Ledger reconciles with exact mathematical precision.
-
-- [x] **WP-30: Mistral & Vertex AI EU Provider Adapters** *(Trigger: First Europe-tier sale)*
-  - [x] Build provider adapter for Mistral Small 3.1 & Mistral Large with EU data residency guarantee (`MistralProviderAdapter` & `LlmProviderFactory`).
-  - [x] *Acceptance:* Complete conversation runs exclusively through EU endpoints with zero US data routing.
-
-- [x] **WP-31: Specialized E-Commerce Adapters** *(Trigger: ≥3 requests for specific platform)*
-  - [x] Shopify REST/Admin API catalog adapter (`@salesops/adapter-catalog-shopify`).
-  - [x] *Acceptance:* Samples 5 items on verify, paginates products, extracts variants and options.
-
----
-
-## 4. Quality & Verification Gates
-
-Before closing any milestone, the following gates must be green:
-
-| Test Gate | Scope | Command / Check |
-|---|---|---|
-| **Import Boundary Lint** | Dependency direction (`types ← core ← web ← apps`) | `pnpm lint:boundaries` |
-| **Tenant Isolation AST** | Verify `tenant_id` exists on all database queries | `pnpm test:isolation` |
-| **Secret Audit** | Check production bundle outputs for leaked keys | `pnpm audit:bundle` |
-| **Integrity & Negative Evals** | Accurate prices, stock checks, out-of-catalog refusals | `pnpm test:evals:integrity` |
-| **Adversarial Evals** | Prompt injection, quota probing, jailbreaks | `pnpm test:evals:adversarial` |
-| **Concurrency Metering** | 50 concurrent turns = 1 billable conversation | `pnpm test:metering:concurrency` |
+- [ ] **WP-M5.1: Unified WhatsApp Inbox**
+  - [ ] Real-time conversation list (search, filters by status, assignee, unread).
+  - [ ] Chat stream with delivery status ticks (`queued`, `sent`, `delivered`, `read`), audio player with transcription, and internal team notes.
+  - [ ] AI Suggest mode box: one-click send or edit draft.
+- [ ] **WP-M5.2: Visual Lead Pipeline Board**
+  - [ ] Stages: `New` $\rightarrow$ `Qualifying` $\rightarrow$ `Interested` $\rightarrow$ `Quoted` $\rightarrow$ `Order Pending` $\rightarrow$ `Won` / `Lost`.
+  - [ ] Lead Cards displaying contact name, phone, quote summary, completeness progress bar, and estimated value.
+  - [ ] Human confirmation enforcement: only a tenant user can drag a lead to `Won`.
+- [ ] **WP-M5.3: Offering & Catalog Management**
+  - [ ] Ingestion 1: Guided vertical pack setup (pre-filled Swiss cleaning services & typical rates).
+  - [ ] Ingestion 2: CSV/XLSX spreadsheet upload with column mapping.
+  - [ ] Ingestion 3: WooCommerce REST API and Shopify Admin API sync.
 
 ---
 
-## 5. Stripe Commercial Catalogue Reference
+### Milestone 6: Owner 1-Tap Actions, Stripe Links & Unit Economics Metering
+> **Goal:** Mobile-friendly owner confirmation flows, Stripe payment checkout links, and transparent per-message cost tracking.
 
-| Product | Base Fee | Included Quota | Additional Block / 1k | Setup Fee | Lookup Key |
-|---|---|---|---|---|---|
-| **Sales Ops Lite** | €29 / mo | 300 convs | €19 | — | `salesops_lite_monthly_eur` |
-| **Sales Ops Standard** | €79 / mo | 500 convs | €39 | — | `salesops_standard_monthly_eur` |
-| **Sales Ops Europe** | €99 / mo | 500 convs | €35 | €250 | `salesops_europe_monthly_eur` |
-| **Sales Ops Premium** | €199 / mo | 500 convs | €149 | €500 | `salesops_premium_monthly_eur` |
-| **Store Preview** | €50 (one-time) | 1 catalog | — | — | `salesops_preview_eur` |
-
----
-
-## 6. E-Store Integration Blueprint (`estore` Repo)
-
-When connecting and selling through `estore` (`@stellar` ecosystem), the integration touches these exact decoupled surfaces without breaking existing branch workflows:
-
-### A. E-Store Storefront (`apps/storefront`)
-1. **Digital Product Catalog Entry**: Add SalesOps plan products (Lite, Standard, Europe, €50 Preview) as digital subscription/service SKUs.
-2. **Order Completed Webhook Dispatcher**: On order fulfillment (Stripe webhook / checkout hook), dispatch a signed payload to SalesOps:
-   ```json
-   {
-     "orderId": "ord_123",
-     "userId": "usr_456",
-     "sellerId": "sel_789",
-     "tenantId": "uuid-v4",
-     "planTier": "standard",
-     "customerEmail": "merchant@store.com",
-     "timestamp": "2026-08-26T17:00:00Z"
-   }
-   ```
-3. **Shopper Widget Embed**: Inject the lightweight `<script>` tag in the storefront root layout with optional HMAC shopper session verification.
-
-### B. E-Store Merchant Dashboard (`apps/dashboard`)
-1. **"Sales Agent" Navigation Entry**: Adds a menu item for merchants in the dashboard sidebar.
-2. **SSO Launch Token Generator**: Creates an HMAC-signed JWT containing `{ userId, sellerId, tenantId, roles: ['vendor_owner'] }` to embed/open the SalesOps portal seamlessly.
-
-### C. Isolation & Branch Safety Rules
-- All `estore` additions must be isolated on a dedicated integration branch (e.g. `feature/salesops-connector`).
-- Zero direct database sharing: communication happens strictly over HTTP APIs with HMAC signature verification.
-
+- [ ] **WP-M6.1: Owner WhatsApp Control Plane & 1-Tap Confirmation**
+  - [ ] Dispatch WhatsApp notifications to owner when a quote request reaches $\ge 80\%$ completeness or customer confirms order.
+  - [ ] Slash command control plane (`/status`, `/pause`, `/resume`, `/takeover`).
+- [ ] **WP-M6.2: Stripe Payment Integration**
+  - [ ] Generate dynamic Stripe Payment Links for deposit or full quote amount inside chat.
+  - [ ] Stripe webhook handler updating `order.status = 'paid'` upon successful payment.
+- [ ] **WP-M6.3: Unit Economics & October 2026 Pricing Metering**
+  - [ ] Track message billing category (`service`, `utility`, `marketing`, `authentication`) and estimate Meta cost.
+  - [ ] Tenant dashboard reporting: Month-to-date Meta messaging cost breakdown and platform subscription usage.
