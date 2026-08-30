@@ -380,6 +380,206 @@ export const ZPI_CATALOG: Catalog = {
   ]
 };
 
+export const MONDAR_TENANT_ID = '00000000-0000-4000-8000-000000000003';
+
+export const MONDAR_TENANT_CONFIG: TenantConfig = {
+  version: 1,
+  tenantId: MONDAR_TENANT_ID,
+  displayName: 'Mondar Reinigungen & Facility Services',
+  tier: 'standard',
+  locales: ['de-CH', 'de', 'en', 'fr'],
+  currency: 'CHF',
+  timezone: 'Europe/Zurich',
+
+  persona: {
+    tone: 'warm_direct',
+    greeting:
+      'Grüezi! Ich bin der digitale Assistent von Mondar Reinigungen. Ich erstelle Ihnen in unter einer Minute eine verbindliche Offerte für Ihre Umzugsreinigung mit 100% Abnahmegarantie.',
+    escalationPhrase:
+      'Gerne verbinde ich Sie mit unserem Geschäftsführer für eine persönliche Beratung.'
+  },
+
+  catalog: {
+    source: 'json',
+    config: { path: 'mondar-services.json' },
+    refresh: { mode: 'poll', ttlMinutes: 60 },
+    staleness: { maxAgeMinutes: 240, onStale: 'hedge_price' }
+  },
+
+  policy: {
+    shipping: null,
+    returns: {
+      windowDays: 14,
+      conditions: '100% Abnahmegarantie bei der Wohnungsübergabe inklusive kostenloser Nachreinigung vor Ort falls nötig.',
+      whoPaysReturn: 'store'
+    },
+    warranty: {
+      months: 1,
+      scope: 'Vollständige 100% Schweizer Abnahmegarantie für die mängelfreie Übergabe an die Verwaltung / Vermieter.'
+    },
+    payment: {
+      methods: ['Rechnung (30 Tage)', 'TWINT', 'Stripe / Kreditkarte', 'Bar bei Abnahme'],
+      installments: false
+    },
+    hours: {
+      timezone: 'Europe/Zurich',
+      note: 'Reinigungseinsätze Mo–Sa 07:00–19:00 Uhr. 24/7 WhatsApp Offertenservice.'
+    },
+    contact: {
+      humanEscalation: 'info@mondar.ch'
+    },
+    custom: [
+      {
+        question: 'Gilt die Abnahmegarantie für alle Reinigungen?',
+        answer: 'Ja, all unsere Endreinigungen beinhalten die 100% Schweizer Abnahmegarantie mit persönlicher Begleitung bei der Übergabe.'
+      },
+      {
+        question: 'Was ist im Preis enthalten?',
+        answer: 'Komplette Reinigung aller Zimmer, Küche (inkl. Backofen/Dampfabzug), Nasszellen (Entkalkung), Fenster inklusive Rahmen und Storen sowie Bodenbeläge.'
+      }
+    ]
+  },
+
+  closes: [
+    {
+      kind: 'stripe_checkout',
+      priceMap: {
+        cleaning_1_5: 'mondar_cleaning_1_5_chf',
+        cleaning_2_5: 'mondar_cleaning_2_5_chf',
+        cleaning_3_5: 'mondar_cleaning_3_5_chf',
+        cleaning_4_5: 'mondar_cleaning_4_5_chf',
+        cleaning_5_5: 'mondar_cleaning_5_5_chf'
+      }
+    },
+    {
+      kind: 'capture_lead',
+      fields: ['name', 'phone', 'notes'],
+      notify: { type: 'webhook', to: 'https://api.mondar.ch/api/leads/notify' }
+    }
+  ],
+
+  channels: [
+    {
+      kind: 'web',
+      allowedOrigins: ['https://mondar.ch', 'https://www.mondar.ch', 'http://localhost:3000', 'http://localhost:3333']
+    }
+  ],
+
+  limits: {
+    conversationsPerMonth: 1000,
+    tokenBudgetPerSession: 40000,
+    monthlySpendCapEur: 50
+  },
+
+  compliance: {
+    aiDisclosure: true,
+    retentionDays: 90,
+    dpaAcceptedAt: '2026-08-30T00:00:00.000Z'
+  }
+};
+
+export const MONDAR_CATALOG: Catalog = {
+  tenantId: MONDAR_TENANT_ID,
+  fetchedAt: new Date().toISOString(),
+  sourceKind: 'json',
+  items: [
+    {
+      sku: 'cleaning_1_5',
+      name: 'Endreinigung 1.5 Zimmer mit Abnahmegarantie',
+      category: 'Wohnungsreinigung',
+      description: 'Komplette Umzugsreinigung für 1.5 Zimmer Wohnungen (bis 45 m²) inklusive Küche, Nasszelle, Fenster, Storen und 100% Abnahmegarantie.',
+      priceMinor: 69000, // CHF 690.00
+      currency: 'CHF',
+      billing: 'once',
+      attributes: {
+        rooms: '1.5',
+        maxSqm: 45,
+        guarantee: '100% Abnahmegarantie'
+      },
+      available: true,
+      url: 'https://mondar.ch/angebote#1-5'
+    },
+    {
+      sku: 'cleaning_2_5',
+      name: 'Endreinigung 2.5 Zimmer mit Abnahmegarantie',
+      category: 'Wohnungsreinigung',
+      description: 'Komplette Umzugsreinigung für 2.5 Zimmer Wohnungen (bis 65 m²) inklusive Küche, Nasszelle, Fenster, Storen und 100% Abnahmegarantie.',
+      priceMinor: 89000, // CHF 890.00
+      currency: 'CHF',
+      billing: 'once',
+      attributes: {
+        rooms: '2.5',
+        maxSqm: 65,
+        guarantee: '100% Abnahmegarantie'
+      },
+      available: true,
+      url: 'https://mondar.ch/angebote#2-5'
+    },
+    {
+      sku: 'cleaning_3_5',
+      name: 'Endreinigung 3.5 Zimmer mit Abnahmegarantie',
+      category: 'Wohnungsreinigung',
+      description: 'Komplette Umzugsreinigung für 3.5 Zimmer Wohnungen (bis 90 m²) inklusive Küche, Nasszelle, Fenster, Storen und 100% Abnahmegarantie.',
+      priceMinor: 108000, // CHF 1'080.00
+      currency: 'CHF',
+      billing: 'once',
+      attributes: {
+        rooms: '3.5',
+        maxSqm: 90,
+        guarantee: '100% Abnahmegarantie'
+      },
+      available: true,
+      url: 'https://mondar.ch/angebote#3-5'
+    },
+    {
+      sku: 'cleaning_4_5',
+      name: 'Endreinigung 4.5 Zimmer mit Abnahmegarantie',
+      category: 'Wohnungsreinigung',
+      description: 'Komplette Umzugsreinigung für 4.5 Zimmer Wohnungen (bis 120 m²) inklusive Küche, 2 Nasszellen, Fenster, Storen und 100% Abnahmegarantie.',
+      priceMinor: 135000, // CHF 1'350.00
+      currency: 'CHF',
+      billing: 'once',
+      attributes: {
+        rooms: '4.5',
+        maxSqm: 120,
+        guarantee: '100% Abnahmegarantie'
+      },
+      available: true,
+      url: 'https://mondar.ch/angebote#4-5'
+    },
+    {
+      sku: 'cleaning_5_5',
+      name: 'Endreinigung 5.5 Zimmer mit Abnahmegarantie',
+      category: 'Wohnungsreinigung',
+      description: 'Komplette Umzugsreinigung für 5.5 Zimmer Wohnungen / Einfamilienhäuser (bis 160 m²) inklusive 100% Abnahmegarantie.',
+      priceMinor: 165000, // CHF 1'650.00
+      currency: 'CHF',
+      billing: 'once',
+      attributes: {
+        rooms: '5.5',
+        maxSqm: 160,
+        guarantee: '100% Abnahmegarantie'
+      },
+      available: true,
+      url: 'https://mondar.ch/angebote#5-5'
+    },
+    {
+      sku: 'addon_carpet_pressure',
+      name: 'Teppich- & Terrassen-Hochdruckreinigung (Zusatzpaket)',
+      category: 'Zusatzleistungen',
+      description: 'Tiefenreinigung von Teppichböden sowie Hochdruck-Nassreinigung von Terrassen und Balkonplatten.',
+      priceMinor: 18000, // CHF 180.00
+      currency: 'CHF',
+      billing: 'once',
+      attributes: {
+        equipment: 'Kärcher Professional Hochdruck'
+      },
+      available: true,
+      url: 'https://mondar.ch/angebote#addons'
+    }
+  ]
+};
+
 export async function seedDatabase(db: Database) {
   const tenantRepo = new TenantRepository(db);
   const catalogRepo = new CatalogRepository(db);
@@ -395,7 +595,7 @@ export async function seedDatabase(db: Database) {
   // 2. Save rewilt catalog snapshot
   const snapshotRewilt = await catalogRepo.saveSnapshot(tenantRewilt.id, REWILT_CATALOG);
 
-  // 3. Upsert ZeroPointIntel (ZPI) tenant (Zero new lines of application code!)
+  // 3. Upsert ZeroPointIntel (ZPI) tenant
   const tenantZpi = await tenantRepo.upsert({
     id: ZPI_TENANT_ID,
     slug: 'zeropointintel',
@@ -406,8 +606,20 @@ export async function seedDatabase(db: Database) {
   // 4. Save ZPI catalog snapshot
   const snapshotZpi = await catalogRepo.saveSnapshot(tenantZpi.id, ZPI_CATALOG);
 
+  // 5. Upsert Mondar Reinigungen (mondar.ch) tenant
+  const tenantMondar = await tenantRepo.upsert({
+    id: MONDAR_TENANT_ID,
+    slug: 'mondar',
+    displayName: MONDAR_TENANT_CONFIG.displayName,
+    config: MONDAR_TENANT_CONFIG
+  });
+
+  // 6. Save Mondar catalog snapshot
+  const snapshotMondar = await catalogRepo.saveSnapshot(tenantMondar.id, MONDAR_CATALOG);
+
   return {
     rewilt: { tenant: tenantRewilt, snapshot: snapshotRewilt },
-    zpi: { tenant: tenantZpi, snapshot: snapshotZpi }
+    zpi: { tenant: tenantZpi, snapshot: snapshotZpi },
+    mondar: { tenant: tenantMondar, snapshot: snapshotMondar }
   };
 }

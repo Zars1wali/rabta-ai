@@ -35,7 +35,7 @@
     "@salesops/adapter-catalog-json": "workspace:*",
     "@salesops/adapter-catalog-csv": "workspace:*",
     "@salesops/adapter-catalog-woocommerce": "workspace:*",
-    "drizzle-orm": "^0.39.3",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.5",
     "zod": "^3.24.2"
   },
