@@ -193,7 +193,11 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
   <header>
     <div class="container header-inner">
       <div class="logo-container">
-        <img src="/logo.svg" alt="Nuncio" width="36" height="36" style="border-radius: 6px;">
+        <div style="width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #0284c7 0%, #10b981 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(2, 132, 199, 0.4); border: 1px solid rgba(255, 255, 255, 0.2); flex-shrink: 0;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
         <div>
           <span class="logo-text">Nuncio</span>
           <span class="badge-sub">by ZeroPointIntel</span>
@@ -230,7 +234,7 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
           <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; text-transform: uppercase;">
             Live WhatsApp-to-Lead Simulator
           </span>
-          <h3 style="font-size: 20px; font-weight: 700; margin-top: 6px;">Real-Time Customer Inbound Extraction</h3>
+          <h3 style="font-size: 20px; font-weight: 700; margin-top: 6px;">How It Works: Customer Inquiry → Owner 1-Tap Approval</h3>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('swiss_cleaning')">🇨🇭 Swiss Cleaning (DE/CH)</button>
@@ -240,57 +244,64 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
       </div>
 
       <div class="sim-grid">
-        <!-- WhatsApp Chat View -->
+        <!-- WhatsApp Customer Chat View -->
         <div class="chat-box">
           <div class="chat-header">
             <div class="avatar" id="sim-avatar">T</div>
             <div>
               <div style="font-size: 14px; font-weight: 600; color: #e9edef;" id="sim-cust-name">${initialScenario.lead.customerName}</div>
-              <div style="font-size: 11px; color: #8696a0;">Online • WhatsApp Business Channel</div>
+              <div style="font-size: 11px; color: #8696a0;">Customer • WhatsApp Chat</div>
             </div>
           </div>
           <div class="chat-body">
             <div class="msg-in">
+              <div style="font-size: 11px; font-weight: 600; color: #94a3b8; margin-bottom: 2px;">Customer Voice / Text Message:</div>
               <div id="sim-msg-text">${initialScenario.message}</div>
               <span style="font-size: 10px; color: #8696a0; display: block; margin-top: 4px;">10:42 AM</span>
             </div>
             <div class="msg-out">
-              <div style="font-size: 11px; font-weight: 700; color: #25d366; margin-bottom: 4px;">🤖 Nuncio Grounded Assistant</div>
+              <div style="font-size: 11px; font-weight: 700; color: #25d366; margin-bottom: 4px;">🤖 Nuncio AI Assistant</div>
               <div id="sim-ai-resp">${initialScenario.lead.aiResponse}</div>
-              <span style="font-size: 10px; color: #8696a0; display: block; margin-top: 4px; text-align: right;">10:42 AM • ✓✓ Delivered</span>
+              <span style="font-size: 10px; color: #8696a0; display: block; margin-top: 4px; text-align: right;">10:42 AM • ✓✓ Instant Reply</span>
             </div>
           </div>
           <div style="padding: 12px; background: #202c33; border-top: 1px solid #2a3942;">
-            <label style="font-size: 11px; color: #8696a0; display: block; margin-bottom: 4px;">Type custom customer message to test live parser:</label>
-            <input type="text" id="custom-sim-input" placeholder="e.g. Need office cleaning for 200m2 in Zurich..." style="width: 100%; background: #2a3942; border: none; border-radius: 6px; padding: 8px 10px; color: #fff; font-size: 13px;" oninput="handleCustomInput(this.value)">
+            <label style="font-size: 11px; color: #8696a0; display: block; margin-bottom: 4px;">Or type any customer message to test live:</label>
+            <input type="text" id="custom-sim-input" placeholder="e.g. Need 4.5 room move-out cleaning in Zurich on Oct 15..." style="width: 100%; background: #2a3942; border: none; border-radius: 6px; padding: 8px 10px; color: #fff; font-size: 13px;" oninput="handleCustomInput(this.value)">
           </div>
         </div>
 
-        <!-- Structured Lead Card -->
+        <!-- Calculated Quote & Owner Control Card -->
         <div class="lead-box">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
             <div>
-              <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Extracted Lead Entity</span>
-              <h4 style="font-size: 16px; font-weight: 700; color: #fff;" id="sim-lead-title">${initialScenario.lead.intentLabel}</h4>
+              <span style="font-size: 11px; color: #38bdf8; text-transform: uppercase; font-weight: 700;">Calculated Trade Quote</span>
+              <h4 style="font-size: 17px; font-weight: 800; color: #fff; margin-top: 2px;" id="sim-lead-title">${initialScenario.lead.intentLabel}</h4>
             </div>
-            <div id="sim-score-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; border-radius: 20px; padding: 4px 10px; font-size: 12px; font-weight: 700;">
-              ${initialScenario.lead.completeness}% Complete
+            <div id="sim-score-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700;">
+              Ready for Approval
             </div>
           </div>
-          <div class="progress-bar-bg">
-            <div class="progress-bar-fill" id="sim-progress-fill" style="width: ${initialScenario.lead.completeness}%;"></div>
+          
+          <div id="sim-fields-container" style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.06);">
+            <div class="field-row"><span class="field-key">👤 Customer:</span><span class="field-val">Thomas Meier (+41 79 123 45 67)</span></div>
+            <div class="field-row"><span class="field-key">🏠 Job Scope:</span><span class="field-val">4.5 Zimmer Wohnung (115 m²)</span></div>
+            <div class="field-row"><span class="field-key">📍 Location & Date:</span><span class="field-val">8001 Zürich • 15. Okt 2026</span></div>
+            <div class="field-row"><span class="field-key">✨ Guarantee:</span><span class="field-val">Abnahmegarantie Inkl.</span></div>
+            <div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Calculated Total:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">CHF 1'180.00</span></div>
           </div>
-          <div id="sim-fields-container">
-            <div class="field-row"><span class="field-key">Language:</span><span class="field-val" id="sim-lang">${initialScenario.lead.language}</span></div>
-            <div class="field-row"><span class="field-key">Service Type:</span><span class="field-val">Move-out deep clean (Endreinigung)</span></div>
-            <div class="field-row"><span class="field-key">Property Size:</span><span class="field-val">4.5 rooms / ~115 m²</span></div>
-            <div class="field-row"><span class="field-key">Postal Code:</span><span class="field-val">8001 Zürich</span></div>
-            <div class="field-row"><span class="field-key">Date:</span><span class="field-val">15. October 2026</span></div>
-          </div>
-          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-top: 14px;">
-            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">🛡️ Owner in the Loop Action</div>
-            <div style="font-size: 13px; color: #e2e8f0; margin-bottom: 8px;" id="sim-action-text">${initialScenario.lead.suggestedAction}</div>
-            <button class="btn-primary" style="width: 100%; font-size: 13px; padding: 8px;" onclick="alert('Simulated Lead Confirmed: Quote Dispatched to Customer.')">✓ 1-Tap Confirm &amp; Dispatch</button>
+
+          <!-- Owner Mobile Alert Section -->
+          <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid #0284c7; border-radius: 10px; padding: 14px; margin-top: 14px;">
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #38bdf8; font-weight: 700; margin-bottom: 6px;">
+              <span>📱</span> WhatsApp Alert Sent to Owner's Mobile:
+            </div>
+            <div style="font-size: 12.5px; color: #e2e8f0; line-height: 1.4; background: #1e293b; padding: 8px 10px; border-radius: 6px; font-family: monospace;" id="sim-action-text">
+              🔔 Neue Offerte: Thomas Meier (4.5 Zi, CHF 1'180).<br>Antworte <b>/approve</b> zum Senden.
+            </div>
+            <button class="btn-primary" style="width: 100%; font-size: 13.5px; padding: 10px; margin-top: 10px; font-weight: 700;" onclick="alert('✅ Quote Approved! Official quote & Stripe payment link sent to customer.')">
+              ✓ Reply /approve (Send Quote + Payment Link)
+            </button>
           </div>
         </div>
       </div>
@@ -372,7 +383,11 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
   <footer>
     <div class="container footer-inner">
       <div style="display: flex; align-items: center; gap: 10px;">
-        <img src="/logo.svg" alt="Nuncio" width="24" height="24">
+        <div style="width: 24px; height: 24px; border-radius: 6px; background: linear-gradient(135deg, #0284c7 0%, #10b981 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
         <span>© 2026 <strong>ZeroPointIntel</strong> (${operator}). All rights reserved.</span>
       </div>
       <div style="display: flex; gap: 20px;">
@@ -394,13 +409,12 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
       document.getElementById('sim-msg-text').innerText = sc.message;
       document.getElementById('sim-ai-resp').innerText = sc.lead.aiResponse;
       document.getElementById('sim-lead-title').innerText = sc.lead.intentLabel;
-      document.getElementById('sim-score-badge').innerText = sc.lead.completeness + '% Complete';
-      document.getElementById('sim-progress-fill').style.width = sc.lead.completeness + '%';
-      document.getElementById('sim-action-text').innerText = sc.lead.suggestedAction;
+      document.getElementById('sim-score-badge').innerText = 'Ready for Approval';
+      document.getElementById('sim-action-text').innerHTML = '🔔 Neue Offerte: ' + sc.lead.customerName + '<br>Antworte <b>/approve</b> zum Senden.';
 
-      let fieldsHtml = '<div class="field-row"><span class="field-key">Language:</span><span class="field-val">' + sc.lead.language + '</span></div>';
+      let fieldsHtml = '<div class="field-row"><span class="field-key">👤 Customer:</span><span class="field-val">' + sc.lead.customerName + '</span></div>';
       for (const [k, v] of Object.entries(sc.lead.extractedFields)) {
-        fieldsHtml += '<div class="field-row"><span class="field-key">' + k + ':</span><span class="field-val">' + v + '</span></div>';
+        fieldsHtml += '<div class="field-row"><span class="field-key">• ' + k + ':</span><span class="field-val">' + v + '</span></div>';
       }
       document.getElementById('sim-fields-container').innerHTML = fieldsHtml;
     }
@@ -410,18 +424,21 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
       const isCleaning = /clean|reinigung|putzen|zimmer|m2/i.test(val);
       const isEmergency = /urgent|notfall|leak|broken|repair|heute/i.test(val);
       
-      let title = isCleaning ? 'Trade Service Quote Request' : (isEmergency ? 'Urgent Service Dispatch' : 'Product & Catalog Inquiry');
-      let score = isCleaning ? 85 : (isEmergency ? 75 : 70);
+      let title = isCleaning ? 'Move-Out Cleaning Quote (CHF 1\'180.00)' : (isEmergency ? 'Urgent HVAC Dispatch (CHF 250.00)' : 'E-Commerce Order Draft');
       
       document.getElementById('sim-msg-text').innerText = val;
       document.getElementById('sim-lead-title').innerText = title;
-      document.getElementById('sim-score-badge').innerText = score + '% Complete';
-      document.getElementById('sim-progress-fill').style.width = score + '%';
-      document.getElementById('sim-ai-resp').innerText = 'Thank you for reaching out! We have parsed your request against verified catalog rates and prepared a quote proposal for owner confirmation.';
+      document.getElementById('sim-score-badge').innerText = 'Ready for Approval';
+      document.getElementById('sim-ai-resp').innerText = isCleaning 
+        ? 'Guten Tag! Für Ihre Reinigung beträgt unser garantierter Richtpreis CHF 1\'180.– inkl. Abnahmegarantie. Dürfen wir den Termin reservieren?'
+        : 'Thank you! We have verified your request against our official rate catalog and prepared a quote for owner confirmation.';
+      
       document.getElementById('sim-fields-container').innerHTML = 
-        '<div class="field-row"><span class="field-key">Classification:</span><span class="field-val">' + title + '</span></div>' +
-        '<div class="field-row"><span class="field-key">Extracted Details:</span><span class="field-val">' + val.slice(0, 60) + '...</span></div>' +
-        '<div class="field-row"><span class="field-key">Status:</span><span class="field-val">Awaiting 1-Tap Owner Approval</span></div>';
+        '<div class="field-row"><span class="field-key">🏠 Job Type:</span><span class="field-val">' + title + '</span></div>' +
+        '<div class="field-row"><span class="field-key">📝 Message:</span><span class="field-val">' + val.slice(0, 50) + '...</span></div>' +
+        '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Total:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (isCleaning ? 'CHF 1\'180.00' : 'CHF 250.00') + '</span></div>';
+      
+      document.getElementById('sim-action-text').innerHTML = '🔔 Neue Offerte für Kunden.<br>Antworte <b>/approve</b> zum Senden.';
     }
   </script>
 </body>

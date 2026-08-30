@@ -397,49 +397,53 @@ export function Simulator(): React.ReactElement {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div>
-                <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Extracted Lead Entity
+                <span style={{ fontSize: '11px', color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+                  Calculated Trade Quote
                 </span>
-                <h4 style={{ margin: '2px 0 0 0', fontSize: '16px', color: '#fff' }}>{activeLead.intentLabel}</h4>
+                <h4 style={{ margin: '2px 0 0 0', fontSize: '17px', fontWeight: 800, color: '#fff' }}>{activeLead.intentLabel}</h4>
               </div>
               <div
                 style={{
-                  background: activeLead.completeness >= 85 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                  color: activeLead.completeness >= 85 ? '#34d399' : '#fbbf24',
-                  border: activeLead.completeness >= 85 ? '1px solid #10b981' : '1px solid #f59e0b',
+                  background: 'rgba(16, 185, 129, 0.2)',
+                  color: '#34d399',
+                  border: '1px solid #10b981',
                   borderRadius: '20px',
-                  padding: '4px 10px',
+                  padding: '4px 12px',
                   fontSize: '12px',
                   fontWeight: 700
                 }}
               >
-                {activeLead.completeness}% Complete
+                Ready for Approval
               </div>
             </div>
 
-            {/* Progress Bar */}
-            <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginBottom: '16px', overflow: 'hidden' }}>
+            {/* Field Breakdown */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
               <div
                 style={{
-                  width: `${activeLead.completeness}%`,
-                  height: '100%',
-                  background: activeLead.completeness >= 85 ? '#10b981' : '#f59e0b',
-                  borderRadius: '3px',
-                  transition: 'width 0.4s ease'
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '12.5px',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  paddingBottom: '4px'
                 }}
-              />
-            </div>
-
-            {/* Extracted Fields Table */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '4px' }}>
-                <span style={{ color: '#94a3b8' }}>Language:</span>
-                <span style={{ fontWeight: 600, color: '#cbd5e1' }}>{activeLead.language}</span>
+              >
+                <span style={{ color: '#94a3b8' }}>👤 Customer:</span>
+                <span style={{ color: '#f8fafc', fontWeight: 500 }}>{activeLead.customerName}</span>
               </div>
               {Object.entries(activeLead.extractedFields).map(([key, val]) => (
-                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '4px' }}>
-                  <span style={{ color: '#94a3b8' }}>{key}:</span>
-                  <span style={{ fontWeight: 600, color: '#f1f5f9', textAlign: 'right', maxWidth: '60%' }}>{val}</span>
+                <div
+                  key={key}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '12.5px',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    paddingBottom: '4px'
+                  }}
+                >
+                  <span style={{ color: '#94a3b8' }}>• {key}:</span>
+                  <span style={{ color: '#f8fafc', fontWeight: 500, textAlign: 'right' }}>{val}</span>
                 </div>
               ))}
             </div>
@@ -465,38 +469,35 @@ export function Simulator(): React.ReactElement {
           {/* Owner 1-Tap Action Guard */}
           <div
             style={{
-              background: 'rgba(15, 23, 42, 0.8)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '8px',
-              padding: '12px',
+              background: 'rgba(15, 23, 42, 0.95)',
+              border: '1px solid #0284c7',
+              borderRadius: '10px',
+              padding: '14px',
               marginTop: '10px'
             }}
           >
-            <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', fontWeight: 600 }}>
-              🛡️ Owner in the Loop Action
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#38bdf8', fontWeight: 700, marginBottom: '6px' }}>
+              <span>📱</span> WhatsApp Alert Sent to Owner's Mobile:
             </div>
-            <div style={{ fontSize: '13px', color: '#e2e8f0', marginBottom: '10px' }}>
-              {activeLead.suggestedAction}
+            <div style={{ fontSize: '12.5px', color: '#e2e8f0', lineHeight: 1.4, background: '#1e293b', padding: '8px 10px', borderRadius: '6px', fontFamily: 'monospace', marginBottom: '10px' }}>
+              🔔 Neue Offerte: {activeLead.customerName}<br />Antworte <b>/approve</b> zum Senden.
             </div>
             <button
-              onClick={() => alert(`Simulated Action Executed: "${activeLead.suggestedAction}"`)}
+              onClick={() => alert(`✅ Quote Approved for ${activeLead.customerName}! Official quote & Stripe payment link sent.`)}
               style={{
                 width: '100%',
-                background: '#0284c7',
+                background: 'linear-gradient(135deg, #0284c7 0%, #10b981 100%)',
                 color: '#fff',
                 border: 'none',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '13.5px',
+                fontWeight: 700,
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px'
+                transition: 'opacity 0.15s ease'
               }}
             >
-              ✓ 1-Tap Confirm &amp; Dispatch
+              ✓ Reply /approve (Send Quote + Payment Link)
             </button>
           </div>
         </div>
