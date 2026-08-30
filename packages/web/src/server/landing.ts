@@ -221,10 +221,10 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
       Official Meta Tech Provider • WhatsApp Cloud API
     </div>
     <h1 class="hero-title">
-      Every WhatsApp enquiry answered in under a minute — <span class="gradient-text">turned into a structured lead</span> for your business.
+      Every WhatsApp inquiry qualified and closed in under a minute — <span class="gradient-text">autonomously &amp; 24/7.</span>
     </h1>
     <p class="hero-sub">
-      Never lose a customer while on a ladder, in a meeting, or after hours. Nuncio autonomously qualifies trade leads, transcribes Swiss German voice notes, and drafts verified quotes grounded in your verified prices.
+      78% of customers buy from the first business that responds. Nuncio is the autonomous WhatsApp AI commercial engine that qualifies inbound leads, quotes verified prices with zero hallucination, and collects payments — keeping business owners in 1-tap mobile control.
     </p>
 
     <!-- Interactive Simulator -->
@@ -234,12 +234,13 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
           <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; text-transform: uppercase;">
             Live WhatsApp-to-Lead Simulator
           </span>
-          <h3 style="font-size: 20px; font-weight: 700; margin-top: 6px;">How It Works: Customer Inquiry → Owner 1-Tap Approval</h3>
+          <h3 style="font-size: 20px; font-weight: 700; margin-top: 6px;">How It Works: Inbound Inquiry → Verified Quote → 1-Tap Close</h3>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('swiss_cleaning')">🇨🇭 Swiss Cleaning (DE/CH)</button>
-          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('emergency_trade')">🛠️ Emergency HVAC (EN)</button>
-          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('ecommerce_order')">🛍️ E-Commerce Order (FR)</button>
+          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('b2b_consulting')">💼 B2B &amp; Pro Services</button>
+          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('field_services')">🛠️ Field Services &amp; Trades</button>
+          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('ecommerce_order')">🛍️ E-Commerce (1-Click Pay)</button>
+          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('clinic_booking')">🏥 Clinics &amp; Bookings</button>
         </div>
       </div>
 
@@ -247,27 +248,27 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
         <!-- WhatsApp Customer Chat View -->
         <div class="chat-box">
           <div class="chat-header">
-            <div class="avatar" id="sim-avatar">T</div>
+            <div class="avatar" id="sim-avatar">E</div>
             <div>
               <div style="font-size: 14px; font-weight: 600; color: #e9edef;" id="sim-cust-name">${initialScenario.lead.customerName}</div>
-              <div style="font-size: 11px; color: #8696a0;">Customer • WhatsApp Chat</div>
+              <div style="font-size: 11px; color: #8696a0;">Inbound Client • WhatsApp Chat</div>
             </div>
           </div>
           <div class="chat-body">
             <div class="msg-in">
-              <div style="font-size: 11px; font-weight: 600; color: #94a3b8; margin-bottom: 2px;">Customer Voice / Text Message:</div>
+              <div style="font-size: 11px; font-weight: 600; color: #94a3b8; margin-bottom: 2px;">Inbound Voice / Text Message:</div>
               <div id="sim-msg-text">${initialScenario.message}</div>
               <span style="font-size: 10px; color: #8696a0; display: block; margin-top: 4px;">10:42 AM</span>
             </div>
             <div class="msg-out">
-              <div style="font-size: 11px; font-weight: 700; color: #25d366; margin-bottom: 4px;">🤖 Nuncio AI Assistant</div>
+              <div style="font-size: 11px; font-weight: 700; color: #25d366; margin-bottom: 4px;">🤖 Nuncio Autonomous Assistant</div>
               <div id="sim-ai-resp">${initialScenario.lead.aiResponse}</div>
-              <span style="font-size: 10px; color: #8696a0; display: block; margin-top: 4px; text-align: right;">10:42 AM • ✓✓ Instant Reply</span>
+              <span style="font-size: 10px; color: #8696a0; display: block; margin-top: 4px; text-align: right;">10:42 AM • ✓✓ Instant &lt; 60s Reply</span>
             </div>
           </div>
           <div style="padding: 12px; background: #202c33; border-top: 1px solid #2a3942;">
-            <label style="font-size: 11px; color: #8696a0; display: block; margin-bottom: 4px;">Or type any customer message to test live:</label>
-            <input type="text" id="custom-sim-input" placeholder="e.g. Need 4.5 room move-out cleaning in Zurich on Oct 15..." style="width: 100%; background: #2a3942; border: none; border-radius: 6px; padding: 8px 10px; color: #fff; font-size: 13px;" oninput="handleCustomInput(this.value)">
+            <label style="font-size: 11px; color: #8696a0; display: block; margin-bottom: 4px;">Or type any customer inquiry to test live:</label>
+            <input type="text" id="custom-sim-input" placeholder="e.g. We need ongoing compliance advisory for 20 seats starting next month..." style="width: 100%; background: #2a3942; border: none; border-radius: 6px; padding: 8px 10px; color: #fff; font-size: 13px;" oninput="handleCustomInput(this.value)">
           </div>
         </div>
 
@@ -275,7 +276,7 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
         <div class="lead-box">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
             <div>
-              <span style="font-size: 11px; color: #38bdf8; text-transform: uppercase; font-weight: 700;">Calculated Trade Quote</span>
+              <span style="font-size: 11px; color: #38bdf8; text-transform: uppercase; font-weight: 700;">Grounded Commercial Quote</span>
               <h4 style="font-size: 17px; font-weight: 800; color: #fff; margin-top: 2px;" id="sim-lead-title">${initialScenario.lead.intentLabel}</h4>
             </div>
             <div id="sim-score-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700;">
@@ -284,23 +285,23 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
           </div>
           
           <div id="sim-fields-container" style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.06);">
-            <div class="field-row"><span class="field-key">👤 Customer:</span><span class="field-val">Thomas Meier (+41 79 123 45 67)</span></div>
-            <div class="field-row"><span class="field-key">🏠 Job Scope:</span><span class="field-val">4.5 Zimmer Wohnung (115 m²)</span></div>
-            <div class="field-row"><span class="field-key">📍 Location & Date:</span><span class="field-val">8001 Zürich • 15. Okt 2026</span></div>
-            <div class="field-row"><span class="field-key">✨ Guarantee:</span><span class="field-val">Abnahmegarantie Inkl.</span></div>
-            <div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Calculated Total:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">CHF 1'180.00</span></div>
+            <div class="field-row"><span class="field-key">👤 Client:</span><span class="field-val">Elena Rossi (Nexus Capital AG)</span></div>
+            <div class="field-row"><span class="field-key">📦 Service Tier:</span><span class="field-val">Standard Advisory (15–50 seats)</span></div>
+            <div class="field-row"><span class="field-key">📍 Location & Term:</span><span class="field-val">Zurich City • 12-Month Commitment</span></div>
+            <div class="field-row"><span class="field-key">✨ Deliverables:</span><span class="field-val">Monthly audits &amp; &lt; 2h SLA response</span></div>
+            <div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Retainer Rate:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">CHF 2'450.00 / mo</span></div>
           </div>
 
           <!-- Owner Mobile Alert Section -->
           <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid #0284c7; border-radius: 10px; padding: 14px; margin-top: 14px;">
             <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #38bdf8; font-weight: 700; margin-bottom: 6px;">
-              <span>📱</span> WhatsApp Alert Sent to Owner's Mobile:
+              <span>📱</span> WhatsApp Alert on Business Owner's Mobile:
             </div>
             <div style="font-size: 12.5px; color: #e2e8f0; line-height: 1.4; background: #1e293b; padding: 8px 10px; border-radius: 6px; font-family: monospace;" id="sim-action-text">
-              🔔 Neue Offerte: Thomas Meier (4.5 Zi, CHF 1'180).<br>Antworte <b>/approve</b> zum Senden.
+              🔔 Neue B2B Anfrage: Elena Rossi (Nexus Capital, CHF 2'450/mo).<br>Antworte <b>/approve</b> zum Bestätigen des Termins.
             </div>
-            <button class="btn-primary" style="width: 100%; font-size: 13.5px; padding: 10px; margin-top: 10px; font-weight: 700;" onclick="alert('✅ Quote Approved! Official quote & Stripe payment link sent to customer.')">
-              ✓ Reply /approve (Send Quote + Payment Link)
+            <button class="btn-primary" style="width: 100%; font-size: 13.5px; padding: 10px; margin-top: 10px; font-weight: 700;" onclick="alert('✅ Lead Confirmed! Discovery call reservation and official retainer scope dispatched.')">
+              ✓ Reply /approve (Confirm Lead &amp; Dispatch Proposal)
             </button>
           </div>
         </div>
@@ -308,30 +309,51 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
     </div>
   </section>
 
-  <!-- Solutions Section -->
-  <section id="solutions" class="container" style="padding: 60px 0;">
-    <h2 class="section-title">Built for Response-Driven Businesses</h2>
-    <p class="section-sub">Whether you run a field service company or an e-commerce brand, Nuncio turns messaging channels into predictable revenue.</p>
+  <!-- Transversal Business Pillars Section -->
+  <section id="solutions" class="container" style="padding: 70px 0;">
+    <h2 class="section-title">Solving the Core Inbound Problems for Any Business</h2>
+    <p class="section-sub">From local service pros and medical clinics to high-growth e-commerce and professional consulting firms.</p>
     <div class="card-grid">
       <div class="card">
-        <div style="font-size: 32px; margin-bottom: 12px;">🛠️</div>
-        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Service Trades &amp; Local Pros</h3>
+        <div style="font-size: 28px; margin-bottom: 12px;">⚡</div>
+        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Instant Speed-to-Lead (&lt; 60s)</h3>
         <p style="font-size: 14px; color: var(--text-muted);">
-          Automates quote capture (m², room count, location, date) for cleaning, construction, HVAC, and mechanics. Zero lost jobs while you work on-site.
+          Never lose high-value inbound customers during evenings, weekends, or busy workdays. Instant AI engagement before leads look elsewhere.
         </p>
       </div>
       <div class="card">
-        <div style="font-size: 32px; margin-bottom: 12px;">🎙️</div>
-        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Swiss German Dialect Handling</h3>
+        <div style="font-size: 28px; margin-bottom: 12px;">🔒</div>
+        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Zero Price Hallucination</h3>
         <p style="font-size: 14px; color: var(--text-muted);">
-          Transcribes Swiss German voice notes, maps colloquial terms to standard service offerings, and answers in flawless business German.
+          Strictly bound to your verified catalog rates, service packages, and SLA parameters. Zero unauthorized discounts or fake commitments.
         </p>
       </div>
       <div class="card">
-        <div style="font-size: 32px; margin-bottom: 12px;">🛍️</div>
-        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">E-Commerce &amp; Retail Stores</h3>
+        <div style="font-size: 28px; margin-bottom: 12px;">📱</div>
+        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">1-Tap WhatsApp Mobile Control</h3>
         <p style="font-size: 14px; color: var(--text-muted);">
-          Syncs with Shopify and WooCommerce to verify live stock, draft orders, and send instant 1-click Stripe payment links inside chat.
+          High-ticket quotes and commitments require your 1-tap confirmation right inside WhatsApp. Zero complex CRM portals to open while on the go.
+        </p>
+      </div>
+      <div class="card">
+        <div style="font-size: 28px; margin-bottom: 12px;">💳</div>
+        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Frictionless In-Chat Payments</h3>
+        <p style="font-size: 14px; color: var(--text-muted);">
+          Turn conversations into immediate bank deposits with 1-click Stripe, Twint, and SEPA payment links generated directly in chat.
+        </p>
+      </div>
+      <div class="card">
+        <div style="font-size: 28px; margin-bottom: 12px;">🎙️</div>
+        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Voice Notes &amp; Multilingual Parsing</h3>
+        <p style="font-size: 14px; color: var(--text-muted);">
+          Transcribes audio voice notes and translates colloquial dialects across German, French, Italian, and English into structured orders.
+        </p>
+      </div>
+      <div class="card">
+        <div style="font-size: 28px; margin-bottom: 12px;">🛡️</div>
+        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Swiss revDSG &amp; EU AI Act Compliance</h3>
+        <p style="font-size: 14px; color: var(--text-muted);">
+          Official Meta Tech Provider with automated Article 50 AI disclosure, strict PostgreSQL tenant RLS, and 1-click data deletion.
         </p>
       </div>
     </div>
@@ -410,9 +432,9 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
       document.getElementById('sim-ai-resp').innerText = sc.lead.aiResponse;
       document.getElementById('sim-lead-title').innerText = sc.lead.intentLabel;
       document.getElementById('sim-score-badge').innerText = 'Ready for Approval';
-      document.getElementById('sim-action-text').innerHTML = '🔔 Neue Offerte: ' + sc.lead.customerName + '<br>Antworte <b>/approve</b> zum Senden.';
+      document.getElementById('sim-action-text').innerHTML = '🔔 Neue Anfrage: ' + sc.lead.customerName + '<br>Antworte <b>/approve</b> zum Bestätigen.';
 
-      let fieldsHtml = '<div class="field-row"><span class="field-key">👤 Customer:</span><span class="field-val">' + sc.lead.customerName + '</span></div>';
+      let fieldsHtml = '<div class="field-row"><span class="field-key">👤 Client:</span><span class="field-val">' + sc.lead.customerName + '</span></div>';
       for (const [k, v] of Object.entries(sc.lead.extractedFields)) {
         fieldsHtml += '<div class="field-row"><span class="field-key">• ' + k + ':</span><span class="field-val">' + v + '</span></div>';
       }
@@ -421,22 +443,23 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
 
     function handleCustomInput(val) {
       if (!val || val.length < 3) return;
-      const isCleaning = /clean|reinigung|putzen|zimmer|m2/i.test(val);
-      const isEmergency = /urgent|notfall|leak|broken|repair|heute/i.test(val);
+      const isConsulting = /consult|retainer|advisory|legal|audit|agency|b2b/i.test(val);
+      const isEmergency = /urgent|notfall|leak|broken|repair|kaputt|heute|today|error|fault/i.test(val);
+      const isEcommerce = /order|buy|commander|stock|shipping|livraison|bouteille|price/i.test(val);
       
-      let title = isCleaning ? 'Move-Out Cleaning Quote (CHF 1\'180.00)' : (isEmergency ? 'Urgent HVAC Dispatch (CHF 250.00)' : 'E-Commerce Order Draft');
+      let title = isConsulting ? 'Professional Advisory Quote (CHF 2\'450/mo)' : (isEmergency ? 'Emergency Specialist Dispatch (CHF 280.00)' : (isEcommerce ? 'E-Commerce Order Draft (CHF 63.90)' : 'Commercial Service Lead'));
       
       document.getElementById('sim-msg-text').innerText = val;
       document.getElementById('sim-lead-title').innerText = title;
       document.getElementById('sim-score-badge').innerText = 'Ready for Approval';
-      document.getElementById('sim-ai-resp').innerText = isCleaning 
-        ? 'Guten Tag! Für Ihre Reinigung beträgt unser garantierter Richtpreis CHF 1\'180.– inkl. Abnahmegarantie. Dürfen wir den Termin reservieren?'
-        : 'Thank you! We have verified your request against our official rate catalog and prepared a quote for owner confirmation.';
+      document.getElementById('sim-ai-resp').innerText = isConsulting 
+        ? 'Hello! Based on your requirements, our standard advisory rate is CHF 250.– / hour. Would you like to schedule an introductory discovery call?'
+        : (isEmergency ? 'We have prioritized your emergency request. Our standard diagnostic fee is CHF 280.–. A specialist can be dispatched within 2 hours. Should we confirm?' : 'Thank you for reaching out! We have checked our verified catalog and prepared the quote details for you.');
       
       document.getElementById('sim-fields-container').innerHTML = 
-        '<div class="field-row"><span class="field-key">🏠 Job Type:</span><span class="field-val">' + title + '</span></div>' +
-        '<div class="field-row"><span class="field-key">📝 Message:</span><span class="field-val">' + val.slice(0, 50) + '...</span></div>' +
-        '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Total:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (isCleaning ? 'CHF 1\'180.00' : 'CHF 250.00') + '</span></div>';
+        '<div class="field-row"><span class="field-key">📋 Request Scope:</span><span class="field-val">' + title + '</span></div>' +
+        '<div class="field-row"><span class="field-key">📝 Inbound Text:</span><span class="field-val">' + val.slice(0, 50) + '...</span></div>' +
+        '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Rate / Quote:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (isConsulting ? 'CHF 2\'450 / mo' : (isEmergency ? 'CHF 280.00' : 'CHF 63.90')) + '</span></div>';
       
       document.getElementById('sim-action-text').innerHTML = '🔔 Neue Offerte für Kunden.<br>Antworte <b>/approve</b> zum Senden.';
     }

@@ -22,63 +22,62 @@ export interface PresetScenario {
 
 export const PRESET_SCENARIOS: PresetScenario[] = [
   {
-    id: 'swiss_cleaning',
-    label: '🇨🇭 Swiss Cleaning (Mundart / DE)',
+    id: 'b2b_consulting',
+    label: '💼 Professional Services & B2B',
     market: 'trades',
     message:
-      'Grüezi! Mir bruuched e Endreinigung für e 4.5 Zimmer Wohnig (ca. 115 m²) in 8001 Zürich am 15. Oktober mit Abnahmegarantie.',
+      'Hello! We are looking for an ongoing compliance & advisory retainer for our 25-person Zurich fintech team starting next month. What are your standard terms and availability for an intro call?',
     lead: {
       intent: 'quote_request',
-      intentLabel: 'Move-Out Deep Clean Quote',
-      customerName: 'Thomas Meier',
-      language: 'Swiss German → DE (Normalized)',
+      intentLabel: 'B2B Advisory Retainer Quote',
+      customerName: 'Elena Rossi (Nexus Capital AG)',
+      language: 'English (EN)',
       extractedFields: {
-        'Service Type': 'Move-out deep clean (Endreinigung)',
-        'Property Size': '4.5 rooms / ~115 m²',
-        'Postal Code & City': '8001 Zürich',
-        'Target Date': '15. October 2026',
-        'Handover Guarantee': 'Required (Abnahmegarantie)'
+        'Service Tier': 'Standard Compliance & Advisory Retainer (15–50 seats)',
+        'Client Location': 'Zurich City',
+        'Target Start': 'Next Month (12-Month Annual Commitment)',
+        'Deliverables': 'Monthly audit reviews, SLA response < 2h, priority access'
       },
-      completeness: 90,
-      missingFields: ['Access details (Key deposit or on-site presence)'],
-      suggestedAction: 'Propose Standard 4.5 Room Package (CHF 1,180.- incl. Guarantee)',
+      completeness: 95,
+      missingFields: [],
+      suggestedAction: 'Propose Monthly Retainer (CHF 2\'450 / mo) & Book Intro Call',
       aiResponse:
-        'Grüezi Herr Meier, vielen Dank für Ihre Anfrage! Für eine 4.5-Zimmer-Wohnung (115 m²) in 8001 Zürich mit Abnahmegarantie am 15. Oktober beträgt unser Festpreis gemäss Tarif CHF 1’180.– inkl. MwSt. und Material. Dürfen wir den Termin für Sie reservieren?'
+        'Hello Elena, thank you for reaching out! For a 25-person team, our Standard Advisory Retainer is CHF 2’450.– / month, which includes monthly audit reviews and priority Slack/WhatsApp access. I have reserved slots for an introduction call this Thursday at 10:00 or Friday at 14:00. Would either work for you?'
     }
   },
   {
-    id: 'emergency_trade',
-    label: '🛠️ HVAC / Plumbing Repair (EN)',
+    id: 'field_services',
+    label: '🛠️ Field Services & Trades',
     market: 'trades',
     message:
-      'Hi, our commercial bakery oven heating circuit tripped and is displaying error E04 in central Zurich. Can someone come inspect today?',
+      'Hi, our central commercial heat pump tripped with error code E04 in central Zurich. Can you dispatch a certified technician for urgent on-site diagnostics today?',
     lead: {
       intent: 'emergency',
-      intentLabel: 'Emergency Commercial Repair',
-      customerName: 'Bakery Bäckerei Stadelhofen',
+      intentLabel: 'Emergency Diagnostic Dispatch',
+      customerName: 'Marc Weber (Property Management)',
       language: 'English (EN)',
       extractedFields: {
-        'Equipment Type': 'Commercial Bakery Oven',
-        'Reported Fault': 'Heating circuit breaker tripped (Error E04)',
-        'Location': 'Zurich City (Central)',
-        'Urgency': 'Immediate / Same Day'
+        'Equipment Type': 'Commercial Heat Pump',
+        'Reported Issue': 'Circuit tripped (Fault E04)',
+        'Location': 'Zurich Central',
+        'SLA Window': 'Same-Day Dispatch (14:00 - 16:00)'
       },
-      completeness: 85,
-      missingFields: ['Equipment Model / Serial number photo'],
-      suggestedAction: 'Dispatch Emergency Tech Window (14:00 - 16:00)',
+      completeness: 90,
+      missingFields: ['Equipment Serial / Access Code'],
+      suggestedAction: 'Dispatch Certified Tech Window (Flat Diagnostic Fee: CHF 280.-)',
       aiResponse:
-        'Hi there, we have flagged this as an urgent priority. Our standard emergency diagnostic fee is CHF 180.-. A technician is available today between 14:00 and 16:00. Would you like to confirm the dispatch?'
+        'Hello Marc, we have flagged this as an urgent priority. Our standard emergency diagnostic fee is CHF 280.–. A certified HVAC technician is available today between 14:00 and 16:00. Would you like to confirm the dispatch?'
     }
   },
   {
     id: 'ecommerce_order',
-    label: '🛍️ E-Commerce WhatsApp Checkout (FR)',
+    label: '🛍️ E-Commerce & Retail (1-Click Pay)',
     market: 'ecommerce',
     message:
       'Bonjour! Je voudrais commander 2 bouteilles de votre Huile d’Olive Bio 500ml et savoir si vous livrez à Genève d’ici vendredi.',
     lead: {
       intent: 'product_enquiry',
-      intentLabel: 'Product Order & Stock Check',
+      intentLabel: 'Product Order & Instant Checkout',
       customerName: 'Claire Dubois',
       language: 'French (FR)',
       extractedFields: {
@@ -93,72 +92,96 @@ export const PRESET_SCENARIOS: PresetScenario[] = [
       aiResponse:
         'Bonjour Claire! Oui, notre Huile d’Olive Bio 500ml est bien en stock. Pour 2 bouteilles avec livraison prioritaire à Genève avant vendredi, le total est de CHF 63.90. Cliquez ici pour régler en 1 clic: https://nuncio.link/pay/chk_98a7bc'
     }
+  },
+  {
+    id: 'clinic_booking',
+    label: '🏥 Clinics & Consultations',
+    market: 'trades',
+    message:
+      'Good morning, I would like to book a Comprehensive Preventive Dental Checkup & Hygiene session in Zurich for next Tuesday afternoon if available.',
+    lead: {
+      intent: 'appointment_request',
+      intentLabel: 'Consultation & Hygiene Session',
+      customerName: 'Dr. Sarah Jenkins',
+      language: 'English (EN)',
+      extractedFields: {
+        'Treatment': 'Preventive Checkup & Deep Hygiene',
+        'Provider': 'Senior Dental Hygienist',
+        'Preferred Time': 'Next Tuesday Afternoon (15:30 Available)',
+        'Standard Fee': 'CHF 220.00 (Tarif 590 Aligned)'
+      },
+      completeness: 90,
+      missingFields: ['Insurance Policy / ID'],
+      suggestedAction: 'Confirm Slot Reservation (Tue 15:30, CHF 220.-)',
+      aiResponse:
+        'Good morning Sarah! We have an opening for a Comprehensive Dental Checkup & Hygiene next Tuesday at 15:30 with our senior team. The standard rate is CHF 220.–. Shall we lock in this appointment for you?'
+    }
   }
 ];
 
 export function parseCustomMessage(text: string): ExtractedLeadData {
-  const isCleaning = /clean|reinigung|putzen|zimmer|m2|sqm/i.test(text);
-  const isEmergency = /urgent|notfall|leak|broken|repair|kaputt|heute|today/i.test(text);
+  const isConsulting = /consult|retainer|advisory|legal|audit|agency|b2b/i.test(text);
+  const isEmergency = /urgent|notfall|leak|broken|repair|kaputt|heute|today|error|fault/i.test(text);
+  const isEcommerce = /order|buy|commander|stock|shipping|livraison|bouteille|price/i.test(text);
   const isFrench = /bonjour|merci|commander|svp/i.test(text);
-  const isGerman = /grüezi|guten tag|bitte|wohnung|preis/i.test(text);
+  const isGerman = /grüezi|guten tag|bitte|wohnung|preis|termin/i.test(text);
 
   let lang = 'English (EN)';
   if (isGerman) lang = 'German (DE)';
   if (isFrench) lang = 'French (FR)';
 
-  if (isCleaning) {
+  if (isConsulting) {
     return {
       intent: 'quote_request',
-      intentLabel: 'Trade Service Quote Request',
+      intentLabel: 'Professional Advisory Quote',
       customerName: 'Prospective Client',
       language: lang,
       extractedFields: {
-        'Service Requested': 'Cleaning / Facility Services',
-        'Raw Request': text.slice(0, 80) + (text.length > 80 ? '...' : ''),
-        'Classification': 'B2B Trade Inbound',
-        'Catalog Verification': 'Matched Verified Offering'
+        'Inquiry Type': 'Professional Consultation & Retainer',
+        'Summary': text.slice(0, 60),
+        'Target Scope': 'Custom Proposal Required'
       },
-      completeness: 80,
-      missingFields: ['Exact address', 'Access code / key status'],
-      suggestedAction: 'Review Catalog Rate & Generate Quote',
+      completeness: 85,
+      missingFields: ['Scope specifications'],
+      suggestedAction: 'Draft Custom Service Scope (Standard Rate: CHF 250/h)',
       aiResponse:
-        'Thank you for reaching out! We have received your inquiry. Based on our verified service pricing, a tailored proposal has been drafted for your confirmation.'
+        'Thank you for reaching out! Based on your requirements, our standard advisory rate is CHF 250.– / hour. Would you like to schedule an introductory discovery call?'
     };
   }
 
   if (isEmergency) {
     return {
       intent: 'emergency',
-      intentLabel: 'Urgent Service Dispatch',
-      customerName: 'Urgent Client',
+      intentLabel: 'Emergency Service Dispatch',
+      customerName: 'Emergency Inbound Caller',
       language: lang,
       extractedFields: {
-        'Incident Type': 'Emergency Support / Repair',
-        'Priority Level': 'High (Immediate Attention)',
-        'Extracted Notes': text.slice(0, 80)
+        'Reported Issue': text.slice(0, 60),
+        'Urgency': 'High / Immediate',
+        'Dispatch Window': 'Next Available Certified Specialist'
       },
-      completeness: 75,
-      missingFields: ['Exact site address', 'Contact phone number'],
-      suggestedAction: 'Notify On-Call Technician',
+      completeness: 85,
+      missingFields: ['Exact address & access info'],
+      suggestedAction: 'Dispatch Urgent Specialist (Diagnostic Fee: CHF 280.-)',
       aiResponse:
-        'We understand this is urgent. Our team has been alerted immediately and is reviewing technician availability in your area.'
+        'We have prioritized your urgent request. Our standard on-site diagnostic fee is CHF 280.–. A specialist can be dispatched within 2 hours. Would you like to proceed?'
     };
   }
 
   return {
     intent: 'product_enquiry',
     intentLabel: 'Commercial Product / Service Inquiry',
-    customerName: 'WhatsApp Contact',
+    customerName: 'Commercial Lead',
     language: lang,
     extractedFields: {
-      'Inquiry Category': 'General Catalog Inquiry',
-      'Extracted Details': text.slice(0, 80)
+      'Request': text.slice(0, 60),
+      'Status': 'Grounded in Catalog Rates'
     },
-    completeness: 70,
-    missingFields: ['Customer address or delivery requirements'],
-    suggestedAction: 'Propose Catalog Match',
+    completeness: 80,
+    missingFields: ['Quantity / Delivery specs'],
+    suggestedAction: 'Send Verified Catalog Price & Checkout Link',
     aiResponse:
-      'Hello! Thank you for contacting us. We have matched your inquiry with our verified product catalog and are ready to assist you.'
+      'Thank you for your message! We have checked our verified catalog and prepared the quote details for you. How would you like to proceed?'
   };
 }
 

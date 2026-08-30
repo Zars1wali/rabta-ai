@@ -16,8 +16,8 @@ describe('Milestone 1: Commercial Sales Landing Page & Simulator', () => {
 
     const html = await res.text();
     // Core Value Proposition Headline
-    expect(html).toContain('Every WhatsApp enquiry answered in under a minute');
-    expect(html).toContain('turned into a structured lead');
+    expect(html).toContain('Every WhatsApp inquiry qualified and closed in under a minute');
+    expect(html).toContain('autonomously');
 
     // Branding & Identity
     expect(html).toContain('Nuncio');
@@ -32,8 +32,8 @@ describe('Milestone 1: Commercial Sales Landing Page & Simulator', () => {
 
     // Interactive Simulator & Presets
     expect(html).toContain('Live WhatsApp-to-Lead Simulator');
-    expect(html).toContain('Thomas Meier');
-    expect(html).toContain('8001 Zürich');
+    expect(html).toContain('Elena Rossi');
+    expect(html).toContain('Nexus Capital AG');
 
     // Legal Links
     expect(html).toContain('/privacy');
@@ -56,20 +56,20 @@ describe('Milestone 1: Commercial Sales Landing Page & Simulator', () => {
     expect(data.metaStatus).toContain('Official Meta Tech Provider');
     expect(data.compliance.aiAct).toContain('EU AI Act Article 50');
     expect(data.compliance.catalogIntegrity).toContain('Deterministic Grounding');
-    expect(data.sampleScenarios).toHaveLength(3);
-    expect(data.sampleScenarios[0].id).toBe('swiss_cleaning');
+    expect(data.sampleScenarios).toHaveLength(4);
+    expect(data.sampleScenarios[0].id).toBe('b2b_consulting');
   });
 
-  it('correctly extracts and scores custom Swiss trade inquiries in the simulation parser', () => {
+  it('correctly extracts and scores custom B2B consulting inquiries in the simulation parser', () => {
     const result = parseCustomMessage(
-      'Grüezi! Mir sueched e Reinigungsfirma für e 3.5 Zimmer Wohnig (85 m2) z Winterthur.'
+      'Hello! We need a monthly legal and compliance advisory retainer for our 20-person agency.'
     );
 
     expect(result.intent).toBe('quote_request');
-    expect(result.intentLabel).toContain('Trade Service Quote Request');
-    expect(result.language).toBe('German (DE)');
+    expect(result.intentLabel).toContain('Professional Advisory Quote');
+    expect(result.language).toBe('English (EN)');
     expect(result.completeness).toBeGreaterThanOrEqual(80);
-    expect(result.suggestedAction).toContain('Review Catalog Rate');
+    expect(result.suggestedAction).toContain('Draft Custom Service Scope');
   });
 
   it('correctly classifies urgent emergency requests in the simulation parser', () => {
@@ -78,9 +78,9 @@ describe('Milestone 1: Commercial Sales Landing Page & Simulator', () => {
     );
 
     expect(result.intent).toBe('emergency');
-    expect(result.intentLabel).toContain('Urgent Service Dispatch');
-    expect(result.completeness).toBeGreaterThanOrEqual(75);
-    expect(result.suggestedAction).toContain('Notify On-Call Technician');
+    expect(result.intentLabel).toContain('Emergency Service Dispatch');
+    expect(result.completeness).toBeGreaterThanOrEqual(80);
+    expect(result.suggestedAction).toContain('Dispatch Urgent Specialist');
   });
 
   it('correctly classifies product / e-commerce inquiries in French', () => {
@@ -90,7 +90,7 @@ describe('Milestone 1: Commercial Sales Landing Page & Simulator', () => {
 
     expect(result.intent).toBe('product_enquiry');
     expect(result.language).toBe('French (FR)');
-    expect(result.completeness).toBeGreaterThanOrEqual(70);
+    expect(result.completeness).toBeGreaterThanOrEqual(75);
   });
 
   it('contains valid preset scenarios with non-zero completeness scores and grounded AI responses', () => {
