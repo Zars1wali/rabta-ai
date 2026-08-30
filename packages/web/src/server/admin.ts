@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { TenantAdminService } from '@salesops/core';
 
 export interface AdminRouteOptions {
@@ -5,10 +6,22 @@ export interface AdminRouteOptions {
   adminApiKey?: string;
 }
 
-function verifyAdminAuth(req: Request, expectedKey?: string): boolean {
-  const adminKey = expectedKey || process.env.ADMIN_API_KEY || 'salesops_admin_secret_key';
+export function verifyAdminAuth(req: Request, expectedKey?: string): boolean {
+  const adminKey = expectedKey || process.env.ADMIN_API_KEY;
+  if (!adminKey) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('ADMIN_API_KEY environment variable is required in production.');
+    }
+    return false;
+  }
+
   const provided = req.headers.get('x-admin-key') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  return provided === adminKey;
+  if (!provided) return false;
+
+  const expectedHash = crypto.createHash('sha256').update(adminKey, 'utf8').digest();
+  const providedHash = crypto.createHash('sha256').update(provided, 'utf8').digest();
+
+  return crypto.timingSafeEqual(expectedHash, providedHash);
 }
 
 export async function handleAdminTenantGetRoute(

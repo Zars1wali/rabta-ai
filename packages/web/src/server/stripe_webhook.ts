@@ -19,7 +19,17 @@ export async function handleStripeWebhookRoute(
   }
 
   const signature = req.headers.get('stripe-signature');
-  const webhookSecret = options.webhookSecret || process.env.STRIPE_WEBHOOK_SECRET || 'whsec_test_secret';
+  const webhookSecret = options.webhookSecret || process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('STRIPE_WEBHOOK_SECRET environment variable is required in production.');
+    }
+    return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 
   if (!signature) {
     return new Response(JSON.stringify({ error: 'Missing stripe-signature header' }), {

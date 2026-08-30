@@ -43,47 +43,47 @@ flowchart TD
   - [x] Created Meta Business App **Nuncio** (App ID: `1584644373301704`) under business portfolio `zeropointintel` (`1188005875832676`).
   - [x] Designated as an official **Meta Tech Provider**.
   - [x] Submitted legal Business Verification for `Nuno Miguel Pires Ribeiro` (Status: *In Review*).
-- [ ] **WP-P0.2: Embedded Signup & App Review Preparation**
-  - [ ] Configure Facebook Login for Business with WhatsApp Embedded Signup scopes (`whatsapp_business_management`, `whatsapp_business_messaging`).
-  - [ ] Prepare App Review screen-recording walkthrough and privacy/terms documentation.
+- [x] **WP-P0.2: Embedded Signup & App Review Preparation**
+  - [x] Configure Facebook Login for Business with WhatsApp Embedded Signup scopes (`whatsapp_business_management`, `whatsapp_business_messaging`).
+  - [x] Prepare App Review screen-recording walkthrough (`docs/meta/APP_REVIEW_SUBMISSION_GUIDE.md`) and GDPR/revDSG privacy, terms, and DPA documentation (`legal/`).
 
 ---
 
-### Milestone 1: ZeroPointIntel.com Commercial Rebranding & Sales Landing
+### Milestone 1: ZeroPointIntel.com Commercial Rebranding & Sales Landing *(Completed)*
 > **Goal:** Transform ZeroPointIntel.com into a clean, modern, high-converting sales platform spotlighting Nuncio for everyday businesses (B2B service trades + E-Commerce) while organizing deep-tech/cybersecurity systems into a dedicated "Portfolio & Solutions" section.
 
-- [ ] **WP-M1.1: Hero Section & Core Value Proposition**
-  - [ ] Clear business headline: *"Every WhatsApp enquiry answered in under a minute — turned into a structured lead for your business."*
-  - [ ] Interactive live simulation widget: Inbound WhatsApp enquiry $\rightarrow$ Structured Lead Card with Completeness Score.
-  - [ ] Clean, trustworthy modern design aesthetic (light/dark accessible palette, refined typography).
-- [ ] **WP-M1.2: Dual Market Solutions**
-  - [ ] **Service Trades & B2B (Cleaning, Construction, Local Pros)**: Automated quote capture (m², rooms, frequency, location, date), Swiss German voice note handling, zero lost jobs while on a ladder.
-  - [ ] **E-Commerce Stores (Shopify, WooCommerce, Custom)**: Real-time stock verification, order drafting, instant Stripe checkout links in chat.
-- [ ] **WP-M1.3: Compliance, Swiss Trust & Portfolio Assets Section**
-  - [ ] Trust badges: Meta Tech Provider Cloud API, EU AI Act Art. 50 disclosure, Swiss/EU data residency (revDSG & GDPR).
-  - [ ] Dedicated *"Portfolio & Deep-Tech Solutions"* showcase preserving ZeroPointIntel's engineering pedigree (IoT telemetry, cybersecurity, high-assurance distributed systems).
+- [x] **WP-M1.1: Hero Section & Core Value Proposition**
+  - [x] Clear business headline: *"Every WhatsApp enquiry answered in under a minute — turned into a structured lead for your business."*
+  - [x] Interactive live simulation widget: Inbound WhatsApp enquiry $\rightarrow$ Structured Lead Card with Completeness Score.
+  - [x] Clean, trustworthy modern design aesthetic (light/dark accessible palette, refined typography).
+- [x] **WP-M1.2: Dual Market Solutions**
+  - [x] **Service Trades & B2B (Cleaning, Construction, Local Pros)**: Automated quote capture (m², rooms, frequency, location, date), Swiss German voice note handling, zero lost jobs while on a ladder.
+  - [x] **E-Commerce Stores (Shopify, WooCommerce, Custom)**: Real-time stock verification, order drafting, instant Stripe checkout links in chat.
+- [x] **WP-M1.3: Compliance, Swiss Trust & Portfolio Assets Section**
+  - [x] Trust badges: Meta Tech Provider Cloud API, EU AI Act Art. 50 disclosure, Swiss/EU data residency (revDSG & GDPR).
+  - [x] Dedicated *"Portfolio & Deep-Tech Solutions"* showcase preserving ZeroPointIntel's engineering pedigree (IoT telemetry, cybersecurity, high-assurance distributed systems).
 
 ---
 
-### Milestone 2: Multi-Tenant Postgres Schema & Row-Level Security
+### Milestone 2: Multi-Tenant Postgres Schema & Row-Level Security *(Completed)*
 > **Goal:** Implement the authoritative domain schema with strict Row-Level Security (RLS) across all tables.
 
-- [ ] **WP-M2.1: Multi-Tenancy & Channel Schemas**
-  - [ ] `tenant` (id, name, legal_name, country, vertical_pack_id, timezone, default_language, status, plan).
-  - [ ] `user` & `membership` (tenant_id, user_id, role: `owner` | `agent` | `viewer`).
-  - [ ] `channel` (tenant_id, type: `whatsapp`, waba_id, phone_number_id, display_number, status, token_ref).
-- [ ] **WP-M2.2: Contacts, Conversations & Messages**
-  - [ ] `contact` (tenant_id, wa_id, display_name, phone_e164, language, tags, consent_source, consent_at).
-  - [ ] `conversation` (tenant_id, channel_id, contact_id, status: `open`/`snoozed`/`closed`, service_window_expires_at, ai_mode: `off`/`suggest`/`auto`).
-  - [ ] `message` (tenant_id, conversation_id, direction, wamid [UNIQUE], type, body, billing_category, cost_estimate, author).
-- [ ] **WP-M2.3: Leads, Offerings & Event Timeline**
-  - [ ] `lead` (tenant_id, contact_id, lead_type: `quote_request`/`appointment_request`/`product_enquiry`, state: `new` $\rightarrow$ `qualifying` $\rightarrow$ `interested` $\rightarrow$ `quoted` $\rightarrow$ `order_pending` $\rightarrow$ `won`/`lost`/`dormant`, score, value_estimate).
-  - [ ] `offering` (tenant_id, sku, name, description, price_type, price, currency, service_area, duration_minutes, active, embedding).
-  - [ ] `quote_request` (tenant_id, lead_id, fields [JSONB], completeness: 0.0–1.0, missing_fields).
-  - [ ] `order` & `payment` (tenant_id, lead_id, contact_id, line_items, status, stripe_payment_intent_id).
-  - [ ] `event` (append-only timeline) & `ai_run` (token usage, latency, prompt_ref, outcome).
-- [ ] **WP-M2.4: Row-Level Security (RLS) Enforcement**
-  - [ ] Write automated CI tests verifying that cross-tenant queries are blocked at the database level.
+- [x] **WP-M2.1: Multi-Tenancy & Channel Schemas**
+  - [x] `tenant` (id, name, legal_name, country, vertical_pack_id, timezone, default_language, status, plan).
+  - [x] `user` & `membership` (tenant_id, user_id, role: `owner` | `agent` | `viewer`).
+  - [x] `channel` (tenant_id, type: `whatsapp`, waba_id, phone_number_id, display_number, status, token_ref).
+- [x] **WP-M2.2: Contacts, Conversations & Messages**
+  - [x] `contact` (tenant_id, wa_id, display_name, phone_e164, language, tags, consent_source, consent_at).
+  - [x] `conversation` (tenant_id, channel_id, contact_id, status: `open`/`snoozed`/`closed`, service_window_expires_at, ai_mode: `off`/`suggest`/`auto`).
+  - [x] `message` (tenant_id, conversation_id, direction, wamid [UNIQUE], type, body, billing_category, cost_estimate, author).
+- [x] **WP-M2.3: Leads, Offerings & Event Timeline**
+  - [x] `lead` (tenant_id, contact_id, lead_type: `quote_request`/`appointment_request`/`product_enquiry`, state: `new` $\rightarrow$ `qualifying` $\rightarrow$ `interested` $\rightarrow$ `quoted` $\rightarrow$ `order_pending` $\rightarrow$ `won`/`lost`/`dormant`, score, value_estimate).
+  - [x] `offering` (tenant_id, sku, name, description, price_type, price, currency, service_area, duration_minutes, active, embedding).
+  - [x] `quote_request` (tenant_id, lead_id, fields [JSONB], completeness: 0.0–1.0, missing_fields).
+  - [x] `order` & `payment` (tenant_id, lead_id, contact_id, line_items, status, stripe_payment_intent_id).
+  - [x] `event` (append-only timeline) & `ai_run` (token usage, latency, prompt_ref, outcome).
+- [x] **WP-M2.4: Row-Level Security (RLS) Enforcement**
+  - [x] Write automated CI tests verifying that cross-tenant queries are blocked at the database level.
 
 ---
 

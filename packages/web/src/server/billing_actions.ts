@@ -1,7 +1,10 @@
 import type { StripeBillingService } from '@salesops/core';
+import { verifyAdminAuth } from './admin.js';
 
 export interface BillingActionsRouteOptions {
   billingService: StripeBillingService;
+  adminApiKey?: string;
+  verifyTenantAuth?: (req: Request, targetTenantId: string) => Promise<boolean> | boolean;
 }
 
 export async function handleTopUpCheckoutRoute(
@@ -24,6 +27,23 @@ export async function handleTopUpCheckoutRoute(
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    if (options.verifyTenantAuth) {
+      const isAuthorized = await options.verifyTenantAuth(req, tenantId);
+      if (!isAuthorized) {
+        return new Response(JSON.stringify({ error: 'Forbidden: Unauthorized for tenant top-up' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    } else if (options.adminApiKey) {
+      if (!verifyAdminAuth(req, options.adminApiKey)) {
+        return new Response(JSON.stringify({ error: 'Unauthorized: Authentication required' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     const result = await options.billingService.createTopUpCheckoutSession({

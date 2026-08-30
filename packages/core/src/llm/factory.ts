@@ -42,7 +42,7 @@ export class LlmProviderFactory {
     return new GeminiProviderAdapter({
       apiKey,
       baseUrl: this.geminiBaseUrl,
-      defaultModel: 'gemini-2.5-flash'
+      defaultModel: 'gemini-2.0-flash'
     });
   }
 }

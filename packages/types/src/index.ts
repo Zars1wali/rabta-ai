@@ -6,3 +6,4 @@ export * from './identity.js';
 export * from './agent.js';
 export * from './tenant.js';
 export * from './metering.js';
+export * from './commercial.js';

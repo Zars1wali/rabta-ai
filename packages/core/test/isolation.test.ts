@@ -39,12 +39,12 @@ describe('Tenant Isolation AST Guard', () => {
 
         const methodText = method.getText(sourceFile);
 
-        // Every method in tenant repositories (except TenantRepository itself where it's tenant-level)
+        // Every method in tenant repositories (except TenantRepository/UserRepository where it is entity-level)
         // must explicitly reference tenantId or tenants.id
-        if (className === 'TenantRepository') {
-          expect(methodText).toMatch(/(tenantId|slug|tenants\.id|tenants\.slug)/);
+        if (className === 'TenantRepository' || className === 'UserRepository') {
+          expect(methodText).toMatch(/(tenantId|slug|tenants\.id|tenants\.slug|userId|email|users\.id|users\.email)/);
         } else {
-          // In CatalogRepository, SessionRepository, MessageRepository, LeadRepository, ToolCallRepository
+          // In CatalogRepository, SessionRepository, MessageRepository, LeadRepository, ToolCallRepository, MembershipRepository
           expect(
             methodText.includes('tenantId') || methodText.includes('tenant_id'),
             `Method ${className}.${methodName} must explicitly filter or insert by tenantId for strict multi-tenant isolation.`

@@ -10,3 +10,5 @@ export * from './onboarding.js';
 export * from './billing_actions.js';
 export * from './whatsapp.js';
 export * from './waba_onboarding.js';
+export * from './legal.js';
+export * from './landing.js';

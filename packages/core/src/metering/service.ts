@@ -28,7 +28,15 @@ export class MeteringService {
 
   constructor(options: MeteringServiceOptions) {
     this.repo = options.repo;
-    this.hmacSecret = options.hmacSecret || process.env.METERING_HMAC_SECRET || 'salesops_metering_secret_salt_2026';
+    const secret = options.hmacSecret || process.env.METERING_HMAC_SECRET;
+    if (!secret) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('METERING_HMAC_SECRET environment variable is required in production.');
+      }
+      this.hmacSecret = 'salesops_metering_secret_salt_2026';
+    } else {
+      this.hmacSecret = secret;
+    }
     this.notificationDispatcher = options.notificationDispatcher;
   }
 

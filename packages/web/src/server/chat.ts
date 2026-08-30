@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AgentTurnExecutor, SessionRepository } from '@salesops/core';
+import type { AgentTurnExecutor, SessionRepository, MessageRepository } from '@salesops/core';
 import type { AgentTurnInput, FunnelStage } from '@salesops/types';
 
 export const ChatRequestBodySchema = z.object({
@@ -16,6 +16,7 @@ export type ChatRequestBody = z.infer<typeof ChatRequestBodySchema>;
 export interface ChatRouteContext {
   executor: AgentTurnExecutor;
   sessionRepo: SessionRepository;
+  messageRepo?: MessageRepository;
 }
 
 export async function handleChatRoute(req: Request, ctx: ChatRouteContext): Promise<Response> {
@@ -43,24 +44,43 @@ export async function handleChatRoute(req: Request, ctx: ChatRouteContext): Prom
     );
   }
 
-  // 1. Resolve session to get tenantId and current stage
-  const tenantId = body.tenantId || '00000000-0000-4000-8000-000000000001';
-  const currentStage: FunnelStage = 'discover';
-  const sessionLocale = body.locale || 'pt-PT';
+  // 1. Resolve session to get verified tenantId and current stage (IDOR protection)
+  const tenantIdCandidate = body.tenantId || '00000000-0000-4000-8000-000000000001';
+  const session = await ctx.sessionRepo.getSession(tenantIdCandidate, body.sessionId);
+  if (!session) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: 'Session not found for the provided tenant.'
+      }),
+      {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  }
+
+  const tenantId = session.tenantId;
+  const currentStage: FunnelStage = (session.stage as FunnelStage) || 'discover';
+  const sessionLocale = body.locale || session.locale || 'pt-PT';
+
+  const history = ctx.messageRepo
+    ? await ctx.messageRepo.getRecentHistory(tenantId, session.id, 15)
+    : [];
 
   const turnInput: AgentTurnInput = {
-    sessionId: body.sessionId,
+    sessionId: session.id,
     tenantId,
     message: {
       id: crypto.randomUUID(),
-      channel: 'web',
-      sessionId: body.sessionId,
+      channel: (session.channel as 'web' | 'whatsapp' | 'email') || 'web',
+      sessionId: session.id,
       senderId: 'visitor',
       content: body.message.content,
       mediaUrl: body.message.mediaUrl ?? null,
       timestamp: new Date().toISOString()
     },
-    history: [],
+    history,
     stage: currentStage,
     locale: sessionLocale
   };
