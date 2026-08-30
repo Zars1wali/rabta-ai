@@ -236,11 +236,11 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
           </span>
           <h3 style="font-size: 20px; font-weight: 700; margin-top: 6px;">How It Works: Inbound Inquiry → Verified Quote → 1-Tap Close</h3>
         </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('b2b_consulting')">💼 B2B &amp; Pro Services</button>
-          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('field_services')">🛠️ Field Services &amp; Trades</button>
-          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('ecommerce_order')">🛍️ E-Commerce (1-Click Pay)</button>
-          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="loadScenario('clinic_booking')">🏥 Clinics &amp; Bookings</button>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="scenario-btn-group">
+          <button id="btn-sc-b2b_consulting" class="btn-scenario" data-id="b2b_consulting" style="font-size: 12px; padding: 7px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; background: #0284c7; border: 1px solid #38bdf8; color: #fff; transition: all 0.15s ease; -webkit-tap-highlight-color: transparent;" onclick="window.loadScenario('b2b_consulting')">💼 B2B &amp; Pro Services</button>
+          <button id="btn-sc-field_services" class="btn-scenario" data-id="field_services" style="font-size: 12px; padding: 7px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #cbd5e1; transition: all 0.15s ease; -webkit-tap-highlight-color: transparent;" onclick="window.loadScenario('field_services')">🛠️ Field Services &amp; Trades</button>
+          <button id="btn-sc-ecommerce_order" class="btn-scenario" data-id="ecommerce_order" style="font-size: 12px; padding: 7px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #cbd5e1; transition: all 0.15s ease; -webkit-tap-highlight-color: transparent;" onclick="window.loadScenario('ecommerce_order')">🛍️ E-Commerce (1-Click Pay)</button>
+          <button id="btn-sc-clinic_booking" class="btn-scenario" data-id="clinic_booking" style="font-size: 12px; padding: 7px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #cbd5e1; transition: all 0.15s ease; -webkit-tap-highlight-color: transparent;" onclick="window.loadScenario('clinic_booking')">🏥 Clinics &amp; Bookings</button>
         </div>
       </div>
 
@@ -268,7 +268,7 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
           </div>
           <div style="padding: 12px; background: #202c33; border-top: 1px solid #2a3942;">
             <label style="font-size: 11px; color: #8696a0; display: block; margin-bottom: 4px;">Or type any customer inquiry to test live:</label>
-            <input type="text" id="custom-sim-input" placeholder="e.g. We need ongoing compliance advisory for 20 seats starting next month..." style="width: 100%; background: #2a3942; border: none; border-radius: 6px; padding: 8px 10px; color: #fff; font-size: 13px;" oninput="handleCustomInput(this.value)">
+            <input type="text" id="custom-sim-input" placeholder="e.g. We need ongoing compliance advisory for 20 seats starting next month..." style="width: 100%; background: #2a3942; border: none; border-radius: 6px; padding: 8px 10px; color: #fff; font-size: 13px;" oninput="window.handleCustomInput(this.value)">
           </div>
         </div>
 
@@ -300,7 +300,7 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
             <div style="font-size: 12.5px; color: #e2e8f0; line-height: 1.4; background: #1e293b; padding: 8px 10px; border-radius: 6px; font-family: monospace;" id="sim-action-text">
               🔔 Neue B2B Anfrage: Elena Rossi (Nexus Capital, CHF 2'450/mo).<br>Antworte <b>/approve</b> zum Bestätigen des Termins.
             </div>
-            <button class="btn-primary" style="width: 100%; font-size: 13.5px; padding: 10px; margin-top: 10px; font-weight: 700;" onclick="alert('✅ Lead Confirmed! Discovery call reservation and official retainer scope dispatched.')">
+            <button class="btn-primary" style="width: 100%; font-size: 13.5px; padding: 10px; margin-top: 10px; font-weight: 700; cursor: pointer;" onclick="alert('✅ Lead Confirmed! Discovery call reservation and official retainer scope dispatched.')">
               ✓ Reply /approve (Confirm Lead &amp; Dispatch Proposal)
             </button>
           </div>
@@ -422,47 +422,114 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
   </footer>
 
   <script>
-    const scenarios = ${JSON.stringify(PRESET_SCENARIOS)};
+    (function() {
+      const scenarios = ${JSON.stringify(PRESET_SCENARIOS)};
 
-    function loadScenario(id) {
-      const sc = scenarios.find(s => s.id === id) || scenarios[0];
-      document.getElementById('sim-avatar').innerText = sc.lead.customerName.charAt(0);
-      document.getElementById('sim-cust-name').innerText = sc.lead.customerName;
-      document.getElementById('sim-msg-text').innerText = sc.message;
-      document.getElementById('sim-ai-resp').innerText = sc.lead.aiResponse;
-      document.getElementById('sim-lead-title').innerText = sc.lead.intentLabel;
-      document.getElementById('sim-score-badge').innerText = 'Ready for Approval';
-      document.getElementById('sim-action-text').innerHTML = '🔔 Neue Anfrage: ' + sc.lead.customerName + '<br>Antworte <b>/approve</b> zum Bestätigen.';
+      const prices = {
+        'b2b_consulting': 'CHF 2\'450.00 / mo',
+        'field_services': 'CHF 280.00',
+        'ecommerce_order': 'CHF 63.90',
+        'clinic_booking': 'CHF 220.00'
+      };
 
-      let fieldsHtml = '<div class="field-row"><span class="field-key">👤 Client:</span><span class="field-val">' + sc.lead.customerName + '</span></div>';
-      for (const [k, v] of Object.entries(sc.lead.extractedFields)) {
-        fieldsHtml += '<div class="field-row"><span class="field-key">• ' + k + ':</span><span class="field-val">' + v + '</span></div>';
+      window.loadScenario = function(id) {
+        const sc = scenarios.find(function(s) { return s.id === id; }) || scenarios[0];
+        
+        // Update active button highlighting
+        var buttons = document.querySelectorAll('.btn-scenario');
+        for (var i = 0; i < buttons.length; i++) {
+          var b = buttons[i];
+          if (b.getAttribute('data-id') === sc.id || b.id === 'btn-sc-' + sc.id) {
+            b.style.background = '#0284c7';
+            b.style.borderColor = '#38bdf8';
+            b.style.color = '#ffffff';
+          } else {
+            b.style.background = 'rgba(255,255,255,0.06)';
+            b.style.borderColor = 'rgba(255,255,255,0.1)';
+            b.style.color = '#cbd5e1';
+          }
+        }
+
+        var avatar = document.getElementById('sim-avatar');
+        var custName = document.getElementById('sim-cust-name');
+        var msgText = document.getElementById('sim-msg-text');
+        var aiResp = document.getElementById('sim-ai-resp');
+        var leadTitle = document.getElementById('sim-lead-title');
+        var scoreBadge = document.getElementById('sim-score-badge');
+        var actionText = document.getElementById('sim-action-text');
+        var fieldsContainer = document.getElementById('sim-fields-container');
+
+        if (avatar) avatar.innerText = sc.lead.customerName.charAt(0);
+        if (custName) custName.innerText = sc.lead.customerName;
+        if (msgText) msgText.innerText = sc.message;
+        if (aiResp) aiResp.innerText = sc.lead.aiResponse;
+        if (leadTitle) leadTitle.innerText = sc.lead.intentLabel;
+        if (scoreBadge) scoreBadge.innerText = 'Ready for Approval';
+        if (actionText) actionText.innerHTML = '🔔 ' + sc.lead.suggestedAction + '<br>Antworte <b>/approve</b> zum Bestätigen.';
+
+        if (fieldsContainer) {
+          var fieldsHtml = '<div class="field-row"><span class="field-key">👤 Client:</span><span class="field-val">' + sc.lead.customerName + '</span></div>';
+          for (var k in sc.lead.extractedFields) {
+            fieldsHtml += '<div class="field-row"><span class="field-key">• ' + k + ':</span><span class="field-val">' + sc.lead.extractedFields[k] + '</span></div>';
+          }
+          fieldsHtml += '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Calculated Rate:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (prices[sc.id] || 'CHF 250.00') + '</span></div>';
+          fieldsContainer.innerHTML = fieldsHtml;
+        }
+      };
+
+      window.handleCustomInput = function(val) {
+        if (!val || val.length < 3) return;
+        var isConsulting = /consult|retainer|advisory|legal|audit|agency|b2b/i.test(val);
+        var isEmergency = /urgent|notfall|leak|broken|repair|kaputt|heute|today|error|fault/i.test(val);
+        var isEcommerce = /order|buy|commander|stock|shipping|livraison|bouteille|price/i.test(val);
+        
+        var title = isConsulting ? 'Professional Advisory Quote (CHF 2\'450/mo)' : (isEmergency ? 'Emergency Specialist Dispatch (CHF 280.00)' : (isEcommerce ? 'E-Commerce Order Draft (CHF 63.90)' : 'Commercial Service Lead'));
+        
+        var msgText = document.getElementById('sim-msg-text');
+        var leadTitle = document.getElementById('sim-lead-title');
+        var scoreBadge = document.getElementById('sim-score-badge');
+        var aiResp = document.getElementById('sim-ai-resp');
+        var fieldsContainer = document.getElementById('sim-fields-container');
+        var actionText = document.getElementById('sim-action-text');
+
+        if (msgText) msgText.innerText = val;
+        if (leadTitle) leadTitle.innerText = title;
+        if (scoreBadge) scoreBadge.innerText = 'Ready for Approval';
+        if (aiResp) {
+          aiResp.innerText = isConsulting 
+            ? 'Hello! Based on your requirements, our standard advisory rate is CHF 250.– / hour. Would you like to schedule an introductory discovery call?'
+            : (isEmergency ? 'We have prioritized your emergency request. Our standard diagnostic fee is CHF 280.–. A specialist can be dispatched within 2 hours. Should we confirm?' : 'Thank you for reaching out! We have checked our verified catalog and prepared the quote details for you.');
+        }
+        if (fieldsContainer) {
+          fieldsContainer.innerHTML = 
+            '<div class="field-row"><span class="field-key">📋 Request Scope:</span><span class="field-val">' + title + '</span></div>' +
+            '<div class="field-row"><span class="field-key">📝 Inbound Text:</span><span class="field-val">' + val.slice(0, 50) + '...</span></div>' +
+            '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Rate / Quote:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (isConsulting ? 'CHF 2\'450 / mo' : (isEmergency ? 'CHF 280.00' : 'CHF 63.90')) + '</span></div>';
+        }
+        if (actionText) actionText.innerHTML = '🔔 Neue Offerte für Kunden.<br>Antworte <b>/approve</b> zum Senden.';
+      };
+
+      // Direct Safari-safe event binding
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          bindScenarioButtons();
+        });
+      } else {
+        bindScenarioButtons();
       }
-      document.getElementById('sim-fields-container').innerHTML = fieldsHtml;
-    }
 
-    function handleCustomInput(val) {
-      if (!val || val.length < 3) return;
-      const isConsulting = /consult|retainer|advisory|legal|audit|agency|b2b/i.test(val);
-      const isEmergency = /urgent|notfall|leak|broken|repair|kaputt|heute|today|error|fault/i.test(val);
-      const isEcommerce = /order|buy|commander|stock|shipping|livraison|bouteille|price/i.test(val);
-      
-      let title = isConsulting ? 'Professional Advisory Quote (CHF 2\'450/mo)' : (isEmergency ? 'Emergency Specialist Dispatch (CHF 280.00)' : (isEcommerce ? 'E-Commerce Order Draft (CHF 63.90)' : 'Commercial Service Lead'));
-      
-      document.getElementById('sim-msg-text').innerText = val;
-      document.getElementById('sim-lead-title').innerText = title;
-      document.getElementById('sim-score-badge').innerText = 'Ready for Approval';
-      document.getElementById('sim-ai-resp').innerText = isConsulting 
-        ? 'Hello! Based on your requirements, our standard advisory rate is CHF 250.– / hour. Would you like to schedule an introductory discovery call?'
-        : (isEmergency ? 'We have prioritized your emergency request. Our standard diagnostic fee is CHF 280.–. A specialist can be dispatched within 2 hours. Should we confirm?' : 'Thank you for reaching out! We have checked our verified catalog and prepared the quote details for you.');
-      
-      document.getElementById('sim-fields-container').innerHTML = 
-        '<div class="field-row"><span class="field-key">📋 Request Scope:</span><span class="field-val">' + title + '</span></div>' +
-        '<div class="field-row"><span class="field-key">📝 Inbound Text:</span><span class="field-val">' + val.slice(0, 50) + '...</span></div>' +
-        '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Rate / Quote:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (isConsulting ? 'CHF 2\'450 / mo' : (isEmergency ? 'CHF 280.00' : 'CHF 63.90')) + '</span></div>';
-      
-      document.getElementById('sim-action-text').innerHTML = '🔔 Neue Offerte für Kunden.<br>Antworte <b>/approve</b> zum Senden.';
-    }
+      function bindScenarioButtons() {
+        var buttons = document.querySelectorAll('.btn-scenario');
+        buttons.forEach(function(btn) {
+          btn.addEventListener('click', function(e) {
+            var id = this.getAttribute('data-id');
+            if (id && window.loadScenario) {
+              window.loadScenario(id);
+            }
+          });
+        });
+      }
+    })();
   </script>
 </body>
 </html>`;
@@ -471,7 +538,9 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=3600'
+      'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
     }
   });
 }
