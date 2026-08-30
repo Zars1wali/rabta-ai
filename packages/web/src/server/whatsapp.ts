@@ -2,7 +2,8 @@ import type {
   WhatsAppCloudClient,
   AgentTurnExecutor,
   SessionRepository,
-  TenantRepository
+  TenantRepository,
+  WhatsAppMessageQueue
 } from '@salesops/core';
 import {
   chunkReplyForWhatsApp,
@@ -15,10 +16,11 @@ export interface WhatsAppRouteOptions {
   appSecret: string;
   tenantId: string;
   whatsappClient: WhatsAppCloudClient;
-  turnExecutor: AgentTurnExecutor;
-  sessionRepo: SessionRepository;
+  turnExecutor?: AgentTurnExecutor;
+  sessionRepo?: SessionRepository;
   tenantRepo?: TenantRepository;
   ownerControlPlane?: OwnerControlPlane;
+  queue?: WhatsAppMessageQueue;
 }
 
 export async function handleWhatsAppGetRoute(
@@ -73,15 +75,32 @@ export async function handleWhatsAppPostRoute(
     return new Response('Invalid JSON', { status: 400 });
   }
 
-  // 2. Parse inbound WhatsApp messages
+  // 2. High-Throughput Async Queue Pipeline (< 100ms response)
+  if (options.queue) {
+    const jobId = await options.queue.enqueue({
+      tenantId: options.tenantId,
+      rawPayload: payload,
+      receivedAt: new Date().toISOString(),
+      signature: signature || undefined
+    });
+
+    return new Response(JSON.stringify({ status: 'queued', jobId }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Response-Time': 'async-queued'
+      }
+    });
+  }
+
+  // 3. Fallback synchronous path for direct callers
   const inboundMessages = options.whatsappClient.parseInboundWebhookPayload(payload);
   const controlPlane = options.ownerControlPlane || new OwnerControlPlane();
 
-  // 3. Process each message
   for (const msg of inboundMessages) {
     // Check if message is a merchant owner slash command
     const ownerCmd = parseOwnerCommand(msg.text);
-    if (ownerCmd && options.tenantRepo) {
+    if (ownerCmd && options.tenantRepo && options.sessionRepo) {
       const tenant = await options.tenantRepo.getById(options.tenantId);
       if (tenant && controlPlane.isOwnerPhone(tenant.config, msg.from)) {
         const cmdResult = await controlPlane.executeCommand({
@@ -96,45 +115,44 @@ export async function handleWhatsAppPostRoute(
       }
     }
 
-    let session = await options.sessionRepo.getSession(options.tenantId, `wa_${msg.from}`);
-    const sessionId = session?.id || crypto.randomUUID();
+    if (options.sessionRepo && options.turnExecutor) {
+      let session = await options.sessionRepo.getSession(options.tenantId, `wa_${msg.from}`);
+      const sessionId = session?.id || crypto.randomUUID();
 
-    if (!session) {
-      session = await options.sessionRepo.createSession({
-        id: sessionId,
+      if (!session) {
+        session = await options.sessionRepo.createSession({
+          id: sessionId,
+          tenantId: options.tenantId,
+          channel: 'whatsapp',
+          stage: 'greet',
+          externalRef: msg.from
+        });
+      } else if (session.stage === 'handoff') {
+        continue;
+      }
+
+      const turnResult = await options.turnExecutor.executeTurn({
         tenantId: options.tenantId,
-        channel: 'whatsapp',
-        stage: 'greet',
-        externalRef: msg.from
-      });
-    } else if (session.stage === 'handoff') {
-      // Human manager takeover in effect: suppress automatic AI replies
-      continue;
-    }
-
-    // Execute turn via AgentTurnExecutor
-    const turnResult = await options.turnExecutor.executeTurn({
-      tenantId: options.tenantId,
-      sessionId,
-      message: {
-        id: msg.messageId || crypto.randomUUID(),
-        channel: 'whatsapp',
         sessionId,
-        senderId: msg.from,
-        content: msg.text,
-        timestamp: msg.timestamp || new Date().toISOString()
-      },
-      history: [],
-      stage: (session?.stage as 'greet') || 'greet',
-      locale: session?.locale || 'pt-PT'
-    });
+        message: {
+          id: msg.messageId || crypto.randomUUID(),
+          channel: 'whatsapp',
+          sessionId,
+          senderId: msg.from,
+          content: msg.text,
+          timestamp: msg.timestamp || new Date().toISOString()
+        },
+        history: [],
+        stage: (session?.stage as 'greet') || 'greet',
+        locale: session?.locale || 'pt-PT'
+      });
 
-    const replyText = turnResult.chunks.join('\n\n');
-    if (replyText) {
-      // Chunk response into natural WhatsApp conversational bubbles
-      const { bubbles } = chunkReplyForWhatsApp(replyText);
-      for (const bubble of bubbles) {
-        await options.whatsappClient.sendTextMessage(msg.from, bubble);
+      const replyText = turnResult.chunks.join('\n\n');
+      if (replyText) {
+        const { bubbles } = chunkReplyForWhatsApp(replyText);
+        for (const bubble of bubbles) {
+          await options.whatsappClient.sendTextMessage(msg.from, bubble);
+        }
       }
     }
   }

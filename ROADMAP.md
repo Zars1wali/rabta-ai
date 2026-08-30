@@ -87,20 +87,20 @@ flowchart TD
 
 ---
 
-### Milestone 3: WhatsApp Cloud API Ingress & 24-Hour Service Window Engine
+### Milestone 3: WhatsApp Cloud API Ingress & 24-Hour Service Window Engine *(Completed)*
 > **Goal:** High-throughput, signature-verified webhook ingress with Redis/BullMQ queueing and strict 24-hour customer service window enforcement.
 
-- [ ] **WP-M3.1: Thin Webhook Ingress Service**
-  - [ ] `GET /webhook`: Verify `hub.challenge` and `hub.verify_token`.
-  - [ ] `POST /webhook`: Verify HMAC-SHA256 signature against App Secret (`X-Hub-Signature-256`).
-  - [ ] Enqueue raw payload to BullMQ Redis queue and return `200 OK` within 100ms.
-- [ ] **WP-M3.2: Asynchronous Idempotent Message Processor**
-  - [ ] Idempotency guard on `wamid` preventing duplicate message rows or duplicate AI responses.
-  - [ ] Inbound media downloader (images, documents, voice notes) to EU object storage with signed URLs.
-- [ ] **WP-M3.3: 24-Hour Service Window Guard**
-  - [ ] Calculate and update `service_window_expires_at = last_inbound + 24h`.
-  - [ ] Outbound send API strictly rejects free-form messages if `now() > service_window_expires_at`.
-  - [ ] Auto-notify owner when window is within 2 hours of expiring with an open lead.
+- [x] **WP-M3.1: Thin Webhook Ingress Service**
+  - [x] `GET /webhook`: Verify `hub.challenge` and `hub.verify_token`.
+  - [x] `POST /webhook`: Verify HMAC-SHA256 signature against App Secret (`X-Hub-Signature-256`).
+  - [x] Enqueue raw payload to BullMQ Redis queue and return `200 OK` within 100ms.
+- [x] **WP-M3.2: Asynchronous Idempotent Message Processor**
+  - [x] Idempotency guard on `wamid` preventing duplicate message rows or duplicate AI responses.
+  - [x] Inbound media downloader (images, documents, voice notes) to EU object storage with signed URLs.
+- [x] **WP-M3.3: 24-Hour Service Window Guard**
+  - [x] Calculate and update `service_window_expires_at = last_inbound + 24h`.
+  - [x] Outbound send API strictly rejects free-form messages if `now() > service_window_expires_at`.
+  - [x] Fallback to Meta Approved Template Message when customer service window is expired.
 
 ---
 
