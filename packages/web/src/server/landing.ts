@@ -426,10 +426,10 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
       const scenarios = ${JSON.stringify(PRESET_SCENARIOS)};
 
       const prices = {
-        'b2b_consulting': 'CHF 2\'450.00 / mo',
-        'field_services': 'CHF 280.00',
-        'ecommerce_order': 'CHF 63.90',
-        'clinic_booking': 'CHF 220.00'
+        b2b_consulting: "CHF 2,450.00 / mo",
+        field_services: "CHF 280.00",
+        ecommerce_order: "CHF 63.90",
+        clinic_booking: "CHF 220.00"
       };
 
       window.loadScenario = function(id) {
@@ -472,7 +472,7 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
           for (var k in sc.lead.extractedFields) {
             fieldsHtml += '<div class="field-row"><span class="field-key">• ' + k + ':</span><span class="field-val">' + sc.lead.extractedFields[k] + '</span></div>';
           }
-          fieldsHtml += '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Calculated Rate:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (prices[sc.id] || 'CHF 250.00') + '</span></div>';
+          fieldsHtml += '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Calculated Rate:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (prices[sc.id] || "CHF 250.00") + '</span></div>';
           fieldsContainer.innerHTML = fieldsHtml;
         }
       };
@@ -483,7 +483,7 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
         var isEmergency = /urgent|notfall|leak|broken|repair|kaputt|heute|today|error|fault/i.test(val);
         var isEcommerce = /order|buy|commander|stock|shipping|livraison|bouteille|price/i.test(val);
         
-        var title = isConsulting ? 'Professional Advisory Quote (CHF 2\'450/mo)' : (isEmergency ? 'Emergency Specialist Dispatch (CHF 280.00)' : (isEcommerce ? 'E-Commerce Order Draft (CHF 63.90)' : 'Commercial Service Lead'));
+        var title = isConsulting ? "Professional Advisory Quote (CHF 2,450/mo)" : (isEmergency ? "Emergency Specialist Dispatch (CHF 280.00)" : (isEcommerce ? "E-Commerce Order Draft (CHF 63.90)" : "Commercial Service Lead"));
         
         var msgText = document.getElementById('sim-msg-text');
         var leadTitle = document.getElementById('sim-lead-title');
@@ -497,16 +497,16 @@ export function handleLandingPageRoute(req: Request, options?: LandingPageServer
         if (scoreBadge) scoreBadge.innerText = 'Ready for Approval';
         if (aiResp) {
           aiResp.innerText = isConsulting 
-            ? 'Hello! Based on your requirements, our standard advisory rate is CHF 250.– / hour. Would you like to schedule an introductory discovery call?'
-            : (isEmergency ? 'We have prioritized your emergency request. Our standard diagnostic fee is CHF 280.–. A specialist can be dispatched within 2 hours. Should we confirm?' : 'Thank you for reaching out! We have checked our verified catalog and prepared the quote details for you.');
+            ? "Hello! Based on your requirements, our standard advisory rate is CHF 250.– / hour. Would you like to schedule an introductory discovery call?"
+            : (isEmergency ? "We have prioritized your emergency request. Our standard diagnostic fee is CHF 280.–. A specialist can be dispatched within 2 hours. Should we confirm?" : "Thank you for reaching out! We have checked our verified catalog and prepared the quote details for you.");
         }
         if (fieldsContainer) {
           fieldsContainer.innerHTML = 
             '<div class="field-row"><span class="field-key">📋 Request Scope:</span><span class="field-val">' + title + '</span></div>' +
             '<div class="field-row"><span class="field-key">📝 Inbound Text:</span><span class="field-val">' + val.slice(0, 50) + '...</span></div>' +
-            '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Rate / Quote:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (isConsulting ? 'CHF 2\'450 / mo' : (isEmergency ? 'CHF 280.00' : 'CHF 63.90')) + '</span></div>';
+            '<div class="field-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 6px;"><span class="field-key" style="font-weight: 700; color: #38bdf8;">💰 Rate / Quote:</span><span class="field-val" style="font-size: 16px; color: #34d399; font-weight: 800;">' + (isConsulting ? "CHF 2,450 / mo" : (isEmergency ? "CHF 280.00" : "CHF 63.90")) + '</span></div>';
         }
-        if (actionText) actionText.innerHTML = '🔔 Neue Offerte für Kunden.<br>Antworte <b>/approve</b> zum Senden.';
+        if (actionText) actionText.innerHTML = "🔔 Neue Offerte für Kunden.<br>Antworte <b>/approve</b> zum Senden.";
       };
 
       // Direct Safari-safe event binding
