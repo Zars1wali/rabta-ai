@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { handleLandingPageRoute } from './packages/web/dist/server/landing.js';
-import { handlePrivacyPolicyRoute, handleTermsOfServiceRoute, handleUserDataDeletionCallback } from './packages/web/dist/server/legal.js';
+import { handlePrivacyPolicyRoute, handleTermsOfServiceRoute, handleDataProcessingAgreementRoute, handleUserDataDeletionCallback } from './packages/web/dist/server/legal.js';
 import { handleEmbeddedSignupConfigRoute, handleEmbeddedSignupCallbackRoute } from './packages/web/dist/server/embedded_signup.js';
 import { defaultQuoteExtractor } from './packages/core/dist/funnel/quote_extractor.js';
 import { SwissCleaningVerticalPack, HvacTradesVerticalPack, getVerticalPack } from './packages/core/dist/funnel/vertical_packs.js';
@@ -43,6 +43,13 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/terms') {
     const webReq = new Request(`http://${req.headers.host || 'localhost:3000'}${req.url}`, { method: req.method, headers: req.headers });
     const webRes = handleTermsOfServiceRoute(webReq);
+    res.writeHead(webRes.status, Object.fromEntries(webRes.headers.entries()));
+    res.end(await webRes.text());
+    return;
+  }
+  if (pathname === '/dpa') {
+    const webReq = new Request(`http://${req.headers.host || 'localhost:3000'}${req.url}`, { method: req.method, headers: req.headers });
+    const webRes = handleDataProcessingAgreementRoute(webReq);
     res.writeHead(webRes.status, Object.fromEntries(webRes.headers.entries()));
     res.end(await webRes.text());
     return;

@@ -77,7 +77,8 @@ export const quoteTool: AgentTool<typeof QuoteInputSchema> = {
         currency,
         formattedTotal: `${formattedTotal} ${currency}`,
         isStale: hasStaleItems,
-        stalenessDisclaimer: disclaimer
+        stalenessDisclaimer: disclaimer,
+        legalNotice: 'Unverbindliche Richtofferte / Non-binding preliminary estimate (vorbehaltlich Bestätigung durch den Inhaber).'
       }
     };
   }

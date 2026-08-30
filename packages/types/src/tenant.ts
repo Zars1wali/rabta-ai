@@ -80,7 +80,10 @@ export const TenantConfigSchema = z.object({
       errorMap: () => ({ message: 'aiDisclosure is required by EU AI Act Art. 50 and cannot be false.' })
     }),
     retentionDays: z.number().int().positive().default(30),
-    dpaAcceptedAt: z.string().datetime().optional()
+    dpaAcceptedAt: z.string().datetime().optional(),
+    termsAcceptedAt: z.string().datetime().optional(),
+    liabilityCapEur: z.number().positive().default(500).optional(),
+    liabilityShieldAcknowledged: z.boolean().default(true).optional()
   })
 });
 export type TenantConfig = z.infer<typeof TenantConfigSchema>;

@@ -64,20 +64,32 @@ We retain all rights, title, and interest in and to the Service, including softw
 
 ---
 
-## 8. Disclaimers and Limitation of Liability
+## 8. Disclaimers, Non-Binding AI Estimations & Limitation of Liability
 
-* **"As Is" Basis:** The Service is provided on an "as-is" and "as-available" basis. While we maintain rigorous deterministic grounding to prevent AI hallucinations, you acknowledge that AI suggestions in "Suggest Mode" should be reviewed by human agents.
-* **Limitation of Liability:** To the maximum extent permitted by applicable law, neither party shall be liable for indirect, incidental, special, or consequential damages, or loss of profits arising out of or related to this agreement.
-
----
-
-## 9. Governing Law & Dispute Resolution
-
-These Terms shall be governed by and construed in accordance with the laws of Switzerland, without regard to conflict of law principles, alongside applicable mandatory European Union consumer protection and data protection regulations for users within the EU/EEA. Any dispute arising out of or in connection with these Terms shall be subject to the exclusive jurisdiction of the competent courts of the Canton of Zurich, Switzerland.
+* **Non-Binding AI Estimations (*Invitatio ad offerendum*):** The Service is provided on an "as-is" and "as-available" basis. All automated statements, pricing suggestions, and appointment slots calculated by the AI engine constitute preliminary, non-binding informational estimates (*invitatio ad offerendum*). Binding contractual commitments, price adjustments, and official orders strictly require the Merchant owner's explicit confirmation via `/approve` or the dashboard.
+* **Limitation of Liability (Swiss Code of Obligations / OR Art. 100):** To the maximum extent permitted by Swiss law (OR Art. 100 Abs. 1):
+  1. **Total Financial Cap:** Vendor's cumulative aggregate financial liability arising out of or related to the Service is strictly capped at the total amount paid by the Merchant to Vendor in the preceding three (3) months, or CHF 500.00 (whichever is lower).
+  2. **Exclusion of Slight Negligence & Auxiliary Persons:** Vendor excludes all liability for slight negligence (*leichte Fahrlässigkeit*) and auxiliary persons (*Hilfspersonen*, OR Art. 101).
+  3. **Exclusion of Consequential Damages:** Vendor shall not be liable for any indirect, incidental, special, or consequential damages, lost profits (*entgangener Gewinn*), business interruption, customer disputes, or third-party service outages (Meta, Stripe, AI inference providers).
 
 ---
 
-## 10. Contact Information
+## 9. Merchant Indemnification
+
+The Merchant agrees to indemnify, defend, and hold harmless **Nuno Miguel Pires Ribeiro** and **ZeroPointIntel** from and against any third-party claims, customer lawsuits, damages, penalties, or legal fees resulting from:
+1. The Merchant's trade execution, defective workmanship, or product quality.
+2. Inaccurate pricing catalogs, inventory errors, or representations supplied by the Merchant.
+3. Sending messages or marketing campaigns without valid end-customer opt-in consent under the Swiss revDSG or EU GDPR.
+
+---
+
+## 10. Governing Law & Dispute Resolution
+
+These Terms shall be governed by and construed exclusively in accordance with the laws of **Switzerland**, without regard to conflict of law principles. Any dispute arising out of or in connection with these Terms shall be subject to the exclusive jurisdiction of the competent courts of the **Canton of Zurich, Switzerland**.
+
+---
+
+## 11. Contact Information
 
 If you have questions regarding these Terms, contact:
 * **Operator:** Nuno Miguel Pires Ribeiro (Zero Point Intel)

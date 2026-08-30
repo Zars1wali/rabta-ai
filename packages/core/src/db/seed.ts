@@ -103,7 +103,10 @@ export const REWILT_TENANT_CONFIG: TenantConfig = {
   compliance: {
     aiDisclosure: true,
     retentionDays: 30,
-    dpaAcceptedAt: '2026-08-26T00:00:00.000Z'
+    dpaAcceptedAt: '2026-08-26T00:00:00.000Z',
+    termsAcceptedAt: '2026-08-26T00:00:00.000Z',
+    liabilityCapEur: 500,
+    liabilityShieldAcknowledged: true
   }
 };
 
@@ -474,7 +477,10 @@ export const MONDAR_TENANT_CONFIG: TenantConfig = {
   compliance: {
     aiDisclosure: true,
     retentionDays: 90,
-    dpaAcceptedAt: '2026-08-30T00:00:00.000Z'
+    dpaAcceptedAt: '2026-08-30T00:00:00.000Z',
+    termsAcceptedAt: '2026-08-30T00:00:00.000Z',
+    liabilityCapEur: 500,
+    liabilityShieldAcknowledged: true
   }
 };
 
