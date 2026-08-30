@@ -12,3 +12,5 @@ export * from './whatsapp.js';
 export * from './waba_onboarding.js';
 export * from './legal.js';
 export * from './landing.js';
+export * from './embedded_signup.js';
+

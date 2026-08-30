@@ -211,9 +211,67 @@ export function MerchantOnboardingWizard(props: {
       {step === 3 && (
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 32 }}>
           <h2 style={{ fontSize: 24, marginTop: 0 }}>Step 3: Connect WhatsApp Business API</h2>
-          <p style={{ color: '#64748b', fontSize: 14 }}>Connect via Meta Embedded Signup or enter your Cloud API credentials.</p>
+          <p style={{ color: '#64748b', fontSize: 14 }}>Connect via Meta Embedded Signup popup or enter your Cloud API credentials.</p>
 
-          <div style={{ marginTop: 24 }}>
+          <button
+            onClick={() => {
+              if (typeof window !== 'undefined' && (window as any).FB) {
+                (window as any).FB.login((response: any) => {
+                  if (response.authResponse?.code) {
+                    fetch('/api/waba/embedded-signup/callback', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ code: response.authResponse.code, tenantId: state.businessName })
+                    })
+                      .then((r) => r.json())
+                      .then((data) => {
+                        if (data.ok) {
+                          setState((prev) => ({
+                            ...prev,
+                            wabaId: data.wabaId || prev.wabaId,
+                            phoneNumberId: data.phoneNumberId || prev.phoneNumberId,
+                            accessToken: data.accessToken || prev.accessToken
+                          }));
+                          setStep(4);
+                        }
+                      });
+                  }
+                }, {
+                  config_id: '1584644373301704',
+                  response_type: 'code',
+                  override_default_response_type: true,
+                  extras: { setup: {}, featureType: '', sessionInfoVersion: '2' }
+                });
+              } else {
+                alert('Meta SDK loading. You can also enter credentials directly below.');
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+              width: '100%',
+              padding: '14px 20px',
+              borderRadius: 8,
+              background: '#1877f2',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: 16,
+              border: 'none',
+              cursor: 'pointer',
+              marginTop: 20
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+            </svg>
+            1-Click Meta Embedded Signup (Connect WhatsApp)
+          </button>
+
+          <div style={{ textAlign: 'center', margin: '20px 0', color: '#94a3b8', fontSize: 13 }}>— or enter credentials directly —</div>
+
+          <div>
             <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Phone Number ID</label>
             <input
               type="text"

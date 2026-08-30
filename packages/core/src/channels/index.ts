@@ -9,3 +9,5 @@ export * from './waba_onboarding.js';
 export * from './deepgram.js';
 export * from './owner_control.js';
 export * from './service_window.js';
+export * from './embedded_signup.js';
+

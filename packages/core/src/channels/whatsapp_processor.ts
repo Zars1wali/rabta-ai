@@ -3,12 +3,17 @@ import { chunkReplyForWhatsApp } from './chunker.js';
 import type { WhatsAppJobPayload } from './whatsapp_queue.js';
 import type { AgentTurnExecutor } from '../agent/turn_loop.js';
 import { OwnerControlPlane, parseOwnerCommand } from './owner_control.js';
+import { defaultQuoteExtractor } from '../funnel/quote_extractor.js';
+import { getVerticalPack } from '../funnel/vertical_packs.js';
+import { OwnerWhatsAppDispatcher } from '../owner/owner_dispatcher.js';
 import type {
   ContactRepository,
   ConversationRepository,
   CommercialMessageRepository,
   TenantRepository,
-  SessionRepository
+  SessionRepository,
+  CommercialLeadRepository,
+  QuoteRequestRepository
 } from '../db/repositories.js';
 
 export interface VoiceTranscriber {
@@ -23,7 +28,10 @@ export interface WhatsAppProcessorOptions {
   messageRepo: CommercialMessageRepository;
   sessionRepo: SessionRepository;
   tenantRepo: TenantRepository;
+  leadRepo?: CommercialLeadRepository;
+  quoteRepo?: QuoteRequestRepository;
   ownerControlPlane?: OwnerControlPlane;
+  ownerDispatcher?: OwnerWhatsAppDispatcher;
   voiceTranscriber?: VoiceTranscriber;
   fallbackTemplateName?: string;
   defaultChannelId?: string;
@@ -37,7 +45,10 @@ export class WhatsAppMessageProcessor {
   private messageRepo: CommercialMessageRepository;
   private sessionRepo: SessionRepository;
   private tenantRepo: TenantRepository;
+  private leadRepo?: CommercialLeadRepository;
+  private quoteRepo?: QuoteRequestRepository;
   private ownerControlPlane: OwnerControlPlane;
+  private ownerDispatcher?: OwnerWhatsAppDispatcher;
   private voiceTranscriber?: VoiceTranscriber;
   private fallbackTemplateName: string;
   private defaultChannelId: string;
@@ -50,7 +61,22 @@ export class WhatsAppMessageProcessor {
     this.messageRepo = options.messageRepo;
     this.sessionRepo = options.sessionRepo;
     this.tenantRepo = options.tenantRepo;
+    this.leadRepo = options.leadRepo;
+    this.quoteRepo = options.quoteRepo;
     this.ownerControlPlane = options.ownerControlPlane || new OwnerControlPlane();
+    this.ownerDispatcher =
+      options.ownerDispatcher ||
+      (options.leadRepo && options.quoteRepo
+        ? new OwnerWhatsAppDispatcher({
+            whatsappClient: options.whatsappClient,
+            leadRepo: options.leadRepo,
+            contactRepo: options.contactRepo,
+            conversationRepo: options.conversationRepo,
+            messageRepo: options.messageRepo,
+            quoteRepo: options.quoteRepo,
+            tenantRepo: options.tenantRepo
+          })
+        : undefined);
     this.voiceTranscriber = options.voiceTranscriber;
     this.fallbackTemplateName = options.fallbackTemplateName || 'service_window_reengage_de';
     this.defaultChannelId = options.defaultChannelId || '00000000-0000-0000-0000-000000000000';
@@ -146,21 +172,20 @@ export class WhatsAppMessageProcessor {
       rawPayload: { from: msg.from, type: msg.type }
     });
 
-    // 5. Merchant Owner Command Guard
-    const ownerCmd = parseOwnerCommand(messageText);
-    if (ownerCmd) {
-      const tenant = await this.tenantRepo.getById(tenantId);
-      if (tenant && this.ownerControlPlane.isOwnerPhone(tenant.config, msg.from)) {
-        const cmdResult = await this.ownerControlPlane.executeCommand({
-          command: ownerCmd,
-          tenantConfig: tenant.config,
-          sessionRepo: this.sessionRepo,
-          tenantRepo: this.tenantRepo
-        });
+    // 5. Merchant Owner Slash Command Handling (/approve, /override, /handoff, /stats)
+    const tenant = await this.tenantRepo.getById(tenantId);
+    const config = tenant?.config as Record<string, unknown> | undefined;
+    const isOwner = (config?.ownerPhone as string) === msg.from || (config?.ownerPhone as string) === phoneE164;
 
-        await this.whatsappClient.sendTextMessage(msg.from, cmdResult.replyText);
-        return;
-      }
+    if (isOwner && messageText.trim().startsWith('/') && this.ownerDispatcher) {
+      const ownerReply = await this.ownerDispatcher.handleOwnerCommand({
+        tenantId,
+        senderPhone: msg.from,
+        commandText: messageText
+      });
+
+      await this.whatsappClient.sendTextMessage(msg.from, ownerReply);
+      return;
     }
 
     // 6. Check Conversation AI Mode (if off / manual takeover, suppress AI)
@@ -168,7 +193,64 @@ export class WhatsAppMessageProcessor {
       return;
     }
 
-    // 7. Get or Create Web/Agent Turn Session
+    // 7. Structured Quote Extraction & Automatic 1-Tap Owner Dispatch
+    const extractedQuote = defaultQuoteExtractor.extractFromText(messageText, tenant?.config?.currency || 'CHF');
+    if (extractedQuote.completeness >= 0.75 && this.ownerDispatcher && this.leadRepo) {
+      const verticalPackId = (config?.verticalPack as string) || (tenant as any)?.verticalPackId || 'swiss_cleaning';
+      const verticalPack = getVerticalPack(verticalPackId);
+      const quoteCalc = verticalPack.calculateQuote({
+        rooms: extractedQuote.rooms,
+        squareMeters: extractedQuote.squareMeters,
+        serviceType: extractedQuote.serviceType || 'move_out_deep_clean',
+        handoverGuarantee: extractedQuote.handoverGuarantee,
+        hasBalcony: extractedQuote.hasBalcony,
+        hasBlinds: extractedQuote.hasBlinds
+      });
+
+      // Create or locate Lead
+      let lead = await this.leadRepo.createLead({
+        tenantId,
+        contactId: contact.id,
+        conversationId: conversation.id,
+        leadType: 'quote_request',
+        state: 'qualifying',
+        score: Math.round(extractedQuote.completeness * 100),
+        valueEstimateMinor: quoteCalc.totalPriceMinor,
+        currency: quoteCalc.currency
+      });
+
+      if (this.quoteRepo) {
+        await this.quoteRepo.createQuoteRequest({
+          tenantId,
+          leadId: lead.id,
+          fields: {
+            rooms: extractedQuote.rooms,
+            squareMeters: extractedQuote.squareMeters,
+            location: extractedQuote.location,
+            targetDate: extractedQuote.targetDate,
+            handoverGuarantee: extractedQuote.handoverGuarantee
+          },
+          completeness: extractedQuote.completeness,
+          missingFields: extractedQuote.missingFields,
+          suggestedPackage: quoteCalc.sku
+        });
+      }
+
+      // Dispatch 1-Tap alert to Business Owner's WhatsApp
+      await this.ownerDispatcher.notifyOwnerOfNewQuote({
+        tenantId,
+        leadId: lead.id,
+        contactId: contact.id,
+        customerPhone: phoneE164,
+        customerName: contact.displayName || undefined,
+        quoteCalc,
+        location: extractedQuote.location,
+        rooms: extractedQuote.rooms,
+        targetDate: extractedQuote.targetDate
+      });
+    }
+
+    // 8. Get or Create Web/Agent Turn Session
     let session = await this.sessionRepo.getSession(tenantId, `wa_${msg.from}`);
     const sessionId = session?.id || crypto.randomUUID();
     if (!session) {
@@ -183,7 +265,7 @@ export class WhatsAppMessageProcessor {
       return;
     }
 
-    // 8. Execute AI Turn
+    // 9. Execute AI Turn
     const turnResult = await this.turnExecutor.executeTurn({
       tenantId,
       sessionId,
@@ -203,7 +285,7 @@ export class WhatsAppMessageProcessor {
     const replyText = turnResult.chunks.join('\n\n');
     if (!replyText) return;
 
-    // 9. 24-Hour Service Window Outbound Check
+    // 10. 24-Hour Service Window Outbound Check
     const now = new Date();
     const isWithinWindow = now.getTime() <= serviceWindowExpiresAt.getTime();
 
