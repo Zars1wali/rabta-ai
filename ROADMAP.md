@@ -104,51 +104,52 @@ flowchart TD
 
 ---
 
-### Milestone 4: AI Qualification, Quote Field Extraction & Multilingual Engine
+### Milestone 4: AI Qualification, Quote Field Extraction & Multilingual Engine *(Completed)*
 > **Goal:** Grounded conversational AI that extracts structured trade quote fields, speaks the customer's language, normalizes Swiss German, and enforces zero-hallucination guardrails.
 
-- [ ] **WP-M4.1: Sticky Contact Language & Swiss German Normalization**
-  - [ ] Language detection on first inbound message; store on `contact.language` (DE, FR, IT, EN).
-  - [ ] Swiss German dialect detection on inbound voice/text; normalize to Hochdeutsch for intent classification.
-  - [ ] Outbound response generation strictly in high-assurance business Hochdeutsch (or French/Italian/English matching customer).
-- [ ] **WP-M4.2: Structured Quote Field Extraction (Cleaning Vertical Pack)**
-  - [ ] Intent classification: `quote_request`, `appointment_request`, `product_enquiry`, `support`, `human_request`.
-  - [ ] Extract structured fields: property type, rooms, square meters ($m^2$), frequency (one-off, bi-weekly, monthly), location/postcode, access, preferred timing.
-  - [ ] Compute real-time `completeness` score ($0.0 - 1.0$) and `missing_fields[]`.
-- [ ] **WP-M4.3: Non-Overridable Guardrails & AI Modes**
-  - [ ] Modes: `off` (inbox only), `suggest` (AI drafts, human sends), `auto` (autonomous for whitelisted intents).
-  - [ ] Gating: `auto` mode locked until tenant has $\ge 10$ active offerings with prices.
-  - [ ] Instant escalation on complaints, refund requests, discount negotiations, or out-of-catalog inquiries.
+- [x] **WP-M4.1: Sticky Contact Language & Swiss German Normalization**
+  - [x] Language detection on first inbound message; store on `contact.language` (DE, FR, IT, EN).
+  - [x] Swiss German dialect detection on inbound voice/text; normalize to Hochdeutsch for intent classification.
+  - [x] Outbound response generation strictly in high-assurance business Hochdeutsch (or French/Italian/English matching customer).
+- [x] **WP-M4.2: Structured Quote Field Extraction (Cleaning Vertical Pack)**
+  - [x] Intent classification: `quote_request`, `appointment_request`, `product_enquiry`, `support`, `human_request`.
+  - [x] Extract structured fields: property type, rooms, square meters ($m^2$), frequency (one-off, bi-weekly, monthly), location/postcode, access, preferred timing.
+  - [x] Compute real-time `completeness` score ($0.0 - 1.0$) and `missing_fields[]`.
+- [x] **WP-M4.3: Non-Overridable Guardrails & AI Modes**
+  - [x] Modes: `off` (inbox only), `suggest` (AI drafts, human sends), `auto` (autonomous for whitelisted intents).
+  - [x] Gating: `auto` mode locked until tenant has $\ge 10$ active offerings with prices.
+  - [x] Instant escalation on complaints, refund requests, discount negotiations, or out-of-catalog inquiries.
 
 ---
 
-### Milestone 5: Nuncio Unified Inbox & Lead Pipeline Management UI
+### Milestone 5: Nuncio Unified Inbox & Lead Pipeline Management UI *(Completed)*
 > **Goal:** Responsive web dashboard providing real-time WhatsApp conversation management, lead kanban pipeline, and trade quote summaries.
 
-- [ ] **WP-M5.1: Unified WhatsApp Inbox**
-  - [ ] Real-time conversation list (search, filters by status, assignee, unread).
-  - [ ] Chat stream with delivery status ticks (`queued`, `sent`, `delivered`, `read`), audio player with transcription, and internal team notes.
-  - [ ] AI Suggest mode box: one-click send or edit draft.
-- [ ] **WP-M5.2: Visual Lead Pipeline Board**
-  - [ ] Stages: `New` $\rightarrow$ `Qualifying` $\rightarrow$ `Interested` $\rightarrow$ `Quoted` $\rightarrow$ `Order Pending` $\rightarrow$ `Won` / `Lost`.
-  - [ ] Lead Cards displaying contact name, phone, quote summary, completeness progress bar, and estimated value.
-  - [ ] Human confirmation enforcement: only a tenant user can drag a lead to `Won`.
-- [ ] **WP-M5.3: Offering & Catalog Management**
-  - [ ] Ingestion 1: Guided vertical pack setup (pre-filled Swiss cleaning services & typical rates).
-  - [ ] Ingestion 2: CSV/XLSX spreadsheet upload with column mapping.
-  - [ ] Ingestion 3: WooCommerce REST API and Shopify Admin API sync.
+- [x] **WP-M5.1: Unified WhatsApp Inbox**
+  - [x] Real-time conversation list (search, filters by status, assignee, unread).
+  - [x] Chat stream with delivery status ticks (`queued`, `sent`, `delivered`, `read`), audio player with transcription, and internal team notes.
+  - [x] AI Suggest mode box: one-click send or edit draft.
+- [x] **WP-M5.2: Visual Lead Pipeline Board**
+  - [x] Stages: `New` $\rightarrow$ `Qualifying` $\rightarrow$ `Interested` $\rightarrow$ `Quoted` $\rightarrow$ `Order Pending` $\rightarrow$ `Won` / `Lost`.
+  - [x] Lead Cards displaying contact name, phone, quote summary, completeness progress bar, and estimated value.
+  - [x] Human confirmation enforcement: only a tenant user can drag a lead to `Won`.
+- [x] **WP-M5.3: Offering & Catalog Management**
+  - [x] Ingestion 1: Guided vertical pack setup (pre-filled Swiss cleaning services & typical rates).
+  - [x] Ingestion 2: CSV/XLSX spreadsheet upload with column mapping.
+  - [x] Ingestion 3: WooCommerce REST API and Shopify Admin API sync.
 
 ---
 
-### Milestone 6: Owner 1-Tap Actions, Stripe Links & Unit Economics Metering
+### Milestone 6: Owner 1-Tap Actions, Stripe Links & Unit Economics Metering *(Completed)*
 > **Goal:** Mobile-friendly owner confirmation flows, Stripe payment checkout links, and transparent per-message cost tracking.
 
-- [ ] **WP-M6.1: Owner WhatsApp Control Plane & 1-Tap Confirmation**
-  - [ ] Dispatch WhatsApp notifications to owner when a quote request reaches $\ge 80\%$ completeness or customer confirms order.
-  - [ ] Slash command control plane (`/status`, `/pause`, `/resume`, `/takeover`).
-- [ ] **WP-M6.2: Stripe Payment Integration**
-  - [ ] Generate dynamic Stripe Payment Links for deposit or full quote amount inside chat.
-  - [ ] Stripe webhook handler updating `order.status = 'paid'` upon successful payment.
-- [ ] **WP-M6.3: Unit Economics & October 2026 Pricing Metering**
-  - [ ] Track message billing category (`service`, `utility`, `marketing`, `authentication`) and estimate Meta cost.
-  - [ ] Tenant dashboard reporting: Month-to-date Meta messaging cost breakdown and platform subscription usage.
+- [x] **WP-M6.1: Owner WhatsApp Control Plane & 1-Tap Confirmation**
+  - [x] Dispatch WhatsApp notifications to owner when a quote request reaches $\ge 80\%$ completeness or customer confirms order.
+  - [x] Slash command control plane (`/status`, `/pause`, `/resume`, `/takeover`, `/approve`, `/override`, `/handoff`).
+- [x] **WP-M6.2: Stripe Payment Integration**
+  - [x] Generate dynamic Stripe Payment Links for deposit or full quote amount inside chat.
+  - [x] Stripe webhook handler updating `order.status = 'paid'` upon successful payment.
+- [x] **WP-M6.3: Unit Economics & October 2026 Pricing Metering**
+  - [x] Track message billing category (`service`, `utility`, `marketing`, `authentication`) and estimate Meta cost.
+  - [x] Tenant dashboard reporting: Month-to-date Meta messaging cost breakdown and platform subscription usage.
+

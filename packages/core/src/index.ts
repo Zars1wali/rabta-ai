@@ -10,3 +10,5 @@ export * from './notifications/index.js';
 export * from './admin/index.js';
 export * from './metering/index.js';
 export * from './reporting/index.js';
+export * from './owner/index.js';
+

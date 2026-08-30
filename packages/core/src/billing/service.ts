@@ -79,6 +79,24 @@ export class StripeBillingService {
     };
   }
 
+  async createTradeQuoteCheckoutSession(options: {
+    tenantId: string;
+    leadId: string;
+    amountMinor: number;
+    currency?: string;
+    title: string;
+    successUrl?: string;
+    cancelUrl?: string;
+  }): Promise<{ checkoutUrl: string; sessionId: string }> {
+    const currency = options.currency || 'CHF';
+    const checkoutSessionId = `cs_lead_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    const checkoutUrl = `https://checkout.stripe.com/pay/${checkoutSessionId}?lead_id=${encodeURIComponent(options.leadId)}&amount=${options.amountMinor}&currency=${encodeURIComponent(currency)}`;
+    return {
+      checkoutUrl,
+      sessionId: checkoutSessionId
+    };
+  }
+
   async createCustomerPortalSession(
     options: StripeCustomerPortalOptions
   ): Promise<{ portalUrl: string }> {
