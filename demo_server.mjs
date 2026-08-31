@@ -94,7 +94,8 @@ const server = http.createServer(async (req, res) => {
           serviceType: extracted.serviceType || 'move_out_deep_clean',
           handoverGuarantee: extracted.handoverGuarantee,
           hasBalcony: extracted.hasBalcony,
-          hasBlinds: extracted.hasBlinds
+          hasBlinds: extracted.hasBlinds,
+          urgency: extracted.serviceType === 'emergency_repair' ? 'urgent_24h' : undefined
         });
 
         // 4. Generate Stripe Checkout URL

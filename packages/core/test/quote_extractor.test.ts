@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TradeQuoteExtractor, defaultQuoteExtractor } from '../src/funnel/quote_extractor.js';
+import { defaultQuoteExtractor } from '../src/funnel/quote_extractor.js';
 
 describe('TradeQuoteExtractor', () => {
   const extractor = defaultQuoteExtractor;

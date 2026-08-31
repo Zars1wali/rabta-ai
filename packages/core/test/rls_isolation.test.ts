@@ -9,12 +9,9 @@ import {
   CommercialLeadSchema,
   LeadStateSchema,
   ContactSchema,
-  ConversationSchema,
   CommercialMessageSchema,
   OfferingSchema,
   QuoteRequestSchema,
-  OrderSchema,
-  PaymentSchema,
   TimelineEventSchema,
   AiRunSchema
 } from '@salesops/types';

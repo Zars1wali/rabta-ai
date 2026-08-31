@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  ServiceWindowEngine,
   ServiceWindowExpiredError,
   defaultServiceWindowEngine
 } from '../src/channels/service_window.js';

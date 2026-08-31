@@ -168,6 +168,24 @@ export function parseCustomMessage(text: string): ExtractedLeadData {
     };
   }
 
+  if (isEcommerce) {
+    return {
+      intent: 'product_enquiry',
+      intentLabel: 'Product Order & Instant Checkout',
+      customerName: 'Online Shopper',
+      language: lang,
+      extractedFields: {
+        'Item Request': text.slice(0, 60),
+        'Catalog Availability': 'In Stock (Verified)'
+      },
+      completeness: 90,
+      missingFields: ['Shipping Street Address'],
+      suggestedAction: 'Draft Stripe 1-Tap Checkout Link',
+      aiResponse:
+        'Thank you for your order inquiry! The item is in stock. Please click here to complete checkout: https://nuncio.link/pay/chk_demo'
+    };
+  }
+
   return {
     intent: 'product_enquiry',
     intentLabel: 'Commercial Product / Service Inquiry',

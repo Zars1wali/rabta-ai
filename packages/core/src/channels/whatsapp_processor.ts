@@ -2,7 +2,7 @@ import type { WhatsAppCloudClient, InboundWhatsAppMessage } from './whatsapp_cli
 import { chunkReplyForWhatsApp } from './chunker.js';
 import type { WhatsAppJobPayload } from './whatsapp_queue.js';
 import type { AgentTurnExecutor } from '../agent/turn_loop.js';
-import { OwnerControlPlane, parseOwnerCommand } from './owner_control.js';
+import { OwnerControlPlane } from './owner_control.js';
 import { defaultQuoteExtractor } from '../funnel/quote_extractor.js';
 import { getVerticalPack } from '../funnel/vertical_packs.js';
 import { OwnerWhatsAppDispatcher } from '../owner/owner_dispatcher.js';
@@ -208,7 +208,7 @@ export class WhatsAppMessageProcessor {
       });
 
       // Create or locate Lead
-      let lead = await this.leadRepo.createLead({
+      const lead = await this.leadRepo.createLead({
         tenantId,
         contactId: contact.id,
         conversationId: conversation.id,

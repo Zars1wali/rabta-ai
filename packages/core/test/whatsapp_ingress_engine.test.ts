@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import crypto from 'node:crypto';
 import {
   WhatsAppCloudClient,
-  InMemoryWhatsAppQueue,
   WhatsAppMessageProcessor,
   type VoiceTranscriber
 } from '../src/channels/index.js';
@@ -14,7 +13,6 @@ describe('Milestone 3: WhatsApp Cloud API Ingress & 24-Hour Service Window Engin
   const VERIFY_TOKEN = 'meta_test_verify_token_456';
 
   let mockClient: WhatsAppCloudClient;
-  let mockQueue: InMemoryWhatsAppQueue;
   let mockTurnExecutor: AgentTurnExecutor;
   let mockContactRepo: any;
   let mockConversationRepo: any;
@@ -27,8 +25,6 @@ describe('Milestone 3: WhatsApp Cloud API Ingress & 24-Hour Service Window Engin
       accessToken: 'test_token',
       phoneNumberId: '123456789'
     });
-
-    mockQueue = new InMemoryWhatsAppQueue();
 
     mockTurnExecutor = {
       executeTurn: vi.fn().mockResolvedValue({

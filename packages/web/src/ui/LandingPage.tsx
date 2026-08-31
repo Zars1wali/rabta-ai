@@ -58,21 +58,23 @@ export function LandingPage({
             />
             <div>
               <span style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', letterSpacing: '-0.02em' }}>
-                Nuncio
+                {brandName.includes('by') ? brandName.split('by')[0]?.trim() : brandName}
               </span>
-              <span
-                style={{
-                  fontSize: '11px',
-                  color: '#94a3b8',
-                  marginLeft: '8px',
-                  background: 'rgba(255,255,255,0.06)',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  border: '1px solid rgba(255,255,255,0.1)'
-                }}
-              >
-                by ZeroPointIntel
-              </span>
+              {brandName.includes('by') && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#94a3b8',
+                    marginLeft: '8px',
+                    background: 'rgba(255,255,255,0.06)',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(255,255,255,0.1)'
+                  }}
+                >
+                  by {brandName.split('by')[1]?.trim()}
+                </span>
+              )}
             </div>
           </div>
 
