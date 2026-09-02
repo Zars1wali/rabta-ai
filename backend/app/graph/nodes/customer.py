@@ -658,103 +658,58 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     if is_photo_requested:
         if matched_products:
             try:
-                from app.db.session import AsyncSessionLocal
-                from app.models.database import CatalogItem
-                from sqlalchemy import select
-                import uuid as uuid_mod
+                from app.services.catalog_tools import get_product_photos
 
-                async with AsyncSessionLocal() as _session:
-                    t_uuid = uuid_mod.UUID(state.get("tenant_id"))
-                    
-                    found_items_with_images = []
-                    
-                    # If multiple items requested ("dono"), resolve all matched items
-                    targets_to_fetch = matched_products if is_multi_requested else [matched_products[0]]
-                    
-                    for target_p in targets_to_fetch:
-                        tokens = [tok.lower() for tok in target_p.split() if len(tok) >= 2]
+                tenant_id_val = state.get("tenant_id")
+                found_items_with_images = []
 
-                        # ── SCORED BEST-MATCH lookup (OR tokens, ranked by match count) ──
-                        # Avoids the AND-all-tokens trap where "G3 POF" accidentally
-                        # matched Vepr Molot because history listed it in the same message.
-                        # Strategy: fetch up to 20 candidates that match ANY token, then
-                        # score each by how many tokens appear in the name, pick the winner.
-                        item = None
-                        if tokens:
-                            from sqlalchemy import or_, func as sqlfunc
-                            any_conditions = [CatalogItem.name.ilike(f"%{tok}%") for tok in tokens]
-                            q_candidates = select(CatalogItem).where(
-                                CatalogItem.tenant_id == t_uuid,
-                                or_(*any_conditions)
-                            ).limit(20)
-                            res_cands = await _session.execute(q_candidates)
-                            candidates = res_cands.scalars().all()
+                targets_to_fetch = matched_products if is_multi_requested else [matched_products[0]]
+                for target_p in targets_to_fetch:
+                    photos = await get_product_photos(
+                        tenant_id=tenant_id_val,
+                        product_name=target_p,
+                        allow_multiple=is_multi_requested,
+                    )
+                    for photo in photos:
+                        found_items_with_images.append({
+                            "name": photo["product_name"],
+                            "url": photo["url"],
+                            "caption": photo["caption"],
+                        })
 
-                            def _score(catalog_item) -> int:
-                                name_lower = (catalog_item.name or "").lower()
-                                return sum(1 for tok in tokens if tok in name_lower)
-
-                            if candidates:
-                                # Pick the candidate with the MOST token matches
-                                item = max(candidates, key=_score)
-                                # Sanity check: must match at least half the tokens
-                                if _score(item) < max(1, len(tokens) // 2):
-                                    item = None
-
-                        # Fallback: whole-phrase substring match
-                        if not item:
-                            q2 = select(CatalogItem).where(
-                                CatalogItem.tenant_id == t_uuid,
-                                CatalogItem.name.ilike(f"%{target_p}%")
-                            ).limit(1)
-                            res2 = await _session.execute(q2)
-                            item = res2.scalar_one_or_none()
-
-                        if item and item.images and len(item.images) > 0:
-                            raw_img = item.images[0]
-                            full_img_url = f"http://65.20.90.130{raw_img}" if raw_img.startswith("/") else raw_img
-                            found_items_with_images.append({
-                                "name": item.name,
-                                "url": full_img_url,
-                                "caption": f"Jee bilkul, yeh lijiye {item.name} ki picture."
-                            })
-
-                    if len(found_items_with_images) > 1:
-                        # Multi-item success!
-                        media_urls = found_items_with_images
-                        media_url = found_items_with_images[0]["url"]
-                        reply_text = f"Jee bilkul, yeh lijiye {' aur '.join(x['name'] for x in found_items_with_images)} ki pictures."
-                        reply_chunks = [reply_text]
-                        needs_escalation = False
-                        logger.info("[Node:customer_sales_chat] Sending multiple images (%d items)", len(media_urls))
-                    elif len(found_items_with_images) == 1:
-                        single_item = found_items_with_images[0]
-                        media_url = single_item["url"]
-                        media_urls = [single_item]
-                        current_product = single_item["name"]
-                        if is_correction:
-                            reply_text = f"Maafi chahta hoon ghalat picture chali gayi thi! Yeh lijiye sahi {single_item['name']} ki picture."
-                        else:
-                            reply_text = f"Jee bilkul, yeh lijiye {single_item['name']} ki picture."
-                        reply_chunks = [reply_text]
-                        needs_escalation = False
-                        logger.info("[Node:customer_sales_chat] Sending image for %s -> %s", single_item["name"], media_url)
+                if len(found_items_with_images) > 1:
+                    media_urls = found_items_with_images
+                    media_url = found_items_with_images[0]["url"]
+                    reply_text = f"Jee bilkul, yeh lijiye {' aur '.join(x['name'] for x in found_items_with_images)} ki pictures."
+                    reply_chunks = [reply_text]
+                    needs_escalation = False
+                    logger.info("[Node:customer_sales_chat] Sending multiple images (%d items)", len(media_urls))
+                elif len(found_items_with_images) == 1:
+                    single_item = found_items_with_images[0]
+                    media_url = single_item["url"]
+                    media_urls = [single_item]
+                    current_product = single_item["name"]
+                    if is_correction:
+                        reply_text = f"Maafi chahta hoon ghalat picture chali gayi thi! Yeh lijiye sahi {single_item['name']} ki picture."
                     else:
-                        # No images found on file
-                        target_name = matched_products[0]
-                        if is_correction:
-                            reply_text = f"Maafi chahta hoon! {target_name} ki photo abhi catalog mein available nahi hai. Aap shop visit karke dekh sakte hain ya specs pooch sakte hain."
-                        else:
-                            reply_text = f"Bhai {target_name} ki photo abhi upload nahi hui, sorry. Jaldi available ho gi — aap price ya specs pooch sakte hain."
-                        reply_chunks = [reply_text]
-                        media_url = None
-                        media_urls = None
-                        needs_escalation = False
-                        logger.info("[Node:customer_sales_chat] No image found for %s", target_name)
+                        reply_text = f"Jee bilkul, yeh lijiye {single_item['name']} ki picture."
+                    reply_chunks = [reply_text]
+                    needs_escalation = False
+                    logger.info("[Node:customer_sales_chat] Sending image for %s -> %s", single_item["name"], media_url)
+                else:
+                    target_name = matched_products[0]
+                    if is_correction:
+                        reply_text = f"Maafi chahta hoon! {target_name} ki photo abhi catalog mein available nahi hai. Aap shop visit karke dekh sakte hain ya specs pooch sakte hain."
+                    else:
+                        reply_text = f"Bhai {target_name} ki photo abhi upload nahi hui, sorry. Jaldi available ho gi — aap price ya specs pooch sakte hain."
+                    reply_chunks = [reply_text]
+                    media_url = None
+                    media_urls = None
+                    needs_escalation = False
+                    logger.info("[Node:customer_sales_chat] No image found for %s", target_name)
             except Exception as img_err:
                 logger.warning("[Node:customer_sales_chat] Image lookup error: %s", img_err)
         else:
-            # Photo requested but no product context — ask which product
             reply_text = "Bhai pehle batayein konsi firearm ki picture chahiye, phir main bhejta hoon!"
             reply_chunks = [reply_text]
             needs_escalation = False
