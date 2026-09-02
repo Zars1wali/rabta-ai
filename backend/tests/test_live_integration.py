@@ -83,17 +83,19 @@ async def test_full_8_message_conversation():
 
                 with patch("app.api.webhooks._send_chunks_with_delays", new_callable=AsyncMock) as mock_send:
                     mock_send.return_value = True
+                    with patch("app.api.webhooks._send_with_retry", new_callable=AsyncMock) as mock_retry:
+                        mock_retry.return_value = True
 
-                    response = await client.post("/webhooks/whatsapp", json=payload)
-                    assert response.status_code == 200
-                    assert response.json()["status"] == "ok"
+                        response = await client.post("/webhooks/whatsapp", json=payload)
+                        assert response.status_code == 200
+                        assert response.json()["status"] == "ok"
 
-                    # Verify the store_agent was called (message was processed)
-                    assert mock_agent.handle_customer_interaction.called
-                    replies_received.append(reply_text)
+                        # Verify the store_agent was called (message was processed)
+                        assert mock_agent.handle_customer_interaction.called
+                        replies_received.append(reply_text)
 
-                    # Verify send was attempted
-                    assert mock_send.called
+                        # Verify send was attempted
+                        assert mock_send.called
 
     assert len(replies_received) == 8, f"Expected 8 messages processed, got {len(replies_received)}"
     print(f"\n[OK] All {len(replies_received)} messages processed without silence.")

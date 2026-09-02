@@ -1,7 +1,18 @@
+import asyncio
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+
+# psycopg3 (used by the LangGraph checkpointer) cannot run on Windows'
+# default ProactorEventLoop. Force the selector loop before any loop is created.
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass  # Python 3.16+ removed the policy API — loop_factory is preferred there
+
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +21,8 @@ from app.api.business_onboarding import router as business_router
 from app.api.gateway_bridge import router as gateway_router
 from app.api.admin_security import router as admin_router
 from app.api.social_ingest import router as social_router
+from app.api.catalog_import import router as catalog_import_router
+from app.api.visual_search_api import router as visual_search_router
 from app.services.knowledge_base import KnowledgeBaseService
 from app.core.config import settings
 
@@ -17,12 +30,83 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("rabta-api")
 
 
+async def _conversation_cleanup_loop():
+    """Background task: purge messages and close conversations inactive for 48+ hours.
+    Runs every 6 hours so the AI always has a fresh, unbiased context window.
+    """
+    from app.db.session import AsyncSessionLocal
+    from sqlalchemy import text
+    CLEANUP_INTERVAL_SECONDS = 6 * 3600  # run every 6 hours
+    STALE_HOURS = 48
+
+    while True:
+        try:
+            await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
+            logger.info("[Cleanup] Starting 48h conversation history purge...")
+            async with AsyncSessionLocal() as session:
+                # Delete messages from conversations that have had no activity in 48h
+                del_msgs = await session.execute(text(
+                    f"""
+                    DELETE FROM messages
+                    WHERE conversation_id IN (
+                        SELECT id FROM conversations
+                        WHERE COALESCE(last_message_at, created_at) < NOW() - INTERVAL '{STALE_HOURS} hours'
+                        AND status = 'active'
+                    )
+                    """
+                ))
+                # Close those stale conversations (marks them inactive for next session)
+                close_convs = await session.execute(text(
+                    f"""
+                    UPDATE conversations
+                    SET status = 'closed'
+                    WHERE COALESCE(last_message_at, created_at) < NOW() - INTERVAL '{STALE_HOURS} hours'
+                    AND status = 'active'
+                    """
+                ))
+                await session.commit()
+                logger.info(
+                    "[Cleanup] Purge complete: %s messages deleted, %s conversations closed.",
+                    del_msgs.rowcount, close_convs.rowcount,
+                )
+        except asyncio.CancelledError:
+            logger.info("[Cleanup] Conversation cleanup task cancelled.")
+            break
+        except Exception as exc:
+            logger.error("[Cleanup] Error during conversation cleanup: %s", exc, exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Initializing RABTA AI Backend Services...")
     kb = KnowledgeBaseService()
     await kb.init_collection()  # Creates both text and image collections
+
+    # Initialize LangGraph conversation engine with PostgreSQL checkpointer
+    try:
+        from app.graph.builder import init_graph
+        await init_graph()
+        logger.info("[Graph] LangGraph conversation engine initialized successfully.")
+    except Exception as exc:
+        logger.error("[Graph] Failed to initialize LangGraph: %s", exc, exc_info=True)
+
+    # Start background 48h conversation cleanup loop
+    cleanup_task = asyncio.create_task(_conversation_cleanup_loop())
+    logger.info("[Cleanup] 48h conversation history cleanup scheduler started.")
+
     yield
+
+    try:
+        from app.graph.checkpointer import close_checkpointer
+        await close_checkpointer()
+    except Exception:
+        pass
+
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     logger.info("Shutting down RABTA AI Backend...")
 
 
@@ -46,8 +130,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static folder
+# Mount static folder — includes catalog_images subdirectory
 static_dir = os.path.join(os.path.dirname(__file__), "static")
+catalog_images_dir = os.path.join(static_dir, "catalog_images")
+os.makedirs(catalog_images_dir, exist_ok=True)
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -56,6 +142,8 @@ app.include_router(business_router)
 app.include_router(gateway_router)
 app.include_router(admin_router)
 app.include_router(social_router)
+app.include_router(catalog_import_router)
+app.include_router(visual_search_router)
 
 
 @app.get("/", response_class=HTMLResponse)

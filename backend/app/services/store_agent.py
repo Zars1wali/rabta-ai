@@ -1,10 +1,9 @@
 import re
+import time
 import json
-import asyncio
 import logging
 import uuid
-import time
-from typing import List, Dict, Any, Optional
+from typing import Optional, List, Dict, Any
 from google import genai
 from google.genai import types
 from app.core.config import settings
@@ -13,116 +12,99 @@ logger = logging.getLogger(__name__)
 
 
 class WhatsAppStoreAgent:
-    """
-    AI store employee that answers customer queries on WhatsApp.
-    Handles catalog questions, pricing, orders, complaints, and small talk
-    in a natural, human tone — not a scripted bot.
-    """
+    """Enterprise-grade consultative sales intelligence agent for retail businesses on WhatsApp."""
 
     def __init__(self):
-        self.api_key = settings.GEMINI_API_KEY
-        if self.api_key:
-            self.client = genai.Client(api_key=self.api_key)
-        else:
-            self.client = None
-            logger.warning("[StoreAgent] GEMINI_API_KEY not set — will use fallback replies.")
+        self.client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
 
     # ------------------------------------------------------------------
-    # SYSTEM PROMPT — structured for natural WhatsApp tone
+    # Master Sales Intelligence Prompt (23-Point Consultative Framework)
     # ------------------------------------------------------------------
 
-    def _build_system_prompt(
-        self, business_name: str, industry: str, catalog_context: str
-    ) -> str:
-        return f"""You are the elite sales intelligence and customer-conversation engine for {business_name} ({industry}) in Pakistan chatting with a customer on WhatsApp.
+    def _build_system_prompt(self, business_name: str, industry: str, catalog_context: str, spec_context: str = "") -> str:
+        spec_section = f"\n=== OFFICIAL MANUFACTURER SPECS (LOOKED UP) ===\n{spec_context}\n" if spec_context else ""
+        return f"""You are the expert Sales Consultant for {business_name}, a premier dealer in Pakistan ({industry}).
+You communicate with buyers on WhatsApp using a consultative, relationship-first approach.
 
-Your mission is not simply to answer messages.
-Your mission is to understand people, reduce uncertainty, build trust, identify what matters to each customer, and guide every legitimate conversation toward the strongest possible next step.
+=== 1. CORE BEHAVIOR & SALES PROCESS ===
+- You are an expert, knowledgeable firearms sales consultant in Pakistan. Be warm, natural, and helpful.
+- For every customer message:
+  1. Carefully read what the customer is actually asking or saying in THIS conversation.
+  2. Answer directly based on verified inventory and specs below.
+  3. Keep responses natural, conversational, and helpful.
+- CATEGORY, ORIGIN & CALIBER INTELLIGENCE:
+  * When asked about a specific origin (e.g. "Russian rifles", "American guns", "Austrian pistols", "Turkish shotguns"):
+    Filter the catalog by that country/origin and recommend the matching items with prices (e.g. Russian -> Saiga MK, Vepr Molot, Baikal Makarov).
+  * When asked about a category (e.g. "pistols hain?", "rifles dikhao", "shotgun available hai?"):
+    List the top popular models in that category from the catalog with prices.
+  * When asked for recommendations / caliber advice (e.g. "9mm mai konse ache hain?", "concealed carry ke liye kya behtar hai?", "best rifle konsi hai?"):
+    Brainstorm and recommend 2-4 top choices from the catalog (e.g. for 9mm: Glock 19 Gen 5, Canik TP9, Taurus G3) explaining briefly why they are popular (reliability, ergonomics, value for money).
+  * If the customer corrects you (e.g. "russian ka pocha hai?"):
+    Acknowledge gracefully and answer their exact specific query from the catalog.
+- If the customer asks about COLORS, VARIANTS, or FINISHES (e.g. "colors isme konse available hain", "fde hai ya black?", "wood stock hai?"):
+  * Be consultative and knowledgeable: describe available finishes (e.g. Standard Matte Black, Cerakote FDE / Desert Tan, Satin Chrome / Nickel, or Wood furniture for AK/Vepr).
+  * Ask which finish or color they prefer!
+  * NEVER assume delivery and NEVER escalate to management for color/variant questions.
+- If the customer shows interest in buying a product (e.g. "19x lagegi", "glock chahiye", "ye lena hai"):
+  * Acknowledge positively with the price: "Zabardast choice hai, Glock 19X Austria brand new available hai PKR 550,000 mein. Aap shop visit karke purchase karna chahenge ya delivery chahiye?"
+  * NEVER assume they want delivery or assume their city unless they explicitly mentioned it.
 
-You embody the principles of elite salespeople, negotiators, customer psychologists, and consultative relationship builders. You sound natural, think deeply, adapt constantly, and read the situation. You never sound like an automated bot or a textbook.
+=== 2. STRICT CONVERSATION RULES ===
+1. NO HALLUCINATION OF NAMES OR CITIES:
+   - NEVER invent or guess a customer name. Only use a name if the customer explicitly introduced themselves (e.g. "Mera naam Usman hai"). Otherwise do NOT use any name.
+   - NEVER invent or guess a city. Only mention a city if the customer explicitly stated it in their message.
+2. NATURAL HUMAN DIALOGUE & FOLLOW-UPS:
+   - When greeted ("salam", "hello", "hi", "aoa", "kese ho"):
+     "Walaikum Assalam! {business_name} se baat kar raha hoon, batayein kis cheez ki talash hai?"
+   - When customer says "ok", "theek hai", "shukriya", "acha":
+     "Jee theek hai bhai!" (or offer help if appropriate).
+   - If the customer asks what you are confirming (e.g. "kia confirm ker rahay?", "kya pata kar rahe ho?"):
+     Explain naturally like a human: "Bhai aapki delivery charges aur availability shop se confirm kar raha hoon, jaise hi pata chalta hai aapko batata hoon. Is ke ilawa kisi aur cheez ki details chahiyein?"
+   - If customer asks for ALTERNATIVES or OTHER OPTIONS (e.g. "or options nahi hain?", "kuch aur dikhao", "dusre models bata"):
+     List 3-5 different models from the catalog with prices. Be consultative and helpful.
+3. PHOTO & PICTURE REQUESTS:
+   - When the customer asks to see a picture or photo of a firearm (e.g. "pic dikhayein", "photo bhejo", "tasweer dekhni hai", "iski picture"):
+     Reply warmly and concisely: "Jee bilkul, yeh check karein." or "Jee bhai, yeh lijiye picture." (The system automatically attaches and delivers the actual product photo).
+     NEVER claim you cannot send photos or do not have the option.
+4. PLAIN TEXT ONLY (NO EMOJIS, NO MARKDOWN):
+   - Zero emojis.
+   - No asterisks (*bold*), bullets, or headers. Write like a normal person typing on WhatsApp.
+5. PAKISTANI ROMAN URDU ONLY:
+   - Zero Devanagari/Hindi script. Natural Pakistani Roman Urdu (English letters) or Urdu script.
 
-=== 1. CORE MISSION ===
-UNDERSTAND THE CUSTOMER -> CREATE CLARITY -> BUILD TRUST -> REMOVE FRICTION -> GUIDE THE NEXT DECISION.
-A successful outcome is not always an immediate sale. Depending on the situation, the correct next step may be:
-- Giving a price directly
-- Confirming product information
-- Understanding the customer's intended use (carry, home defense, range, sport)
-- Identifying budget
-- Comparing products honestly
-- Diagnosing and solving an objection
-- Guiding toward shop visit or confirmed booking
-- Handing over to the human owner
-
-=== 2. ADAPTIVE INTELLIGENCE & STATE MODEL ===
-Silently analyze the customer's state before answering (Curious, Ready to Buy, Comparing, Price Sensitive, Skeptical, Confused, Hesitant, Urgent, Casual, Returning).
-- If customer wants a quick answer (e.g. "glock 19 price?"), give the exact price directly in 1 crisp line. Do NOT stall with unnecessary questions.
-- If customer is confused, simplify.
-- If customer wants technical details, provide them accurately.
-- If customer is skeptical or asking for comparison, compare honestly without slamming competitors.
-- If customer asks for help choosing, ask ONLY the single highest-value diagnostic question (e.g. "Aap ka main purpose kya hai — concealed carry, home defense, ya target shooting?").
-
-=== 3. STRICT WHATSAPP CONVERSATION RULES ===
-1. CONCISE & ADAPTIVE LENGTH:
-   - Match the customer's message length and energy.
-   - For simple queries, use 1 to 2 crisp lines (10 to 25 words).
-   - For complex comparisons or deep questions, give a structured, natural answer without walls of text.
-2. GREETINGS WITH STORE NAME:
-   - When customer greets ("salam", "hello", "hi"), reply in 1 natural line mentioning {business_name}:
-     * "Walaikum Assalam! {business_name} se baat kar raha hoon, batayein kis cheez ki talash hai?"
-     * "Hello! {business_name} store, kya dekhna chahenge?"
-   - Never dump product catalogs on greeting.
-3. ZERO EMOJI SPAM & PLAIN TEXT:
-   - Absolutely NO decorative emojis.
-   - Do NOT use markdown bold/headers/bullets (*, **, #, -). Type like a human on a phone keyboard.
-4. LANGUAGE & SCRIPT RULES (PAKISTANI URDU ONLY):
-   - ABSOLUTE BAN ON DEVANAGARI / HINDI SCRIPT:
-     * NEVER EVER output Devanagari script characters (e.g. जानी, है, के, क्या).
-     * NEVER use Hindi vocabulary (e.g. 'namaste', 'dhanyawad', 'kripya', 'mitra', 'shuddh').
-     * Always communicate in natural Pakistani Roman Urdu (English alphabet like "kya haal hai", "mashhoor hai", "jaani jaati hai"), authentic Urdu script (اردو), or English.
-   - Do not overuse "sir" or force "bhai" into every sentence. Use natural Pakistani retail phrasing.
-5. NO INVENTED INFORMATION:
-   - Never invent stock, prices, or specs not present in the verified catalog below.
-   - If asked directly if you are AI, be transparent and helpful without being defensive.
-
-=== 4. MULTIMODAL PHOTO & SCREENSHOT IDENTIFICATION ===
-- When a customer sends a photo, screenshot, or quotes an image, visually examine it in detail (model, slide markings, grip, caliber, optic, frame).
-- Match it to the verified catalog below, identify the model, state availability and price in 1-2 lines.
-- Example: "Yeh Glock 19X V MOS hai with red dot optic, price PKR 600,000 hai."
-- If the exact model in the photo is not in stock, name what is in the photo and suggest the closest verified in-stock alternative.
-- Never say you did not receive the picture when an image is attached.
-
-=== 5. OBJECTION & TRUST DIAGNOSTICS ===
-- If a customer says "soch ke batata hoon" or hesitates, do not pressure or beg. Use a soft diagnostic: "Bilkul, take your time. Agar kisi specific cheez ya comparison pe confusion ho toh batayein, main clear kar deta hoon."
-- If comparing prices with another dealer, focus calmly on authenticity, import source, condition, and included accessories.
-- Never force urgency or fabricate scarcity.
-
+=== 3. WHEN TO ESCALATE TO MANAGEMENT (STRICT RULES) ===
+Only escalate when the customer asks something you cannot answer from verified catalog:
+- Delivery charges for a specific city: If customer asks "delivery charges kya hain?" without stating their city, ask: "Delivery bilkul arrange ho sakti hai. Aap kis city mein mangwana chahte hain?"
+- Once the customer names their city for delivery (e.g. "Islamabad delivery chahiye"):
+  Tell them: "Theek hai, main shop management se confirm karke aapko foran delivery charges batata hoon."
+  Include internal tag: [ESCALATE: delivery]
+- LEGAL / LICENSING / REGULATORY QUESTIONS:
+  * NEVER give legal advice or speculate on license validity.
+  * Tell them: "Firearms purchase ke liye valid license aur legal requirements zaroori hain. Iski exact procedure aur verification ke liye main shop management se confirm karke aapko update karta hoon."
+  * Include internal tag: [ESCALATE: legal]
+- Custom discount / price bargaining:
+  Tell them: "Theek hai, main shop se confirm karke aapko foran update karta hoon."
+  Include internal tag: [ESCALATE: discount]
+{spec_section}
 === VERIFIED STORE CATALOG & INVENTORY ===
-Use ONLY this verified data for factual prices, specs, and policies:
 {catalog_context}
 """
-
-    # ------------------------------------------------------------------
-    # Post-processing: strip any markdown, emojis, or Devanagari Hindi artifacts
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _strip_markdown(text: str) -> str:
         """Remove markdown formatting, decorative emoji spam, and Devanagari script."""
-        # 1. Eliminate any Devanagari / Hindi script artifacts if model tokenizes them
         if re.search(r'[\u0900-\u097F]', text):
             hindi_fixes = {
                 'जानी': 'jaani', 'जाती': 'jaati', 'है': 'hai', 'हैं': 'hain',
-                'के': 'ke', 'की': 'ki', 'का': 'ka', 'में': 'mein', 'से': 'se',
+                'के': 'ke', 'کی': 'ki', 'کا': 'ka', 'में': 'mein', 'से': 'se',
                 'को': 'ko', 'पर': 'par', 'नहीं': 'nahi', 'भी': 'bhi', 'और': 'aur',
                 'यह': 'yeh', 'वह': 'woh', 'आप': 'aap', 'लिए': 'liye', 'किया': 'kiya',
                 'गया': 'gaya', 'थी': 'thi', 'था': 'tha', 'थे': 'the'
             }
             for h_word, r_word in hindi_fixes.items():
                 text = text.replace(h_word, r_word)
-            # Remove any remaining stray Devanagari characters
             text = re.sub(r'[\u0900-\u097F]+', '', text)
 
-        # 2. Markdown stripping
         text = re.sub(r'\*{1,2}(.*?)\*{1,2}', r'\1', text)  # *bold* and **bold**
         text = re.sub(r'_{1,2}(.*?)_{1,2}', r'\1', text)    # _italic_ and __italic__
         text = re.sub(r'^#{1,3}\s+', '', text, flags=re.MULTILINE)  # ### headers
@@ -131,7 +113,6 @@ Use ONLY this verified data for factual prices, specs, and policies:
         text = re.sub(r'`{1,3}[^`]*`{1,3}', '', text)               # code blocks
         text = re.sub(r'\n{3,}', '\n\n', text)                       # excess newlines
 
-        # 3. Strip decorative emojis
         emoji_pattern = re.compile(
             r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F700-\U0001F77F'
             r'\U0001F780-\U0001F7FF\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FA6F'
@@ -140,17 +121,8 @@ Use ONLY this verified data for factual prices, specs, and policies:
         text = emoji_pattern.sub('', text)
         return text.strip()
 
-    # ------------------------------------------------------------------
-    # Split a long reply into multiple short WhatsApp messages
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _chunk_reply(text: str, max_chars: int = 280) -> List[str]:
-        """
-        Split a long reply into multiple short messages that feel like
-        natural WhatsApp message bursts. Each chunk targets ~280 chars
-        (roughly 3-4 lines on a phone screen).
-        """
         if len(text) <= max_chars:
             return [text]
 
@@ -164,26 +136,24 @@ Use ONLY this verified data for factual prices, specs, and policies:
             else:
                 if current:
                     chunks.append(current)
-                # If a single paragraph is too long, force-split on sentence boundaries
-                if len(para) > max_chars:
-                    sentences = re.split(r'(?<=[.!?])\s+', para)
-                    current = ""
-                    for sent in sentences:
-                        if len(current) + len(sent) + 1 <= max_chars:
-                            current = f"{current} {sent}" if current else sent
-                        else:
-                            if current:
-                                chunks.append(current)
-                            current = sent
-                else:
+                if len(para) <= max_chars:
                     current = para
+                else:
+                    sentences = re.split(r'([.!?]\s+)', para)
+                    s_current = ""
+                    for s in sentences:
+                        if len(s_current) + len(s) <= max_chars:
+                            s_current += s
+                        else:
+                            if s_current.strip():
+                                chunks.append(s_current.strip())
+                            s_current = s
+                    current = s_current.strip()
 
-        if current:
-            chunks.append(current)
+        if current.strip():
+            chunks.append(current.strip())
 
-        # If somehow still only 1 chunk or empty, return as-is
         return chunks if chunks else [text]
-    # ------------------------------------------------------------------
 
     async def handle_customer_interaction(
         self,
@@ -192,44 +162,72 @@ Use ONLY this verified data for factual prices, specs, and policies:
         industry: str,
         catalog_context: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        image_match_context: Optional[Dict[str, Any]] = None,
-        image_base64: Optional[str] = None,
         image_bytes: Optional[bytes] = None,
+        image_base64: Optional[str] = None,
     ) -> Dict[str, Any]:
+        """Runs the Gemini sales agent with strictly grounded context."""
         request_id = str(uuid.uuid4())[:8]
         t0 = time.monotonic()
 
-        if not self.client:
-            logger.warning("[%s] No Gemini client — sending fallback.", request_id)
-            return {
-                "reply_text": f"Assalam-o-Alaikum! {business_name} mein khushamdeed. Bataiye kya chahiye?",
-                "reply_chunks": None,
-                "is_order_intent": False,
-                "request_id": request_id,
-                "latency_ms": 0,
-                "source": "fallback_no_key",
-            }
+        # Check if customer is asking a detailed technical spec question about a catalog item
+        spec_context = ""
+        is_spec_query = any(w in customer_message.lower() for w in ["specs", "spec", "barrel", "weight", "length", "twist", "dimension", "finish", "material"])
+        if is_spec_query:
+            try:
+                from app.services.spec_search import search_product_specs
+                from app.graph.nodes.nlu import _BRANDS, _catalog_cache, _refresh_catalog_cache_if_needed
+                await _refresh_catalog_cache_if_needed()
+                # Find candidate product
+                cand_p = None
+                cm_lower = customer_message.lower()
+                for p_name in sorted(_catalog_cache, key=len, reverse=True):
+                    if p_name in cm_lower:
+                        cand_p = p_name.title()
+                        break
+                if not cand_p:
+                    for b_name, d_model in sorted(_BRANDS.items(), key=lambda x: len(x[0]), reverse=True):
+                        if b_name in cm_lower:
+                            cand_p = d_model
+                            break
+                if not cand_p and conversation_history:
+                    # check last assistant mention
+                    for h in reversed(conversation_history):
+                        h_lower = h.get("text", "").lower()
+                        for p_name in sorted(_catalog_cache, key=len, reverse=True):
+                            if p_name in h_lower:
+                                cand_p = p_name.title()
+                                break
+                        if cand_p:
+                            break
+                if cand_p:
+                    spec_context = await search_product_specs(cand_p, customer_message)
+                    if spec_context:
+                        logger.info("[%s] Looked up manufacturer specs for %s: %s", request_id, cand_p, spec_context[:100])
+            except Exception as spec_err:
+                logger.warning("[%s] Spec search error: %s", request_id, spec_err)
 
-        system_instruction = self._build_system_prompt(business_name, industry, catalog_context)
+        system_instruction = self._build_system_prompt(
+            business_name=business_name,
+            industry=industry,
+            catalog_context=catalog_context,
+            spec_context=spec_context,
+        )
 
-        if image_match_context:
-            system_instruction += self._build_image_match_prompt(image_match_context)
-
-        contents: list = []
-        if conversation_history:
-            for item in conversation_history:
-                role = "user" if item.get("role") == "customer" else "model"
-                contents.append(
-                    types.Content(
-                        role=role,
-                        parts=[types.Part.from_text(text=item["text"])],
-                    )
+        contents = []
+        # Only include the last 6 messages to keep context fresh and avoid stale name/city bias
+        fresh_history = (conversation_history or [])[-6:]
+        for item in fresh_history:
+            role = "user" if item.get("role") == "customer" else "model"
+            contents.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(text=item["text"])],
                 )
+            )
 
-        user_text = customer_message or "Ye image check karein aur batayein konsi product hai"
+        user_text = customer_message or "Ye photo mein konsi product hai aur iski price kya hai?"
         user_parts = []
 
-        # Attach image to user Content if provided
         if image_bytes:
             user_parts.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
         elif image_base64:
@@ -255,53 +253,123 @@ Use ONLY this verified data for factual prices, specs, and policies:
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
-                    temperature=0.6,
-                    max_output_tokens=120,
+                    temperature=0.5,
+                    max_output_tokens=350,
                 ),
             )
 
-            # Guard: response.text can raise when safety filters block output.
-            # This is a known Gemini SDK behavior — candidates exist but finish_reason is SAFETY/RECITATION.
             try:
                 reply_text = response.text.strip() if response.text else ""
-            except (ValueError, AttributeError) as text_err:
-                # Check if response was blocked by safety filters
-                blocked_reason = "unknown"
-                try:
-                    if response.candidates:
-                        blocked_reason = str(response.candidates[0].finish_reason)
-                except Exception:
-                    pass
-                logger.warning(
-                    "[%s] Gemini response blocked (finish_reason=%s): %s",
-                    request_id, blocked_reason, text_err,
-                )
+            except Exception as text_err:
+                logger.warning("[%s] Gemini response blocked: %s", request_id, text_err)
                 reply_text = ""
 
             if not reply_text:
-                reply_text = "Jee bataiye, kya chahiye aapko?"
+                reply_text = "Jee bataiye, kis firearm model ya product ke baare mein janna chahte hain?"
+
+            # Detect escalation tag from model
+            needs_escalation = False
+            extracted_item = None
+            extracted_city = None
+            extracted_name = None
+
+            if "[ESCALATE" in reply_text:
+                needs_escalation = True
+                reply_text = re.sub(r'\[ESCALATE:?[^\]]*\]', '', reply_text, flags=re.IGNORECASE).strip()
+
+            # Strictly inspect only the current message + last 2 customer turns for facts.
+            recent_customer_turns = [h.get("text", "") for h in fresh_history if h.get("role") == "customer"][-2:]
+            customer_recent_text = customer_message + " " + " ".join(recent_customer_turns)
+            lower_all = customer_recent_text.lower()
+            lower_cust = lower_all
+
+            # Extract Name ONLY if explicitly stated with valid introduction pattern
+            INVALID_NAME_WORDS = {
+                "nahi", "nahin", "brand", "pata", "naam", "firearm", "pistol", "gun", "rifle",
+                "delivery", "lahore", "karachi", "islamabad", "rawalpindi", "peshawar",
+                "glock", "taurus", "hai", "bhai", "want", "need", "price", "pindi",
+                "unknown", "koi", "kuch", "shukriya", "insta", "instagram", "page", "dekha"
+            }
+            name_match = re.search(r'\b(?:mera naam|my name is|i am)\s+([a-zA-Z]{3,15})\b', lower_cust)
+            if name_match:
+                cand = name_match.group(1).capitalize()
+                if cand.lower() not in INVALID_NAME_WORDS:
+                    extracted_name = cand
+
+            # Extract City ONLY if explicitly stated in recent customer messages
+            for city in ["lahore", "karachi", "islamabad", "rawalpindi", "peshawar", "quetta", "multan", "faisalabad", "sialkot", "gujranwala", "abbottabad", "mardan", "kohat"]:
+                if re.search(rf'\b{city}\b', lower_cust):
+                    extracted_city = city.capitalize()
+                    break
+
+            # Extract Product
+            search_corpus = lower_all
+            recent_assistant_text = " ".join([h.get("text", "") for h in fresh_history if h.get("role") != "customer"][-2:]).lower()
+            if image_bytes or image_base64 or not lower_all.strip() or any(w in lower_all for w in ["image", "picture", "photo", "tasweer", "share"]):
+                search_corpus = f"{lower_all} {reply_text.lower()} {recent_assistant_text}"
+
+            if catalog_context:
+                for line in catalog_context.split("\n"):
+                    line_clean = line.strip().lstrip("-").strip()
+                    if ":" in line_clean:
+                        p_name = line_clean.split(":")[0].strip()
+                        if p_name and p_name.lower() in search_corpus:
+                            extracted_item = p_name
+                            break
+
+            if not extracted_item:
+                from app.graph.nodes.nlu import _BRANDS, _catalog_cache
+                for model in sorted(_catalog_cache, key=len, reverse=True):
+                    if re.search(rf'\b{re.escape(model)}\b', search_corpus):
+                        extracted_item = model.title()
+                        break
+                if not extracted_item:
+                    for brand, default_model in sorted(_BRANDS.items(), key=lambda x: len(x[0]), reverse=True):
+                        if re.search(rf'\b{re.escape(brand)}\b', search_corpus):
+                            extracted_item = default_model
+                            break
+
+            # Only escalate delivery if the customer EXPLICITLY asked for delivery
+            is_delivery_asked = any(k in customer_message.lower() for k in ["delivery", "deliver", "bhej", "charges", "charges honge", "kitne din"])
+            if is_delivery_asked and extracted_city:
+                needs_escalation = True
+
+            # Escalate discount / custom price requests to shop management
+            is_discount_asked = any(k in customer_message.lower() for k in ["discount", "kam ho", "kam hoga", "gunjaish", "gunjash", "final price", "kam rate"]) or ("mil sakta hai" in customer_message.lower() and any(w in customer_message.lower() for w in ["mein", "mai", "lakh", "hazar", "price", "rate"]))
+            if is_discount_asked:
+                needs_escalation = True
+                if not any(k in reply_text.lower() for k in ["confirm karke", "pata karke", "management"]):
+                    reply_text = "Theek hai bhai, main shop management se confirm karke aapko foran update karta hoon."
+
+            # Escalate legal / licensing inquiries
+            from app.graph.nodes.nlu import _has_legal_intent
+            if _has_legal_intent(customer_message):
+                needs_escalation = True
+                if not any(k in reply_text.lower() for k in ["confirm karke", "license zaroori", "management"]):
+                    reply_text = "Firearms purchase ke liye valid license aur legal requirements zaroori hain. Iski exact procedure aur verification ke liye main shop management se confirm karke aapko update karta hoon."
 
             reply_text = self._strip_markdown(reply_text)
             chunks = self._chunk_reply(reply_text)
 
             is_order_intent = any(
                 kw in customer_message.lower()
-                for kw in [
-                    "order", "book", "kharidna", "chahiye", "address",
-                    "cod", "bhej dein", "delivery", "mangwana", "lena hai",
-                ]
+                for kw in ["order", "book", "kharidna", "lena hai", "confirm order", "lagegi", "chahiye"]
             )
 
             latency = int((time.monotonic() - t0) * 1000)
             logger.info(
-                "[%s] Gemini OK — %d chunks, %dms, intent=%s",
-                request_id, len(chunks), latency, is_order_intent,
+                "[%s] Gemini OK — %d chunks, %dms, escalate=%s (item=%s, city=%s)",
+                request_id, len(chunks), latency, needs_escalation, extracted_item, extracted_city
             )
 
             return {
                 "reply_text": reply_text,
                 "reply_chunks": chunks,
                 "is_order_intent": is_order_intent,
+                "needs_escalation": needs_escalation,
+                "extracted_name": extracted_name,
+                "extracted_item": extracted_item,
+                "extracted_city": extracted_city,
                 "request_id": request_id,
                 "latency_ms": latency,
                 "source": "gemini",
@@ -309,15 +377,13 @@ Use ONLY this verified data for factual prices, specs, and policies:
 
         except Exception as e:
             latency = int((time.monotonic() - t0) * 1000)
-            logger.error(
-                "[%s] Gemini FAILED after %dms: %s", request_id, latency, e,
-                exc_info=True,
-            )
-            fallback = "Maaf kijiye, technical issue aa gaya hai. Thori der mein dobara try karein ya owner se baat karein."
+            logger.error("[%s] Gemini error after %dms: %s", request_id, latency, e, exc_info=True)
+            fallback = "Maaf kijiye, technical issue aa gaya hai. Thori der mein dobara try karein ya shop se rabta karein."
             return {
                 "reply_text": fallback,
                 "reply_chunks": [fallback],
                 "is_order_intent": False,
+                "needs_escalation": False,
                 "request_id": request_id,
                 "latency_ms": latency,
                 "source": "fallback_error",

@@ -1,56 +1,62 @@
 """Tests for Part A + Part B fixes: reliability and tone."""
 import pytest
-import time
-import asyncio
 from unittest.mock import patch, AsyncMock, MagicMock
-from collections import defaultdict
 
 
-# === CONVERSATION STORE ===
+# === CONVERSATION STORE (DB-backed, async) ===
 
 class TestConversationStore:
-    def _fresh(self):
+    @pytest.mark.asyncio
+    async def test_get_history_async_fetches_trimmed(self):
         from app.services.conversation_store import ConversationStore
+        import uuid
+        from unittest.mock import MagicMock
         s = ConversationStore()
-        s._store = defaultdict(list)
-        s._timestamps = {}
-        return s
+        conv = MagicMock()
+        conv.id = uuid.uuid4()
+        fake_session = MagicMock()
+        fake_session.__aenter__ = AsyncMock(return_value=fake_session)
+        fake_session.__aexit__ = AsyncMock(return_value=False)
+        with patch("app.services.conversation_store.AsyncSessionLocal", return_value=fake_session):
+            with patch("app.services.conversation_store.conversation_repo.get_or_create_conversation", new_callable=AsyncMock, return_value=conv) as goc:
+                with patch("app.services.conversation_store.conversation_repo.get_recent_messages", new_callable=AsyncMock, return_value=[{"role": "customer", "text": "hi"}]) as grm:
+                    hist = await s.get_history_async(uuid.uuid4(), "923001234567")
+        assert hist == [{"role": "customer", "text": "hi"}]
+        goc.assert_awaited_once()
+        grm.assert_awaited_once()
 
-    def test_add_and_retrieve(self):
-        s = self._fresh()
-        s.add_message("111", "222", "customer", "hi")
-        s.add_message("111", "222", "assistant", "hello")
-        h = s.get_history("111", "222")
-        assert len(h) == 2
-        assert h[0]["role"] == "customer"
-        assert h[1]["text"] == "hello"
+    @pytest.mark.asyncio
+    async def test_add_message_async_maps_roles(self):
+        from app.services.conversation_store import ConversationStore
+        import uuid
+        from unittest.mock import MagicMock
+        s = ConversationStore()
+        conv = MagicMock()
+        conv.id = uuid.uuid4()
+        fake_session = MagicMock()
+        fake_session.__aenter__ = AsyncMock(return_value=fake_session)
+        fake_session.__aexit__ = AsyncMock(return_value=False)
+        with patch("app.services.conversation_store.AsyncSessionLocal", return_value=fake_session):
+            with patch("app.services.conversation_store.conversation_repo.get_or_create_conversation", new_callable=AsyncMock, return_value=conv):
+                with patch("app.services.conversation_store.conversation_repo.append_message", new_callable=AsyncMock) as ap:
+                    await s.add_message_async(uuid.uuid4(), "923001234567", "assistant", "hello")
+        kwargs = ap.await_args.kwargs
+        assert kwargs["sender_type"] == "ai"
+        assert kwargs["content_text"] == "hello"
 
-    def test_bounded_to_16(self):
-        s = self._fresh()
-        for i in range(20):
-            role = "customer" if i % 2 == 0 else "assistant"
-            s.add_message("111", "222", role, f"m{i}")
-        assert len(s.get_history("111", "222")) == 16
-
-    def test_ttl_expiry(self):
-        s = self._fresh()
-        s.add_message("111", "222", "customer", "old")
-        s._timestamps["111_222"] = time.time() - 86401
-        assert len(s.get_history("111", "222")) == 0
-
-    def test_separate_conversations(self):
-        s = self._fresh()
-        s.add_message("a", "b", "customer", "msgA")
-        s.add_message("c", "b", "customer", "msgB")
-        assert len(s.get_history("a", "b")) == 1
-        assert len(s.get_history("c", "b")) == 1
-
-    def test_returns_copy(self):
-        s = self._fresh()
-        s.add_message("111", "222", "customer", "hi")
-        h = s.get_history("111", "222")
-        h.append({"role": "x", "text": "injected"})
-        assert len(s.get_history("111", "222")) == 1
+    @pytest.mark.asyncio
+    async def test_db_failure_never_raises(self):
+        from app.services.conversation_store import ConversationStore
+        import uuid
+        from unittest.mock import MagicMock
+        s = ConversationStore()
+        fake_session = MagicMock()
+        fake_session.__aenter__ = AsyncMock(return_value=fake_session)
+        fake_session.__aexit__ = AsyncMock(return_value=False)
+        with patch("app.services.conversation_store.AsyncSessionLocal", return_value=fake_session):
+            with patch("app.services.conversation_store.conversation_repo.get_or_create_conversation", new_callable=AsyncMock, side_effect=RuntimeError("db down")):
+                assert await s.get_history_async(uuid.uuid4(), "923001234567") == []
+                assert await s.add_message_async(uuid.uuid4(), "923001234567", "customer", "hi") is None
 
 
 # === STORE AGENT: CHUNKING & MARKDOWN ===
@@ -97,30 +103,23 @@ class TestPromptStructure:
         from app.services.store_agent import WhatsAppStoreAgent
         return WhatsAppStoreAgent()._build_system_prompt("TestShop", "Retail", "Widget PKR 500")
 
-    def test_has_corporate_phrase_blocklist(self):
+    def test_forbids_corporate_tone(self):
         p = self._prompt()
-        for phrase in [
-            "I hope this message finds you well",
-            "Thank you for reaching out",
-            "How may I assist you today",
-            "I'd be happy to help",
-            "Please don't hesitate",
-        ]:
-            assert phrase in p, f"Missing forbidden phrase: {phrase}"
+        assert "NATURAL HUMAN DIALOGUE" in p
+        assert "concise" in p
 
-    def test_has_good_bad_examples(self):
+    def test_has_conversation_examples(self):
         p = self._prompt()
-        assert "GOOD:" in p
-        assert "BAD:" in p
-        assert "Complaint" in p
+        assert "Walaikum Assalam" in p
+        assert "Zabardast choice hai" in p
 
     def test_forbids_markdown(self):
         p = self._prompt()
-        assert "NO markdown" in p
+        assert "NO MARKDOWN" in p
 
     def test_emoji_rule(self):
         p = self._prompt()
-        assert "Most messages should have zero" in p
+        assert "Zero emojis" in p
 
     def test_has_business_name(self):
         assert "TestShop" in self._prompt()
@@ -128,13 +127,13 @@ class TestPromptStructure:
     def test_has_catalog(self):
         assert "Widget PKR 500" in self._prompt()
 
-    def test_bot_deflection(self):
+    def test_human_presentation(self):
         p = self._prompt()
-        assert "are you a bot" in p.lower()
+        assert "real human sales consultant" in p
 
-    def test_forbids_ai_self_desc(self):
+    def test_no_name_city_hallucination(self):
         p = self._prompt()
-        assert "AI assistant" in p or "virtual assistant" in p
+        assert "NO HALLUCINATION" in p
 
 
 # === WEBHOOK ERROR HANDLING ===
@@ -174,7 +173,8 @@ class TestWebhookErrorHandling:
     async def test_history_loaded_and_persisted(self):
         from app.api.webhooks import process_inbound_message
         with patch("app.api.webhooks.conversation_store") as cs:
-            cs.get_history.return_value = [{"role": "customer", "text": "prev"}]
+            cs.get_history_async = AsyncMock(return_value=[{"role": "customer", "text": "prev"}])
+            cs.add_message_async = AsyncMock(return_value=None)
             with patch("app.api.webhooks.store_agent") as ag:
                 ag.handle_customer_interaction = AsyncMock(return_value={
                     "reply_text": "ok", "reply_chunks": ["ok"],
@@ -184,12 +184,13 @@ class TestWebhookErrorHandling:
                 with patch("app.api.webhooks._send_chunks_with_delays", new_callable=AsyncMock) as sc:
                     sc.return_value = True
                     await process_inbound_message(
-                        {"from": "111", "type": "text", "text": {"body": "hi"}}, "222"
+                        {"from": "111", "type": "text", "text": {"body": "hi"}},
+                        "923040124445",
                     )
-                    cs.get_history.assert_called_once()
+                    cs.get_history_async.assert_awaited()
                     kw = ag.handle_customer_interaction.call_args[1]
                     assert kw["conversation_history"] is not None
-                    assert cs.add_message.call_count == 2
+                    assert cs.add_message_async.call_count == 2
 
     @pytest.mark.asyncio
     async def test_send_fail_triggers_fallback(self):

@@ -1,51 +1,61 @@
-import logging
 import re
-from typing import Optional, Dict, Any
+import uuid
+import logging
+from typing import Optional, Dict, Any, List, Tuple
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.services.price_update_service import PriceUpdateService
+from app.services.escalation_service import EscalationService, EscalationRecord
+from app.db.repositories import tenant_repo, price_log_repo
 
 logger = logging.getLogger(__name__)
 
 
 class OwnerCopilotService:
-    """Handles owner alerts, human handoffs, and WhatsApp slash commands."""
+    """Personal Digital Executive Assistant for the Business Owner (Haider bhai) on WhatsApp.
+    
+    Speaks to the owner casually like a real person to their boss on WhatsApp:
+    Short. Casual. No formatting. No subject lines. No bullet points.
+    """
 
-    COMMANDS_HELP = """*RABTA AI -- Owner Control Panel*
-
-Commands:
-* /pause [number] - Stop AI for this customer and chat directly.
-* /resume [number] - Hand customer back to AI.
-* /status - View active chats & AI status.
-* /add [Item Name] PKR [Price] - Quick-add item to catalog.
-* /help - View available commands.
-"""
+    def __init__(self):
+        self.price_service = PriceUpdateService()
+        self.escalation_service = EscalationService(
+            reminder1_secs=1800.0,  # 30 minutes
+            reminder2_secs=3600.0,  # 60 minutes
+            timeout_secs=7200.0
+        )
 
     def is_owner_command(self, text: str) -> bool:
-        """Checks if a message from owner starts with a slash command."""
         return text.strip().startswith("/")
 
     async def handle_command(
         self,
+        session: AsyncSession,
+        tenant_id: uuid.UUID,
         command_text: str,
         business_name: str,
         active_customer: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Executes owner WhatsApp commands and returns action dict."""
         cmd_parts = command_text.strip().split()
         main_cmd = cmd_parts[0].lower()
 
         if main_cmd == "/help":
-            return {"action": "reply_owner", "message": self.COMMANDS_HELP}
+            return {
+                "action": "reply_owner",
+                "message": "Commands: /status, /pause [number], /resume [number], /prices. Ya direct mujhse baat karein rate update ya customer replies ke liye."
+            }
 
         elif main_cmd == "/pause":
             target_phone = cmd_parts[1] if len(cmd_parts) > 1 else active_customer
             if not target_phone:
                 return {
                     "action": "reply_owner",
-                    "message": "[!] Please specify customer phone: /pause +923001234567",
+                    "message": "Bhai customer number batayein: /pause 03001234567",
                 }
             return {
                 "action": "pause_ai",
                 "customer_phone": target_phone,
-                "message": f"[*] AI Paused for customer {target_phone}.\nYour next messages will be forwarded directly to the customer!\nType /resume when finished.",
+                "message": f"AI paused for {target_phone}. Aap directly baat karein, finish hone par /resume likhein.",
             }
 
         elif main_cmd == "/resume":
@@ -53,63 +63,178 @@ Commands:
             return {
                 "action": "resume_ai",
                 "customer_phone": target_phone,
-                "message": f"[*] AI Resumed! AI will now respond to customer {target_phone or 'all'}.",
+                "message": f"AI resumed for {target_phone or 'all'}.",
             }
 
         elif main_cmd == "/status":
-            return {
-                "action": "reply_owner",
-                "message": f"[*] {business_name} -- Status Report\n- AI Status: Active (Ready to Sell)\n- Active Takeover: {active_customer or 'None'}\n- All systems running smoothly.",
-            }
-
-        elif main_cmd == "/add":
-            item_data = " ".join(cmd_parts[1:])
-            if not item_data:
+            pending_esc = self.escalation_service.get_pending_for_tenant(tenant_id)
+            if pending_esc:
+                esc_desc = ", ".join([f"{e.customer_phone}: {e.customer_question[:30]}" for e in pending_esc])
                 return {
                     "action": "reply_owner",
-                    "message": "[!] Please specify item details: /add Lawn Kurti PKR 2500",
+                    "message": f"AI active hai. Open inquiries ({len(pending_esc)}): {esc_desc}",
                 }
-
-            price = 0.0
-            item_name = item_data
-            # Extract price if present at the end or preceded by PKR / Rs / price
-            match = re.search(r'(?:pkr|rs\.?|price)?\s*(\d+(?:,\d+)?(?:\.\d+)?)\s*$', item_data, re.IGNORECASE)
-            if match:
-                price_str = match.group(1).replace(",", "")
-                try:
-                    price = float(price_str)
-                    item_name = item_data[:match.start()].strip(" -:|")
-                except ValueError:
-                    pass
-
             return {
-                "action": "add_catalog_item",
-                "item_name": item_name or item_data,
-                "price": price,
-                "raw_text": item_data,
-                "message": f"[*] Product Added to AI Brain!\nItem: {item_name or item_data}\nPrice: PKR {price:,.0f}\nAI will now recommend this to customers.",
+                "action": "reply_owner",
+                "message": "Sab clear hai bhai, koi pending inquiry nahi hai.",
+            }
+
+        elif main_cmd == "/prices":
+            history = await price_log_repo.get_price_history(session, tenant_id, limit=5)
+            if not history:
+                return {
+                    "action": "reply_owner",
+                    "message": "Bhai koi recent price updates nahi hain.",
+                }
+            lines = ["Recent price changes:"]
+            for h in history:
+                t_str = h.confirmed_at.strftime("%d %b %H:%M")
+                lines.append(f"{h.item_name}: PKR {int(h.new_price):,} ({t_str})")
+            return {
+                "action": "reply_owner",
+                "message": "\n".join(lines),
             }
 
         else:
             return {
                 "action": "reply_owner",
-                "message": "[?] Unknown command. Type /help for available commands.",
+                "message": "Bhai samajh nahi aaya. Rate update karna hai toh jaise 'Glock 19 USA 450000' likhein.",
             }
 
-    def format_lead_alert(
+    async def handle_owner_natural_message(
+        self,
+        session: AsyncSession,
+        tenant_id: uuid.UUID,
+        owner_phone: str,
+        message_text: str,
+        on_cache_invalidate: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Routes natural messages from Haider bhai."""
+        # 1. Price Updates
+        price_res = await self.price_service.process_owner_price_message(
+            session=session,
+            tenant_id=tenant_id,
+            owner_phone=owner_phone,
+            message_text=message_text,
+            on_cache_invalidate=on_cache_invalidate,
+        )
+        if price_res is not None:
+            return {
+                "action": "reply_owner",
+                "message": price_res["reply"],
+                "is_price_updated": price_res.get("is_price_updated", False),
+            }
+
+        # 2. Answering an open customer inquiry
+        target_esc, clean_answer = self.escalation_service.find_target_escalation(tenant_id, message_text)
+        if target_esc:
+            resolved_esc = self.escalation_service.resolve_escalation(target_esc.escalation_id, clean_answer)
+            if resolved_esc:
+                # Direct answer pass: do not rephrase, pass straight
+                return {
+                    "action": "relay_escalation_to_customer",
+                    "customer_phone": resolved_esc.customer_phone,
+                    "customer_reply": clean_answer,
+                    "escalation_id": resolved_esc.escalation_id,
+                    "owner_confirmation": "Done bhai. Customer ko convey kar diya.",
+                }
+
+        # 3. Fallback
+        return {
+            "action": "reply_owner",
+            "message": "Jee bhai note kar liya.",
+        }
+
+    def format_escalation_alert(
         self,
         customer_phone: str,
-        customer_message: str,
-        ai_reply: str,
-        reason: str = "New Inquiry"
+        customer_question: str,
+        customer_name: Optional[str] = None,
+        extracted_item: Optional[str] = None,
+        extracted_city: Optional[str] = None,
+        customer_address: Optional[str] = None,
+        inquiry_type: str = "delivery",
     ) -> str:
-        """Formats a clean notification to send to the owner's personal WhatsApp."""
-        return f"""[!] *{reason} Alert -- Rabta AI*
+        """Short, casual, one-line message to Haider bhai on WhatsApp."""
+        INVALID_NAMES = {
+            "nahi", "brand", "pata", "naam", "firearm", "pistol", "gun",
+            "delivery", "lahore", "karachi", "islamabad", "rawalpindi", "peshawar",
+            "unknown", "none", "customer", "bhai", "sir", "batao", "price", "rate",
+        }
 
-[Customer]: {customer_phone}
-[Customer Said]: "{customer_message}"
-[AI Replied]: "{ai_reply}"
+        # 1. Clean Customer Identifier
+        if customer_name and isinstance(customer_name, str):
+            c_name = customer_name.strip().title()
+            if c_name.lower() not in INVALID_NAMES and len(c_name) >= 3 and not re.search(r'\d', c_name):
+                identifier = c_name
+            else:
+                clean_digits = re.sub(r'[^\d]', '', str(customer_phone or ""))
+                short = clean_digits[-4:] if len(clean_digits) >= 4 else (clean_digits or "0000")
+                identifier = f"customer (...{short})"
+        else:
+            clean_digits = re.sub(r'[^\d]', '', str(customer_phone or ""))
+            short = clean_digits[-4:] if len(clean_digits) >= 4 else (clean_digits or "0000")
+            identifier = f"customer (...{short})"
 
--> To chat directly with customer, reply: /pause {customer_phone}
-"""
+        # 2. Clean Product
+        product = extracted_item.strip() if (extracted_item and extracted_item.lower() not in ["firearm", "gun", "pistol", "unknown", "product"]) else None
+        city = extracted_city.strip() if extracted_city else None
+        q_lower = customer_question.lower()
 
+        # 3. Final Price / Discount Inquiries
+        if any(w in q_lower for w in ["final", "discount", "kam", "akhri", "concession", "gunjaish", "kam rate"]):
+            if product:
+                return f"Haider bhai, {identifier} {product} ka final price / discount pooch raha hai. Kitna de sakte hain?"
+            return f"Haider bhai, {identifier} final price / discount maang raha hai. Kitna discount de sakte hain?"
+
+        # 4. Delivery Charges Inquiries
+        if inquiry_type == "delivery" or any(w in q_lower for w in ["deliver", "charges", "bhej", "shipping", "courier"]):
+            # Build location string: "Lahore, DHA Phase 5 Street 7" or just "Lahore"
+            if city and customer_address:
+                location = f"{city}, {customer_address}"
+            elif city:
+                location = city
+            else:
+                location = None
+
+            # Build full identifier with phone
+            phone_clean = re.sub(r'[^\d]', '', str(customer_phone or ""))
+            phone_short = f"(+92{phone_clean[-10:]}" if len(phone_clean) >= 10 else customer_phone
+            identifier_full = f"{identifier} — {phone_short}"
+
+            if location and product:
+                return (f"Haider bhai, {identifier_full}\n"
+                        f"Address: {location}\n"
+                        f"Product: {product}\n"
+                        f"Delivery charges kya hain?")
+            elif location:
+                return (f"Haider bhai, {identifier_full}\n"
+                        f"Address: {location}\n"
+                        f"Delivery charges pooch raha hai.")
+            elif product:
+                return (f"Haider bhai, {identifier_full} {product} ke liye delivery charges pooch raha hai. "
+                        f"Charges kya hain?")
+            else:
+                return f"Haider bhai, {identifier_full} delivery charges pooch raha hai: \"{customer_question}\""
+
+        # 5. Price / Rate Inquiries
+        if any(w in q_lower for w in ["price", "rate", "kitne ka", "cost"]):
+            if product:
+                return f"Haider bhai, {identifier} {product} ka price pooch raha hai. Aaj ka rate kya hai?"
+            return f"Haider bhai, {identifier} rate pooch raha hai: \"{customer_question}\""
+
+        # 6. Availability Inquiries
+        if any(w in q_lower for w in ["available", "stock", "hai ya nahi", "mil jayegi", "parhi hai"]):
+            if product:
+                return f"Haider bhai, {identifier} {product} maang raha hai. Available hai? Aur price kya hai?"
+            return f"Haider bhai, {identifier} stock availability pooch raha hai: \"{customer_question}\""
+
+        # 7. Bulk Inquiries
+        if any(w in q_lower for w in ["bulk", "quantity", "zyada", "5 piece", "10 piece", "wholesale"]):
+            if product:
+                return f"Haider bhai, {identifier} {product} bulk mein maang raha hai. Yeh serious lag raha hai — aap khud baat karein ya main rate quote karun?"
+
+        # 8. General Inquiry Fallback
+        if product:
+            return f"Haider bhai, {identifier} {product} ke baray mein pooch raha hai: \"{customer_question}\". Kya jawab dun?"
+        return f"Haider bhai, {identifier} ne poochha: \"{customer_question}\". Kya jawab dun?"

@@ -18,6 +18,30 @@ async def get_catalog_for_tenant(
     return list(result.scalars().all())
 
 
+async def get_item_by_id(
+    session: AsyncSession, item_id: uuid.UUID, tenant_id: Optional[uuid.UUID] = None
+) -> Optional[CatalogItem]:
+    """Retrieve a single catalog item by ID with optional tenant isolation check."""
+    stmt = select(CatalogItem).where(CatalogItem.id == item_id)
+    if tenant_id:
+        stmt = stmt.where(CatalogItem.tenant_id == tenant_id)
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def update_item_price(
+    session: AsyncSession, item_id: uuid.UUID, new_price: float
+) -> Optional[CatalogItem]:
+    """Update price of a specific catalog item and commit to DB."""
+    item = await get_item_by_id(session, item_id)
+    if not item:
+        return None
+    item.price = new_price
+    await session.commit()
+    await session.refresh(item)
+    return item
+
+
 async def format_catalog_context_for_ai(
     session: AsyncSession, tenant_id: uuid.UUID
 ) -> str:
@@ -29,8 +53,9 @@ async def format_catalog_context_for_ai(
     lines = ["Products & Inventory:"]
     for it in items:
         price_str = f"PKR {int(it.price):,}" if it.price and it.price > 0 else "Contact for price"
+        cat_str = f" [{it.category}]" if it.category else ""
         desc = f" ({it.description})" if it.description else ""
-        lines.append(f"- {it.name}: {price_str}{desc}")
+        lines.append(f"- {it.name}{cat_str}: {price_str}{desc}")
 
     return "\n".join(lines)
 

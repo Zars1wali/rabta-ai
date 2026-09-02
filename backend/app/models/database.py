@@ -114,3 +114,18 @@ class VisualSearchLog(Base):
     confidence_tier = Column(String(20), nullable=True)  # high, medium, low, none
     ocr_text = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PriceChangeLog(Base):
+    """Immutable audit trail of every owner-confirmed price change."""
+    __tablename__ = "price_change_log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)
+    catalog_item_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    item_name = Column(String(500), nullable=False)
+    old_price = Column(Numeric(12, 2), nullable=True)
+    new_price = Column(Numeric(12, 2), nullable=False)
+    changed_by_phone = Column(String(30), nullable=False)
+    confirmed_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    metadata_json = Column(JSON, default=dict)

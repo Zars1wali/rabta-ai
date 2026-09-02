@@ -37,6 +37,7 @@ backend/backend_run.log
 backend/backups/*.sql
 backend/backups/*.gz
 backups/
+scratch/
 
 # Database / SQLite / Local storage
 *.sqlite3
@@ -54,3 +55,6 @@ Thumbs.db
 caddy_data/
 caddy_config/
 postgres_data/
+
+# Large binary assets — served from VPS directly
+backend/app/static/catalog_images/
