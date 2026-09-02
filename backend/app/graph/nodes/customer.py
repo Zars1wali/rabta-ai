@@ -570,15 +570,22 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         ]
     )
 
-    # Photo intent requires EXPLICIT photo keywords (pic, picture, photo, tasweer, image, bhejo).
-    # Generic browse/show words (dikhao, dekhaye, options) are NOT photo requests.
+    # Photo intent: trust NLU classification DIRECTLY.
+    # CRITICAL: When Deepgram transcribes voice in Urdu Arabic script (e.g. پکچر شیئر کریں),
+    # raw keyword matching ("pic", "photo", etc.) will FAIL because those words are in Arabic
+    # script, not Latin. NLU Gemini reads the Arabic correctly and sets nlu_photo_intent=True.
+    # We must trust NLU here, not raw text keywords.
     _EXPLICIT_PHOTO_WORDS = ["pic", "picture", "photo", "tasweer", "image", "bhejo", "share karein", "share keren"]
     has_explicit_photo_keyword = any(kw in raw_msg_lower for kw in _EXPLICIT_PHOTO_WORDS)
 
     # Browse intent: customer asking to see a category or alternatives
     is_browse_intent = bool(state.get("nlu_browse_intent"))
 
-    is_photo_requested = (bool(state.get("nlu_photo_intent")) and has_explicit_photo_keyword) or is_correction or has_explicit_photo_keyword
+    is_photo_requested = (
+        bool(state.get("nlu_photo_intent"))   # ← NLU already handled Arabic script correctly
+        or is_correction
+        or has_explicit_photo_keyword          # fallback: plain text "pic"/"photo" keywords
+    )
 
     # Contextual product resolution:
     # Check if customer wants photos for multiple items ("dono", "all", "both")
@@ -599,8 +606,20 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     live_catalog = _catalog_cache  # list of lowercase product names from DB
 
     matched_products = []
-    # ── STEP 1: Search CURRENT raw_message first using LIVE CATALOG ──────────
-    matched_products = _extract_products_from_text(raw_msg_lower, live_catalog)
+
+    # ── STEP 0: NLU product injection (HIGHEST PRIORITY for photo requests) ──
+    # When NLU says photo=True AND extracted a product name (works for Arabic script voice),
+    # inject it FIRST before any raw-text matching.
+    if is_photo_requested and not is_browse_intent:
+        nlu_prods = state.get("nlu_extracted_products") or []
+        if nlu_prods:
+            matched_products = list(nlu_prods)
+        elif state.get("nlu_extracted_product"):
+            matched_products.append(state.get("nlu_extracted_product"))
+
+    # ── STEP 1: Search CURRENT raw_message using LIVE CATALOG (Latin-text messages) ──
+    if not matched_products:
+        matched_products = _extract_products_from_text(raw_msg_lower, live_catalog)
 
     # Brand-keyword fallback for current message (e.g. "bellini", "kral")
     if not matched_products:
@@ -608,16 +627,6 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             if re.search(rf'\b{re.escape(brand)}\b', raw_msg_lower):
                 if default_model not in matched_products:
                     matched_products.append(default_model)
-
-    # ── STEP 1.5: NLU-extracted products (highest priority for voice messages) ──
-    # Gemini NLU returns a list of ALL products mentioned in one message.
-    # Use this list directly so "Beretta, Canik aur Glock ki pics bhejo" sends all 3 images.
-    if not matched_products and not is_browse_intent:
-        nlu_prods = state.get("nlu_extracted_products") or []
-        if nlu_prods:
-            matched_products = list(nlu_prods)
-        elif state.get("nlu_extracted_product"):
-            matched_products.append(state.get("nlu_extracted_product"))
 
     # ── STEP 2: Only if current message has NO product/brand at all AND                 ──
     # ──         it's NOT a browse/alternatives request (to prevent re-sending same item) ──
