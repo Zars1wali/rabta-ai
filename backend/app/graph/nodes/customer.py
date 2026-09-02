@@ -807,10 +807,14 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                     product_context=current_product,
                 )
                 escalation_id = esc.escalation_id
-                owner_alert = (
-                    f"Haider bhai, {current_name or 'Customer'} ({state.get('sender_phone')}) {current_product or 'item'} ke baare mein pooch raha hai:\n"
-                    f"\"{raw_msg_lower}\"\n"
-                    f"Aap jo reply karein ge customer ko convey ho jaye ga."
+                from app.services.owner_copilot import OwnerCopilotService
+                copilot = OwnerCopilotService()
+                owner_alert = copilot.format_escalation_alert(
+                    customer_phone=state.get("sender_phone", ""),
+                    customer_question=raw_msg_lower,
+                    customer_name=current_name,
+                    extracted_item=current_product,
+                    inquiry_type="discount",
                 )
             except Exception as e:
                 logger.warning("[Node:customer_sales_chat] Failed creating inquiry escalation: %s", e)

@@ -90,24 +90,23 @@ def route_owner(state: RabtaGraphState) -> str:
         pending_escs = []
 
     if pending_escs:
-        # If owner gave a number or price without a specific product name (e.g. "30k", "1500", "400 mein dedo", "3000")
-        # it is an answer to the pending escalation, NOT a catalog price change!
-        if state.get("nlu_is_price_update") and not state.get("nlu_price_product"):
-            return "relay_owner_answer"
-
+        # Check if owner explicitly requested a permanent catalog price update
+        is_explicit_catalog_update = any(kw in msg for kw in ["update", "kardo", "krdo", "kar do", "badal do", "change", "set karo", "catalog"])
+        
         # If owner is asking for clarification about the customer inquiry
         CLARIFY_KEYWORDS = [
             "kon hai", "koon hai", "kaun hai", "kiska", "kis ka", "kia poochna",
             "kya poochna", "kia note", "kya note", "kya sawal", "kia sawal",
             "details", "samajh nahi", "kya masla", "kia masla", "kya rate", "kis cheez", "kis model"
         ]
-        is_clarification = any(kw in msg for kw in CLARIFY_KEYWORDS) or ("?" in msg and not any(kw in msg for kw in ["kardo", "krdo", "kar do", "update"]))
+        is_clarification = any(kw in msg for kw in CLARIFY_KEYWORDS) or ("?" in msg and not is_explicit_catalog_update)
         if is_clarification:
             return "handle_owner_inquiry_clarification"
 
-        # If owner gave a direct answer to relay
-        if not any(w in msg for w in ["theek", "ok", "acha", "shukriya", "sahi", "hello", "hi", "salam"]):
-            if not state.get("nlu_is_add_product") and not (state.get("nlu_is_price_update") and state.get("nlu_price_product")):
+        # If owner gave a price/discount or text answer (e.g. "400k", "1500", "dedo 400 mein", "10k discount")
+        # and did NOT explicitly ask for a permanent catalog update -> route to relay_owner_answer
+        if not is_explicit_catalog_update and not state.get("nlu_is_add_product"):
+            if not any(w in msg for w in ["theek", "ok", "acha", "shukriya", "sahi", "hello", "hi", "salam"]):
                 return "relay_owner_answer"
 
     # 10. Add product intent
