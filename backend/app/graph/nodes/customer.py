@@ -446,6 +446,8 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
         customer_phone=phone,
         question=state.get("raw_message", ""),
         product_context=product,
+        customer_name=name,
+        conversation_snippet=(state.get("conversation_history") or [])[-8:],
     )
 
     owner_alert = copilot.format_escalation_alert(
@@ -805,6 +807,8 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                     customer_phone=state.get("sender_phone", ""),
                     question=raw_msg_lower,
                     product_context=current_product,
+                    customer_name=current_name,
+                    conversation_snippet=(state.get("conversation_history") or [])[-8:],
                 )
                 escalation_id = esc.escalation_id
                 from app.services.owner_copilot import OwnerCopilotService

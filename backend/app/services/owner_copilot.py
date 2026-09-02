@@ -178,15 +178,11 @@ class OwnerCopilotService:
         if customer_name and isinstance(customer_name, str):
             c_name = customer_name.strip().title()
             if c_name.lower() not in INVALID_NAMES and len(c_name) >= 3 and not re.search(r'\d', c_name):
-                identifier = c_name
+                identifier_full = f"{c_name} ({phone_display})"
             else:
-                short = digits[-4:] if len(digits) >= 4 else (digits or "0000")
-                identifier = f"customer (...{short})"
+                identifier_full = f"Customer ({phone_display})"
         else:
-            short = digits[-4:] if len(digits) >= 4 else (digits or "0000")
-            identifier = f"customer (...{short})"
-
-        identifier_full = f"{identifier} ({phone_display})"
+            identifier_full = f"Customer ({phone_display})"
 
         # 2. Clean Product
         product = extracted_item.strip() if (extracted_item and extracted_item.lower() not in ["firearm", "gun", "pistol", "unknown", "product"]) else None
@@ -227,8 +223,8 @@ class OwnerCopilotService:
         # 5. Price / Rate Inquiries
         if any(w in q_lower for w in ["price", "rate", "kitne ka", "cost"]):
             if product:
-                return f"Haider bhai, {identifier} {product} ka price pooch raha hai. Aaj ka rate kya hai?"
-            return f"Haider bhai, {identifier} rate pooch raha hai: \"{customer_question}\""
+                return f"Haider bhai, {identifier_full} {product} ka price pooch raha hai. Aaj ka rate kya hai?"
+            return f"Haider bhai, {identifier_full} rate pooch raha hai: \"{customer_question}\""
 
         # 6. Availability Inquiries
         if any(w in q_lower for w in ["available", "stock", "hai ya nahi", "mil jayegi", "parhi hai"]):

@@ -52,7 +52,13 @@ def route_owner(state: RabtaGraphState) -> str:
         return "handle_owner_greeting"
 
     # 4. Explicit escalation reply — always takes priority even over active price flow
-    if any(kw in msg for kw in ["ko bolo", "ko batao", "ko keh do"]):
+    RELAY_DECISION_PHRASES = [
+        "ko bolo", "ko batao", "ko keh do", "ko bol do", "ko dedo", "ko de do",
+        "give it to him", "give him", "give for", "tell him", "tell them", "quote him", "offer him",
+        "mein dedo", "mai dedo", "mein de do", "mai de do", "final bol do", "kam kar do", "discount dedo",
+        "discount de do", "final rate", "final price"
+    ]
+    if any(kw in msg for kw in RELAY_DECISION_PHRASES):
         tenant_id_str = state.get("tenant_id", "")
         try:
             tenant_id = uuid.UUID(tenant_id_str)
@@ -97,13 +103,15 @@ def route_owner(state: RabtaGraphState) -> str:
         CLARIFY_KEYWORDS = [
             "kon hai", "koon hai", "kaun hai", "kiska", "kis ka", "kia poochna",
             "kya poochna", "kia note", "kya note", "kya sawal", "kia sawal",
-            "details", "samajh nahi", "kya masla", "kia masla", "kya rate", "kis cheez", "kis model"
+            "details", "samajh nahi", "kya masla", "kia masla", "kya rate", "kis cheez", "kis model",
+            "kia price", "kya price", "price dia", "price bataya", "discount dia", "discount diya",
+            "kin teeno", "konse teen", "what price", "which price", "did you quote", "which guns", "which weapons"
         ]
         is_clarification = any(kw in msg for kw in CLARIFY_KEYWORDS) or ("?" in msg and not is_explicit_catalog_update)
         if is_clarification:
             return "handle_owner_inquiry_clarification"
 
-        # If owner gave a price/discount or text answer (e.g. "400k", "1500", "dedo 400 mein", "10k discount")
+        # If owner gave a price/discount or text answer (e.g. "400k", "1500", "dedo 400 mein", "10k discount", "give it to him for 410k")
         # and did NOT explicitly ask for a permanent catalog update -> route to relay_owner_answer
         if not is_explicit_catalog_update and not state.get("nlu_is_add_product"):
             if not any(w in msg for w in ["theek", "ok", "acha", "shukriya", "sahi", "hello", "hi", "salam"]):
@@ -925,20 +933,54 @@ async def handle_owner_inquiry_clarification(state: RabtaGraphState) -> RabtaGra
         }
 
     latest_esc = pending_escs[-1]
-    cust_phone = latest_esc.customer_phone
-    clean_digits = re.sub(r'[^\d]', '', str(cust_phone or ""))
-    short_phone = clean_digits[-4:] if len(clean_digits) >= 4 else (clean_digits or "0000")
+    cust_phone = str(latest_esc.customer_phone or "").strip()
+    digits = re.sub(r'[^\d]', '', cust_phone)
+    if digits.startswith("92") and len(digits) == 12:
+        phone_display = f"+92 {digits[2:5]} {digits[5:]}"
+    elif digits.startswith("03") and len(digits) == 11:
+        phone_display = f"+92 {digits[1:4]} {digits[4:]}"
+    elif digits:
+        phone_display = f"+{digits}"
+    else:
+        phone_display = cust_phone
+
+    cust_name = latest_esc.customer_name or ""
     product = latest_esc.product_context or "firearm"
     question = latest_esc.customer_question
+    snippet = latest_esc.conversation_snippet or []
+
+    # Format dialogue turns
+    dialogue_lines = []
+    for turn in snippet:
+        speaker = "Customer" if turn.get("role") == "customer" else "Store AI"
+        text = turn.get("text", "").strip()
+        dialogue_lines.append(f"{speaker}: {text}")
+    formatted_transcript = "\n".join(dialogue_lines) if dialogue_lines else f"Customer: {question}"
 
     fallback = (
-        f"Bhai customer (...{short_phone}) ne {product} ke baray mein poochha hai: \"{question}\". "
-        f"Aap jo rate ya discount batayein ge, main customer ko convey kar doonga."
+        f"Haider bhai, customer {cust_name} ({phone_display}) ne {product} ke baray mein poochha tha: \"{question}\". "
+        f"Aap jo rate ya discount batayein ge main customer ko relay kar doonga."
     )
+
+    scenario_context = (
+        f"Owner (Haider bhai) is asking a question about a pending customer inquiry.\n"
+        f"Customer: {cust_name or 'Buyer'} ({phone_display})\n"
+        f"Product Inquired: {product}\n"
+        f"Customer's Inquiry: '{question}'\n\n"
+        f"=== ACTUAL STORE CHAT TRANSCRIPT WITH CUSTOMER ===\n"
+        f"{formatted_transcript}\n"
+        f"==================================================\n"
+        f"TASK:\n"
+        f"Answer Haider bhai's exact question accurately using the chat transcript above.\n"
+        f"- If he asks what price was quoted ('apne kia price dia / bataya'), state the exact PKR price told to the customer.\n"
+        f"- If he asks which 3 guns/weapons were discussed ('kin teeno me / konse models'), list the exact models shown in the transcript.\n"
+        f"- If he asks whether you gave a discount ('apne discount dia'), clarify that you told the customer you'd confirm with shop management.\n"
+        f"Keep the reply concise, natural, and helpful in polite Pakistani Roman Urdu."
+    )
+
     reply = await _generate_grounded_owner_reply(
-        scenario=f"Owner asked for clarification on pending inquiry from customer (...{short_phone}) asking about {product}: '{question}'. Remind him what was asked.",
+        scenario=scenario_context,
         raw_message=state.get("raw_message", ""),
-        context_details={"customer_phone": f"...{short_phone}", "product": product, "question": question},
         fallback=fallback,
     )
     return {

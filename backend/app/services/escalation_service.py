@@ -16,8 +16,11 @@ class EscalationRecord(BaseModel):
     escalation_id: str
     tenant_id: str
     customer_phone: str
+    customer_name: Optional[str] = None
     customer_question: str
     product_context: Optional[str] = None
+    quoted_price: Optional[str] = None
+    conversation_snippet: Optional[List[Dict[str, str]]] = None
     created_at: float
     last_reminder_at: float
     reminder_stage: int = 0
@@ -89,6 +92,9 @@ class EscalationService:
         customer_phone: str,
         question: str,
         product_context: Optional[str] = None,
+        customer_name: Optional[str] = None,
+        quoted_price: Optional[str] = None,
+        conversation_snippet: Optional[List[Dict[str, str]]] = None,
     ) -> EscalationRecord:
         _load_persisted_escalations()
         for esc in list(_global_escalations.values()):
@@ -103,8 +109,11 @@ class EscalationService:
             escalation_id=esc_id,
             tenant_id=str(tenant_id),
             customer_phone=customer_phone,
+            customer_name=customer_name,
             customer_question=question.strip(),
             product_context=product_context,
+            quoted_price=quoted_price,
+            conversation_snippet=conversation_snippet,
             created_at=time.time(),
             last_reminder_at=time.time(),
             reminder_stage=0,
