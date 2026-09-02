@@ -26,9 +26,11 @@ class EscalationRecord(BaseModel):
     resolved_at: Optional[float] = None
 
 
-_STORAGE_DIR = "/app/backups" if os.path.exists("/app/backups") else os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backups")
-os.makedirs(_STORAGE_DIR, exist_ok=True)
-_STORAGE_FILE = os.path.join(_STORAGE_DIR, "escalations.json")
+_STORAGE_FILE = "/tmp/rabta_escalations.json" if os.name != 'nt' else os.path.join(os.environ.get("TEMP", "C:\\temp"), "rabta_escalations.json")
+try:
+    os.makedirs(os.path.dirname(_STORAGE_FILE), exist_ok=True)
+except Exception:
+    pass
 
 _global_escalations: Dict[str, EscalationRecord] = {}
 
