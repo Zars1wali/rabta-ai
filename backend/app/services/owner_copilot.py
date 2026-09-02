@@ -190,17 +190,26 @@ class OwnerCopilotService:
         # 4. Delivery Charges Inquiries
         if inquiry_type == "delivery" or any(w in q_lower for w in ["deliver", "charges", "bhej", "shipping", "courier"]):
             # Build location string: "Lahore, DHA Phase 5 Street 7" or just "Lahore"
-            if city and customer_address:
-                location = f"{city}, {customer_address}"
-            elif city:
-                location = city
-            else:
-                location = None
+            loc_parts = []
+            if city:
+                loc_parts.append(city)
+            if customer_address and customer_address.lower() != (city or "").lower():
+                loc_parts.append(customer_address)
+            location = ", ".join(loc_parts) if loc_parts else "Not specified"
 
-            # Build full identifier with phone
-            phone_clean = re.sub(r'[^\d]', '', str(customer_phone or ""))
-            phone_short = f"(+92{phone_clean[-10:]}" if len(phone_clean) >= 10 else customer_phone
-            identifier_full = f"{identifier} — {phone_short}"
+            # Clean and format phone number properly (preserves international & local numbers)
+            phone_raw = str(customer_phone or "").strip()
+            digits = re.sub(r'[^\d]', '', phone_raw)
+            if digits.startswith("92") and len(digits) == 12:
+                phone_display = f"+92 {digits[2:5]} {digits[5:]}"
+            elif digits.startswith("03") and len(digits) == 11:
+                phone_display = f"+92 {digits[1:4]} {digits[4:]}"
+            elif digits:
+                phone_display = f"+{digits}"
+            else:
+                phone_display = phone_raw
+
+            identifier_full = f"{identifier} ({phone_display})"
 
             if location and product:
                 return (f"Haider bhai, {identifier_full}\n"
