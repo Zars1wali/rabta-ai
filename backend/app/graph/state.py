@@ -59,6 +59,7 @@ class RabtaGraphState(TypedDict, total=False):
     nlu_extracted_category: Optional[str]  # category extracted for browse (e.g. "rifles", "pistols")
     nlu_extracted_city: Optional[str]
     nlu_extracted_product: Optional[str]
+    nlu_extracted_products: Optional[list]   # list of ALL products named in one message (e.g. voice listing multiple guns)
     nlu_extracted_name: Optional[str]
     nlu_is_price_update: bool
     nlu_price_product: Optional[str]

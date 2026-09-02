@@ -299,9 +299,10 @@ Task:
    - "extracted_product": specific firearm model or brand mentioned (e.g. "Glock 19X", "Taurus PT92", "Colt M4"). If customer said a category ("rifles", "pistols"), this should be null.
    - "extracted_category": category keyword if customer asked about a class of firearms. E.g. "rifles dekhaye" -> "rifle", "pistols available hain?" -> "pistol", "shotguns" -> "shotgun". Null if asking for a specific model.
    - "extracted_name": customer personal name ONLY IF they explicitly introduced themselves (e.g. "Mera naam Usman hai" -> "Usman", "I am Ali" -> "Ali"). Null otherwise. DO NOT extract cities, firearms, or common words as names.
+   - "extracted_products": LIST of ALL specific firearm models/brands mentioned in this message (e.g. if customer says "Beretta, Canik aur Glock ki pic bhejo" -> ["Beretta 92FS", "Canik TP9 Sub Elite", "Glock 19"]). Empty list [] if no specific models mentioned. This is especially important for voice messages that list multiple products.
 
 Return STRICT JSON only:
-{{"is_delivery_intent": boolean, "is_photo_intent": boolean, "is_browse_intent": boolean, "is_correction_intent": boolean, "is_legal_intent": boolean, "is_order_intent": boolean, "is_greeting": boolean, "extracted_city": string|null, "extracted_product": string|null, "extracted_category": string|null, "extracted_name": string|null}}"""
+{{"is_delivery_intent": boolean, "is_photo_intent": boolean, "is_browse_intent": boolean, "is_correction_intent": boolean, "is_legal_intent": boolean, "is_order_intent": boolean, "is_greeting": boolean, "extracted_city": string|null, "extracted_product": string|null, "extracted_products": list, "extracted_category": string|null, "extracted_name": string|null}}"""
 
         try:
             resp = await client.aio.models.generate_content(
@@ -358,6 +359,9 @@ Return STRICT JSON only:
     extracted_category = result.get("extracted_category")
     city = result.get("extracted_city")
     product = result.get("extracted_product")
+    products_list = result.get("extracted_products") or []
+    if not isinstance(products_list, list):
+        products_list = []
     name = result.get("extracted_name")
 
     # If classified as browse AND no explicit photo keywords — strip photo intent to prevent image loop
@@ -397,8 +401,8 @@ Return STRICT JSON only:
     merged_name = name or state.get("customer_name")
 
     logger.info(
-        "[NLU:customer] delivery=%s photo=%s browse=%s legal=%s corr=%s city=%s prod=%s cat=%s name=%s",
-        delivery_intent, photo_intent, browse_intent, legal_intent, correction_intent, merged_city, merged_product, extracted_category, merged_name,
+        "[NLU:customer] delivery=%s photo=%s browse=%s legal=%s corr=%s city=%s prod=%s prods=%s cat=%s name=%s",
+        delivery_intent, photo_intent, browse_intent, legal_intent, correction_intent, merged_city, merged_product, products_list, extracted_category, merged_name,
     )
 
     return {
@@ -411,6 +415,7 @@ Return STRICT JSON only:
         "nlu_extracted_category": extracted_category,
         "nlu_extracted_city": city,
         "nlu_extracted_product": product,
+        "nlu_extracted_products": products_list,
         "nlu_extracted_name": name,
         # Merge into session state immediately
         "customer_city": merged_city,

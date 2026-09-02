@@ -586,7 +586,12 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         _BRANDS, _refresh_catalog_cache_if_needed,
         _extract_products_from_text, _catalog_cache,
     )
-    is_multi_requested = any(w in raw_msg_lower for w in ["dono", "both", "all", "teeno", "sab", "inke"])
+    # Multi-requested: explicit words OR NLU detected multiple products in one message (e.g. voice listing guns)
+    _nlu_multi = (state.get("nlu_extracted_products") or [])
+    is_multi_requested = (
+        any(w in raw_msg_lower for w in ["dono", "both", "all", "teeno", "sab", "inke"])
+        or len(_nlu_multi) > 1
+    )
     media_urls = None
 
     # Refresh DB-backed catalog cache (no-op if < 5 min old)
@@ -604,27 +609,36 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                 if default_model not in matched_products:
                     matched_products.append(default_model)
 
+    # ── STEP 1.5: NLU-extracted products (highest priority for voice messages) ──
+    # Gemini NLU returns a list of ALL products mentioned in one message.
+    # Use this list directly so "Beretta, Canik aur Glock ki pics bhejo" sends all 3 images.
+    if not matched_products and not is_browse_intent:
+        nlu_prods = state.get("nlu_extracted_products") or []
+        if nlu_prods:
+            matched_products = list(nlu_prods)
+        elif state.get("nlu_extracted_product"):
+            matched_products.append(state.get("nlu_extracted_product"))
+
     # ── STEP 2: Only if current message has NO product/brand at all AND                 ──
     # ──         it's NOT a browse/alternatives request (to prevent re-sending same item) ──
+    # NOTE: History scan is intentionally LIMITED to the LAST BOT TURN only (not all history)
+    # to avoid picking up wrong products from a rifle-list reply when user asked about a pistol.
     if not matched_products and not is_browse_intent:
         history = state.get("conversation_history") or []
+        # Only check the most recent assistant turn — don't scan further back
         for h in reversed(history):
-            # Only scan assistant turns (the bot's last suggestion)
             if h.get("role") in ("assistant", "bot"):
                 h_text = h.get("text", "").lower()
-                matched_products = _extract_products_from_text(h_text, live_catalog)
-                if matched_products:
-                    break
-                for brand, default_model in sorted(_BRANDS.items(), key=lambda x: len(x[0]), reverse=True):
-                    if re.search(rf'\b{re.escape(brand)}\b', h_text):
-                        if default_model not in matched_products:
-                            matched_products.append(default_model)
-                if matched_products:
-                    break
+                history_matches = _extract_products_from_text(h_text, live_catalog)
+                if len(history_matches) == 1:
+                    # Only use history match if it's UNAMBIGUOUS (exactly one product found)
+                    matched_products = history_matches
+                # Never pick from a list of 2+ items from history — too ambiguous
+                break  # Only check the single most-recent bot turn
 
-    # ── STEP 3: Fallback to current_product / NLU product ONLY if not a browse request ───
+    # ── STEP 3: Fallback to current_product ONLY if not a browse request ───
     if not matched_products and not is_browse_intent:
-        fallback_p = current_product or state.get("nlu_extracted_product")
+        fallback_p = current_product
         if fallback_p:
             matched_products.append(fallback_p)
 
@@ -649,16 +663,36 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                     targets_to_fetch = matched_products if is_multi_requested else [matched_products[0]]
                     
                     for target_p in targets_to_fetch:
-                        tokens = [tok for tok in target_p.split() if len(tok) >= 3]
-                        conditions = [CatalogItem.name.ilike(f"%{tok}%") for tok in tokens] if tokens else [CatalogItem.name.ilike(f"%{target_p}%")]
-                        
-                        q = select(CatalogItem).where(
-                            CatalogItem.tenant_id == t_uuid,
-                            *conditions
-                        ).limit(1)
-                        res = await _session.execute(q)
-                        item = res.scalar_one_or_none()
+                        tokens = [tok.lower() for tok in target_p.split() if len(tok) >= 2]
 
+                        # ── SCORED BEST-MATCH lookup (OR tokens, ranked by match count) ──
+                        # Avoids the AND-all-tokens trap where "G3 POF" accidentally
+                        # matched Vepr Molot because history listed it in the same message.
+                        # Strategy: fetch up to 20 candidates that match ANY token, then
+                        # score each by how many tokens appear in the name, pick the winner.
+                        item = None
+                        if tokens:
+                            from sqlalchemy import or_, func as sqlfunc
+                            any_conditions = [CatalogItem.name.ilike(f"%{tok}%") for tok in tokens]
+                            q_candidates = select(CatalogItem).where(
+                                CatalogItem.tenant_id == t_uuid,
+                                or_(*any_conditions)
+                            ).limit(20)
+                            res_cands = await _session.execute(q_candidates)
+                            candidates = res_cands.scalars().all()
+
+                            def _score(catalog_item) -> int:
+                                name_lower = (catalog_item.name or "").lower()
+                                return sum(1 for tok in tokens if tok in name_lower)
+
+                            if candidates:
+                                # Pick the candidate with the MOST token matches
+                                item = max(candidates, key=_score)
+                                # Sanity check: must match at least half the tokens
+                                if _score(item) < max(1, len(tokens) // 2):
+                                    item = None
+
+                        # Fallback: whole-phrase substring match
                         if not item:
                             q2 = select(CatalogItem).where(
                                 CatalogItem.tenant_id == t_uuid,
