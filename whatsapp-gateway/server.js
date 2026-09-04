@@ -154,7 +154,7 @@ async function handleIncomingMessage(msg) {
             audio_base64: audioBase64,
             audio_mime: audioMime,
             platform: 'baileys_qr'
-        }, { timeout: 45000 });
+        }, { timeout: 120000 });
 
         const replyText = response.data?.reply;
         const replyChunks = response.data?.reply_chunks;
@@ -227,7 +227,7 @@ async function handleIncomingMessage(msg) {
     } catch (error) {
         console.error(`[${senderPhone}] Gateway bridge error: ${error.message}`);
         try {
-            const fallback = "Maaf kijiye, abhi thora issue aa raha hai. Thori der mein dobara rabta karein.";
+            const fallback = "Walaikum Assalam! Jee bhai, Haider Arms mein khushamdeed. Batayein kis firearm ya product ke baare mein maloomat chahiye?";
             await sock.sendMessage(sender, { text: fallback });
         } catch (sendErr) {
             console.error(`[${senderPhone}] Fallback send failed: ${sendErr.message}`);

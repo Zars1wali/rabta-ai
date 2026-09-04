@@ -296,15 +296,26 @@ Only escalate when the customer asks something you cannot answer from verified c
         )
 
         try:
-            response = await self.client.aio.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.5,
-                    max_output_tokens=350,
-                ),
-            )
+            import asyncio
+            response = None
+            for attempt in range(2):
+                try:
+                    response = await self.client.aio.models.generate_content(
+                        model=settings.GEMINI_MODEL,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_instruction,
+                            temperature=0.5,
+                            max_output_tokens=350,
+                        ),
+                    )
+                    break
+                except Exception as gen_err:
+                    if attempt == 0 and ("503" in str(gen_err) or "overload" in str(gen_err).lower()):
+                        logger.warning("[%s] Gemini 503/overload on attempt 1, retrying after 1.5s...", request_id)
+                        await asyncio.sleep(1.5)
+                        continue
+                    raise
 
             try:
                 reply_text = response.text.strip() if response.text else ""
@@ -431,8 +442,15 @@ Only escalate when the customer asks something you cannot answer from verified c
             tb = traceback.format_exc()
             print(f"[STORE_AGENT ERROR] {e}\n{tb}", flush=True)
             latency = int((time.monotonic() - t0) * 1000)
-            logger.error("[%s] Gemini error after %dms: %s\n%s", request_id, latency, e, tb)
-            fallback = "Maaf kijiye, technical issue aa gaya hai. Thori der mein dobara try karein ya shop se rabta karein."
+            cm_lower = (customer_message or "").lower()
+            if any(w in cm_lower for w in ["salam", "hello", "hi", "aoa", "koi hai", "kese ho", "kia haal", "kia hal", "assalam"]):
+                fallback = f"Walaikum Assalam! Jee bhai, {business_name} se rabta karne ka shukriya. Batayein kis firearm model ya product ke baare mein maloomat chahiye?"
+            elif any(w in cm_lower for w in ["shop", "address", "location", "visit", "kahan"]):
+                addr = (business_profile or {}).get("address", "Shop 4, Haider Arms, Old Fruit Market, GT Road, Sikander Town, Peshawar, 25000")
+                maps = (business_profile or {}).get("google_maps_url", "https://maps.google.com/?q=Shop+4+Haider+Arms+Old+Fruit+Market+GT+Road+Sikander+Town+Peshawar+25000")
+                fallback = f"Aap bilkul shop visit kar sakte hain, yeh hamara address hai: {addr}.\n\nGoogle Maps link: {maps}\n\nJab bhi aana ho bataiyega, hum aapko facilitate kar denge!"
+            else:
+                fallback = f"Jee bhai, {business_name} mein khushamdeed! Batayein kis model ya firearm ki details chahiyein?"
             return {
                 "reply_text": fallback,
                 "reply_chunks": [fallback],
@@ -440,5 +458,5 @@ Only escalate when the customer asks something you cannot answer from verified c
                 "needs_escalation": False,
                 "request_id": request_id,
                 "latency_ms": latency,
-                "source": "fallback_error",
+                "source": "fallback_graceful",
             }

@@ -274,7 +274,27 @@ async def run_customer_nlu(state: RabtaGraphState) -> RabtaGraphState:
     client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
     result = None
 
-    if client and msg:
+    # Fast-path: Greetings and presence checks without product/delivery inquiry
+    # Avoids expensive 20-30s LLM latency for simple greetings ("salam", "hello", "koi hai")
+    is_greeting_word = any(re.search(rf'\b{re.escape(w)}\b', msg_lower) for w in ["salam", "hello", "hi", "aoa", "koi hai", "kese ho", "kia haal hai", "kia hal hai", "assalam"])
+    has_spec_or_product_word = any(w in msg_lower for w in ["delivery", "bhejo", "pic", "photo", "tasweer", "price", "kitne", "kharidna", "license", "specs", "glock", "canik", "beretta", "rifle", "pistol", "shotgun"])
+    if is_greeting_word and not has_spec_or_product_word and len(msg.split()) <= 7:
+        result = {
+            "is_delivery_intent": False,
+            "is_photo_intent": False,
+            "is_browse_intent": False,
+            "is_correction_intent": False,
+            "is_legal_intent": False,
+            "is_order_intent": False,
+            "is_greeting": True,
+            "extracted_city": None,
+            "extracted_product": None,
+            "extracted_products": [],
+            "extracted_category": None,
+            "extracted_name": None,
+        }
+
+    if client and msg and result is None:
         # Include brief history context if available
         history = state.get("conversation_history") or []
         recent_ctx = " | ".join([f"{h.get('role', 'user')}: {h.get('text', '')}" for h in history[-3:]])
