@@ -427,8 +427,11 @@ Only escalate when the customer asks something you cannot answer from verified c
             }
 
         except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"[STORE_AGENT ERROR] {e}\n{tb}", flush=True)
             latency = int((time.monotonic() - t0) * 1000)
-            logger.error("[%s] Gemini error after %dms: %s", request_id, latency, e, exc_info=True)
+            logger.error("[%s] Gemini error after %dms: %s\n%s", request_id, latency, e, tb)
             fallback = "Maaf kijiye, technical issue aa gaya hai. Thori der mein dobara try karein ya shop se rabta karein."
             return {
                 "reply_text": fallback,

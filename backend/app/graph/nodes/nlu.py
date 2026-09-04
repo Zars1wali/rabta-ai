@@ -142,8 +142,7 @@ _BRANDS: Dict[str, str] = {
 # they mean "browse/show me options" not "send me a product photo".
 # For photo detection, at least one of these explicit words must appear.
 _PHOTO_WORDS = [
-    "pic", "picture", "photo", "tasweer", "image",
-    "share keren", "share karein", "bhejo",
+    "pic", "picture", "photo", "tasweer", "image", "tasvir",
 ]
 
 # Browse/list request keywords — customer wants to SEE OPTIONS or ALTERNATIVES.

@@ -578,16 +578,18 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     # raw keyword matching ("pic", "photo", etc.) will FAIL because those words are in Arabic
     # script, not Latin. NLU Gemini reads the Arabic correctly and sets nlu_photo_intent=True.
     # We must trust NLU here, not raw text keywords.
-    _EXPLICIT_PHOTO_WORDS = ["pic", "picture", "photo", "tasweer", "image", "bhejo", "share karein", "share keren"]
+    _EXPLICIT_PHOTO_WORDS = ["pic", "picture", "photo", "tasweer", "image", "tasvir"]
     has_explicit_photo_keyword = any(kw in raw_msg_lower for kw in _EXPLICIT_PHOTO_WORDS)
 
     # Browse intent: customer asking to see a category or alternatives
     is_browse_intent = bool(state.get("nlu_browse_intent"))
 
+    # Location / address queries must NEVER trigger a photo request
+    is_location_query = any(w in raw_msg_lower for w in ["location", "address", "shop", "visit", "kahan", "kidhar", "map"])
+
     is_photo_requested = (
-        bool(state.get("nlu_photo_intent"))   # ← NLU already handled Arabic script correctly
-        or is_correction
-        or has_explicit_photo_keyword          # fallback: plain text "pic"/"photo" keywords
+        (bool(state.get("nlu_photo_intent")) or is_correction or has_explicit_photo_keyword)
+        and not is_location_query
     )
 
     # Contextual product resolution:
