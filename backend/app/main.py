@@ -76,6 +76,25 @@ async def _conversation_cleanup_loop():
             logger.error("[Cleanup] Error during conversation cleanup: %s", exc, exc_info=True)
 
 
+async def _polite_followup_loop():
+    """Background worker: periodically scans for quiet conversations (idle 10-15 mins)
+    and sends a single polite, grounded follow-up message with official social channels.
+    Runs every 60 seconds.
+    """
+    from app.services.followup_service import followup_service
+    FOLLOWUP_SCAN_INTERVAL = 60  # seconds
+
+    while True:
+        try:
+            await asyncio.sleep(FOLLOWUP_SCAN_INTERVAL)
+            await followup_service.scan_and_process_followups(idle_minutes=10.0, max_hours=24.0)
+        except asyncio.CancelledError:
+            logger.info("[FollowUp] Follow-up scheduler cancelled.")
+            break
+        except Exception as exc:
+            logger.error("[FollowUp] Error in follow-up worker loop: %s", exc, exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Initializing RABTA AI Backend Services...")
@@ -94,6 +113,10 @@ async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(_conversation_cleanup_loop())
     logger.info("[Cleanup] 48h conversation history cleanup scheduler started.")
 
+    # Start background polite follow-up loop (scans every 60s)
+    followup_task = asyncio.create_task(_polite_followup_loop())
+    logger.info("[FollowUp] Polite conversation follow-up scheduler started.")
+
     yield
 
     try:
@@ -103,8 +126,10 @@ async def lifespan(app: FastAPI):
         pass
 
     cleanup_task.cancel()
+    followup_task.cancel()
     try:
         await cleanup_task
+        await followup_task
     except asyncio.CancelledError:
         pass
     logger.info("Shutting down RABTA AI Backend...")

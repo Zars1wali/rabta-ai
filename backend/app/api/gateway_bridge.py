@@ -241,6 +241,28 @@ async def gateway_metrics():
     }
 
 
+class FollowUpTriggerPayload(BaseModel):
+    idle_minutes: float = 10.0
+    max_hours: float = 24.0
+    tenant_id: Optional[str] = None
+    force_conversation_id: Optional[str] = None
+
+
+@router.post("/trigger-followups")
+async def trigger_followups(payload: FollowUpTriggerPayload = FollowUpTriggerPayload()):
+    """Manually trigger or test polite follow-up scan for idle conversations."""
+    from app.services.followup_service import followup_service
+    t_uuid = uuid.UUID(payload.tenant_id) if payload.tenant_id else None
+    c_uuid = uuid.UUID(payload.force_conversation_id) if payload.force_conversation_id else None
+    processed = await followup_service.scan_and_process_followups(
+        idle_minutes=payload.idle_minutes,
+        max_hours=payload.max_hours,
+        tenant_id=t_uuid,
+        force_conversation_id=c_uuid,
+    )
+    return {"status": "ok", "processed_count": len(processed), "followups": processed}
+
+
 def _reply(text: str, biz_name: str = "Haider Arms") -> Dict[str, Any]:
     return {
         "reply": text,

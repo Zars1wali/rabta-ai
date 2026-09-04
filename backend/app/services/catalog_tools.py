@@ -151,3 +151,37 @@ async def get_product_photos(
                 })
 
         return photos
+
+
+async def get_business_profile(tenant_id: str) -> Dict[str, Any]:
+    """
+    Retrieve verified business profile, physical address, Google Maps link,
+    and official social media channels (Instagram, YouTube) from the database.
+    
+    Args:
+        tenant_id: UUID string of the business tenant.
+    """
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {}
+
+    from app.models.database import Tenant
+    async with AsyncSessionLocal() as session:
+        stmt = select(Tenant).where(Tenant.id == t_uuid)
+        res = await session.execute(stmt)
+        tenant = res.scalar_one_or_none()
+        if not tenant:
+            return {}
+        prof = tenant.business_profile or {}
+        # Also inject business name and phone if available
+        return {
+            "business_name": prof.get("business_name") or tenant.name,
+            "address": prof.get("address") or "",
+            "city": prof.get("city") or "",
+            "postal_code": prof.get("postal_code") or "",
+            "instagram_url": prof.get("instagram_url") or "",
+            "youtube_url": prof.get("youtube_url") or "",
+            "google_maps_url": prof.get("google_maps_url") or "",
+            "business_phone": tenant.business_phone or "",
+        }

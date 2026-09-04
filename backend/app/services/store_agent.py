@@ -21,16 +21,40 @@ class WhatsAppStoreAgent:
     # Master Sales Intelligence Prompt (23-Point Consultative Framework)
     # ------------------------------------------------------------------
 
-    def _build_system_prompt(self, business_name: str, industry: str, catalog_context: str, spec_context: str = "") -> str:
+    def _build_system_prompt(
+        self,
+        business_name: str,
+        industry: str,
+        catalog_context: str,
+        spec_context: str = "",
+        business_profile: Optional[Dict[str, Any]] = None,
+    ) -> str:
         spec_section = f"\n=== OFFICIAL MANUFACTURER SPECS (LOOKED UP) ===\n{spec_context}\n" if spec_context else ""
+        
+        prof = business_profile or {}
+        address = prof.get("address", "")
+        city = prof.get("city", "")
+        instagram_url = prof.get("instagram_url", "")
+        youtube_url = prof.get("youtube_url", "")
+        maps_url = prof.get("google_maps_url", "")
+
+        profile_section = f"""
+=== VERIFIED BUSINESS PROFILE & OFFICIAL CHANNELS (DATABASE TRUTH) ===
+Official Physical Address: {address}
+City: {city}
+Google Maps Navigation: {maps_url}
+Official Instagram: {instagram_url}
+Official YouTube Channel: {youtube_url}
+""" if (address or instagram_url or youtube_url) else ""
+
         return f"""You are the expert Sales Consultant for {business_name}, a premier dealer in Pakistan ({industry}).
 You communicate with buyers on WhatsApp using a consultative, relationship-first approach.
-
+{profile_section}
 === 1. CORE BEHAVIOR & SALES PROCESS ===
 - You are an expert, knowledgeable firearms sales consultant in Pakistan. Be warm, natural, and helpful.
 - For every customer message:
   1. Carefully read what the customer is actually asking or saying in THIS conversation.
-  2. Answer directly based on verified inventory and specs below.
+  2. Answer directly based on verified inventory, business profile, and specs.
   3. Keep responses natural, conversational, and helpful.
 - CATEGORY, ORIGIN & CALIBER INTELLIGENCE:
   * When asked about a specific origin (e.g. "Russian rifles", "American guns", "Austrian pistols", "Turkish shotguns"):
@@ -49,7 +73,20 @@ You communicate with buyers on WhatsApp using a consultative, relationship-first
   * Acknowledge positively with the price: "Zabardast choice hai, Glock 19X Austria brand new available hai PKR 550,000 mein. Aap shop visit karke purchase karna chahenge ya delivery chahiye?"
   * NEVER assume they want delivery or assume their city unless they explicitly mentioned it.
 
-=== 2. STRICT CONVERSATION RULES ===
+=== 2. STORE LOCATION, PHYSICAL VISIT & SOCIAL MEDIA CHANNELS ===
+- When customer asks about physical location, shop address, or visiting the store in ANY phrasing (e.g. "shop kahan hai", "location bhejo", "visit karna hai address do", "dukan kidhar hai", "peshawar mein kahan hain", "store address kya hai"):
+  * Answer directly, warmly and accurately with the verified physical address: "{address}"
+  * Share the Google Maps link naturally so they can navigate easily: "{maps_url}"
+  * Welcoming tone: "Aap bilkul shop visit kar sakte hain, yeh hamara address hai: {address}"
+  * NEVER claim you don't know the address, and NEVER escalate shop visit/address inquiries to management!
+- When customer asks about social media channels, videos, reviews, or Instagram/YouTube in ANY phrasing (e.g. "instagram link do", "insta id kya hai", "youtube channel hai?", "videos kahan dekh sakta hoon", "online page dikhao"):
+  * Answer warmly and share the verified links directly from the profile:
+    - Instagram: {instagram_url}
+    - YouTube: {youtube_url}
+  * If they specifically asked for Instagram, give the Instagram link. If YouTube/videos, give the YouTube link. If general social channels, share both!
+  * NEVER invent URLs or use placeholders.
+
+=== 3. STRICT CONVERSATION RULES ===
 1. NO HALLUCINATION OF NAMES OR CITIES:
    - NEVER invent or guess a customer name. Only use a name if the customer explicitly introduced themselves (e.g. "Mera naam Usman hai"). Otherwise do NOT use any name.
    - NEVER invent or guess a city. Only mention a city if the customer explicitly stated it in their message.
@@ -72,7 +109,7 @@ You communicate with buyers on WhatsApp using a consultative, relationship-first
 5. PAKISTANI ROMAN URDU ONLY:
    - Zero Devanagari/Hindi script. Natural Pakistani Roman Urdu (English letters) or Urdu script.
 
-=== 3. WHEN TO ESCALATE TO MANAGEMENT (STRICT RULES) ===
+=== 4. WHEN TO ESCALATE TO MANAGEMENT (STRICT RULES) ===
 Only escalate when the customer asks something you cannot answer from verified catalog:
 - Delivery charges for a specific city: If customer asks "delivery charges kya hain?" without stating their city, ask: "Delivery bilkul arrange ho sakti hai. Aap kis city mein mangwana chahte hain?"
 - Once the customer names their city for delivery (e.g. "Islamabad delivery chahiye"):
@@ -164,10 +201,20 @@ Only escalate when the customer asks something you cannot answer from verified c
         conversation_history: Optional[List[Dict[str, str]]] = None,
         image_bytes: Optional[bytes] = None,
         image_base64: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        business_profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Runs the Gemini sales agent with strictly grounded context."""
         request_id = str(uuid.uuid4())[:8]
         t0 = time.monotonic()
+
+        # Load business profile dynamically from database if not provided
+        if tenant_id and not business_profile:
+            try:
+                from app.services.catalog_tools import get_business_profile
+                business_profile = await get_business_profile(tenant_id)
+            except Exception as e:
+                logger.warning("[%s] Could not load business_profile: %s", request_id, e)
 
         # Check if customer is asking a detailed technical spec question about a catalog item
         spec_context = ""
@@ -211,6 +258,7 @@ Only escalate when the customer asks something you cannot answer from verified c
             industry=industry,
             catalog_context=catalog_context,
             spec_context=spec_context,
+            business_profile=business_profile,
         )
 
         contents = []
@@ -329,8 +377,11 @@ Only escalate when the customer asks something you cannot answer from verified c
                             extracted_item = default_model
                             break
 
-            # Only escalate delivery if the customer EXPLICITLY asked for delivery
-            is_delivery_asked = any(k in customer_message.lower() for k in ["delivery", "deliver", "bhej", "charges", "charges honge", "kitne din"])
+            # Only escalate delivery if the customer EXPLICITLY asked for delivery (not store visit or address)
+            is_delivery_asked = (
+                any(k in customer_message.lower() for k in ["delivery", "deliver", "bhej", "charges", "charges honge", "kitne din"])
+                and not any(k in customer_message.lower() for k in ["visit", "shop", "dukan", "address", "location", "kahan", "kidhar", "insta", "youtube"])
+            )
             if is_delivery_asked and extracted_city:
                 needs_escalation = True
 

@@ -540,6 +540,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         catalog_context=state.get("catalog_context", ""),
         conversation_history=state.get("conversation_history") or [],
         image_base64=state.get("image_base64"),
+        tenant_id=state.get("tenant_id"),
     )
 
     reply_text = reply_data.get("reply_text", "")

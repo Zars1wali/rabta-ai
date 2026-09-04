@@ -64,6 +64,27 @@ async def get_or_create_conversation(
     return conversation
 
 
+def is_clean_resolution(text: str) -> bool:
+    """Check if customer message is a clear resolution / goodbye."""
+    import re
+    t = (text or "").lower().strip()
+    t = re.sub(r'[^\w\s]', '', t).strip()
+    if not t:
+        return False
+    
+    clean_phrases = [
+        "shukriya", "bohot shukriya", "bahut shukriya", "shukria",
+        "thanks", "thank you", "thx", "many thanks",
+        "allah hafiz", "allahhafiz", "khuda hafiz", "khudahafiz",
+        "bye", "goodbye", "good bye", "see you",
+        "theek hai shukriya", "sahi hai shukriya", "ok shukriya", "ok thanks"
+    ]
+    words = t.split()
+    if len(words) <= 5 and any(cp in t for cp in clean_phrases):
+        return True
+    return False
+
+
 async def append_message(
     session: AsyncSession,
     conversation_id: uuid.UUID,
@@ -85,10 +106,17 @@ async def append_message(
     )
     session.add(msg)
 
-    # Update conversation last_message_at
+    # Update conversation timestamps and resolution flags
     conv = await session.get(Conversation, conversation_id)
     if conv:
-        conv.last_message_at = datetime.utcnow()
+        now = datetime.utcnow()
+        conv.last_message_at = now
+        if sender_type == "customer":
+            conv.last_customer_message_at = now
+            if is_clean_resolution(content_text):
+                conv.is_resolved_cleanly = True
+            else:
+                conv.is_resolved_cleanly = False
 
     await session.commit()
     await session.refresh(msg)

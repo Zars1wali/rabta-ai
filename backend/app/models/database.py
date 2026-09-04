@@ -28,6 +28,7 @@ class Tenant(Base):
     ai_persona_config = Column(JSON, default={})  # tone, language preferences, greeting
     active_takeover_customer_phone = Column(String(30), nullable=True)  # Customer currently in human takeover
     is_ai_paused = Column(Boolean, default=False)  # Master pause switch
+    business_profile = Column(JSON, default=dict)  # Address, Google Maps, Instagram, YouTube
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -80,6 +81,10 @@ class Conversation(Base):
     channel = Column(String(50), default="whatsapp")  # whatsapp, instagram, tiktok
     status = Column(String(50), default="active")  # active, human_takeover, resolved
     last_message_at = Column(DateTime, default=datetime.utcnow)
+    last_customer_message_at = Column(DateTime, default=datetime.utcnow)
+    has_followed_up = Column(Boolean, default=False)
+    followed_up_at = Column(DateTime, nullable=True)
+    is_resolved_cleanly = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="conversations")
