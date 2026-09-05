@@ -2,7 +2,7 @@ import time
 import uuid
 import base64
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from pydantic import BaseModel
 from fastapi import APIRouter
 
