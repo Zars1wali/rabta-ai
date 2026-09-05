@@ -1003,14 +1003,16 @@ async def owner_fallback(state: RabtaGraphState) -> RabtaGraphState:
     """Natural language interpretation of owner messages via Rabta Owner Intelligence Brain."""
     from app.db.session import AsyncSessionLocal
     from app.services.owner_copilot import OwnerCopilotService
-    from app.graph.nodes.nlu import refresh_catalog_cache_async
-
     copilot = OwnerCopilotService()
     tenant_id_str = state.get("tenant_id", "")
     try:
         tenant_id = uuid.UUID(tenant_id_str)
     except (ValueError, AttributeError):
         tenant_id = uuid.uuid4()
+
+    async def _invalidate():
+        from app.api.gateway_bridge import invalidate_catalog_cache
+        invalidate_catalog_cache(tenant_id_str)
 
     async with AsyncSessionLocal() as session:
         res = await copilot.handle_owner_natural_message(
@@ -1020,7 +1022,7 @@ async def owner_fallback(state: RabtaGraphState) -> RabtaGraphState:
             message_text=state.get("raw_message", ""),
             conversation_history=state.get("conversation_history") or [],
             image_base64=state.get("image_base64"),
-            on_cache_invalidate=refresh_catalog_cache_async,
+            on_cache_invalidate=_invalidate,
         )
 
     reply = res.get("message") or "Jee Haider bhai note kar liya."
