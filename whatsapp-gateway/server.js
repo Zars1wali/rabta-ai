@@ -128,15 +128,30 @@ async function handleIncomingMessage(msg) {
         }
     }
 
-    let lastKnownOwnerJid = global._lastKnownOwnerJid || null;
-    const OWNER_MATCHERS = ['3169827188', '61379545444551', '3140922056', '79938417877160'];
+    // Strict Single-Owner Enforcement: Only 1 active owner exists at any time
+    const OWNER_PHONE = process.env.OWNER_PHONE || '+923169827188';
+    const OWNER_LID = process.env.OWNER_LID || '61379545444551';
+    const OWNER_MATCHERS = [
+        OWNER_PHONE.replace(/[^\d]/g, '').slice(-10), // e.g. '3169827188'
+        OWNER_LID.replace(/[^\d]/g, ''),               // e.g. '61379545444551'
+    ].filter(Boolean);
+
+    // Ensure stale/previous owner JID is never used
+    if (global._lastKnownOwnerJid && !OWNER_MATCHERS.some(m => global._lastKnownOwnerJid.includes(m))) {
+        global._lastKnownOwnerJid = `${OWNER_LID}@lid`;
+    }
+    if (!global._lastKnownOwnerJid) {
+        global._lastKnownOwnerJid = `${OWNER_LID}@lid`;
+    }
+
     const isOwnerMsg = OWNER_MATCHERS.some(matcher => senderPhone.includes(matcher) || sender.includes(matcher));
     if (isOwnerMsg) {
         global._lastKnownOwnerJid = sender;
-        lastKnownOwnerJid = sender;
-        console.log(`👑 [BOSS] Recognized Owner from JID: ${sender}`);
+        console.log(`👑 [BOSS] Recognized Active Owner: ${sender}`);
+    } else {
+        console.log(`👤 [CUSTOMER] Inbound message from: ${senderPhone}`);
     }
-    const effectiveSenderPhone = isOwnerMsg ? '+923169827188' : senderPhone;
+    const effectiveSenderPhone = isOwnerMsg ? OWNER_PHONE : senderPhone;
 
     const promptText = textMessage
         || (imageBase64 ? (isOwnerMsg ? 'Add new product from photo' : 'Ye photo mein konsi product hai aur iski price kya hai?') : '')
