@@ -129,14 +129,14 @@ async function handleIncomingMessage(msg) {
     }
 
     let lastKnownOwnerJid = global._lastKnownOwnerJid || null;
-    const OWNER_MATCHERS = ['3140922056', '79938417877160'];
+    const OWNER_MATCHERS = ['3169827188', '61379545444551', '3140922056', '79938417877160'];
     const isOwnerMsg = OWNER_MATCHERS.some(matcher => senderPhone.includes(matcher) || sender.includes(matcher));
     if (isOwnerMsg) {
         global._lastKnownOwnerJid = sender;
         lastKnownOwnerJid = sender;
-        console.log(`👑 [BOSS] Recognized Haider bhai from JID: ${sender}`);
+        console.log(`👑 [BOSS] Recognized Owner from JID: ${sender}`);
     }
-    const effectiveSenderPhone = isOwnerMsg ? '+923140922056' : senderPhone;
+    const effectiveSenderPhone = isOwnerMsg ? '+923169827188' : senderPhone;
 
     const promptText = textMessage
         || (imageBase64 ? (isOwnerMsg ? 'Add new product from photo' : 'Ye photo mein konsi product hai aur iski price kya hai?') : '')
