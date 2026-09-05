@@ -575,9 +575,19 @@ Return STRICT JSON only:
                 result = {"intent": "CASUAL_CHAT"}
 
     intent = result.get("intent", "CASUAL_CHAT")
-    in_add_flow = state.get("product_pending_state") in ("AWAITING_DETAILS", "AWAITING_PRICE")
+    CANCEL_WORDS = ["cancel", "nahi", "no", "mat karo", "stop", "band", "chhoro", "rehne do", "add nahi", "chutiye", "pagal"]
+    is_cancel = any(w in msg_lower for w in CANCEL_WORDS)
     is_add_keyword = any(kw in msg_lower for kw in ["add product", "product add", "naya product", "new product", "item add", "add item", "new rifle", "naya item"])
-    is_add_product = (intent == "ADD_PRODUCT" or is_add_keyword or in_add_flow)
+    has_price_val = bool(re.search(r'\b\d+(?:\.\d+)?\s*(?:k|lakh|lac)?\b', msg_lower))
+
+    # Only remain in add flow if user is actually providing price/details and didn't cancel/ask something else
+    in_add_flow = (
+        state.get("product_pending_state") in ("AWAITING_DETAILS", "AWAITING_PRICE")
+        and not is_cancel
+        and has_price_val
+        and intent not in ("INFO_REQUEST", "CASUAL_CHAT")
+    )
+    is_add_product = (intent == "ADD_PRODUCT" or is_add_keyword or in_add_flow) and not is_cancel
     is_price_update = (intent == "PRICE_UPDATE" and bool(result.get("new_price")) and not is_add_product)
     
     CATALOG_INFO_KEYWORDS = [

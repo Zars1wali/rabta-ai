@@ -35,37 +35,50 @@ def route_owner(state: RabtaGraphState) -> str:
     """
     msg = (state.get("raw_message") or "").strip().lower()
     ps = state.get("price_pending_state")
+    prod_state = state.get("product_pending_state")
 
     # 1. Slash command
     if msg.startswith("/"):
         return "handle_owner_command"
 
-    # 2. Confirmation replies in pending flows
+    # 2. Cancel keywords explicitly abort any pending state
+    CANCEL_WORDS = ["cancel", "nahi", "no", "mat karo", "stop", "band", "chhoro", "rehne do", "add nahi", "chutiye", "pagal"]
+    if any(w in msg for w in CANCEL_WORDS):
+        state["product_pending_state"] = None
+        state["product_pending_item"] = None
+        state["price_pending_state"] = None
+        return "owner_fallback"
+
+    # 3. Confirmation replies in pending flows ONLY if expecting confirmation
     CONFIRM_WORDS = ["haan", "han", "yes", "confirm", "add kardo", "add kar do", "bilkul", "zaroor"]
-    CANCEL_WORDS = ["cancel", "nahi", "no", "mat karo", "stop", "band"]
-    is_confirmation_reply = any(w in msg for w in CONFIRM_WORDS + CANCEL_WORDS)
-    if state.get("product_pending_state") == "AWAITING_CONFIRMATION" and is_confirmation_reply:
+    if prod_state == "AWAITING_CONFIRMATION" and any(w in msg for w in CONFIRM_WORDS):
         return "handle_confirmation"
-    if state.get("product_pending_state") in ("AWAITING_PRICE", "AWAITING_DETAILS"):
-        return "handle_owner_add_product"
     if ps == "AWAITING_DISAMBIGUATION":
         return "handle_disambiguation"
-    if ps == "AWAITING_CONFIRMATION" and is_confirmation_reply:
+    if ps == "AWAITING_CONFIRMATION" and any(w in msg for w in CONFIRM_WORDS):
         return "handle_confirmation"
 
-    # 3. Direct photo vision intake (if owner sent an image without text, or with explicit add intent)
+    # 4. If in staged add-product flow, ONLY stay if message actually provides a price/details
+    if prod_state in ("AWAITING_PRICE", "AWAITING_DETAILS"):
+        has_price = bool(re.search(r'\b\d+(?:\.\d+)?\s*(?:k|lakh|lac)?\b', msg))
+        if has_price:
+            return "handle_owner_add_product"
+        else:
+            # User is asking a question or moving on -> clear pending flow immediately!
+            state["product_pending_state"] = None
+            state["product_pending_item"] = None
+            return "owner_fallback"
+
+    # 5. Direct photo vision intake
     if state.get("image_base64") and (not msg or state.get("nlu_is_add_product")):
         return "handle_owner_add_product"
 
-    # 4. Explicit Add Product intent
-    if state.get("nlu_is_add_product"):
+    # 6. Explicit Add Product intent (only if explicit add keywords present)
+    if state.get("nlu_is_add_product") and any(w in msg for w in ["add product", "naya product", "item add", "add item", "new rifle", "naya item"]):
         return "handle_owner_add_product"
 
-    # 5. ALL OTHER NATURAL OWNER INTERACTIONS:
-    # Greetings, catalog inquiries, stock checks, photo requests, pricing inquiries,
-    # price updates, margin preferences, escalation responses, AI pause/resume,
-    # casual conversation, and operational questions:
-    # Handled with full cognitive reasoning by the Master Owner Intelligence Copilot!
+    # 7. ALL OTHER NATURAL OWNER INTERACTIONS:
+    # Always route to owner_fallback so the Master Owner Intelligence Copilot handles it!
     return "owner_fallback"
 
 
@@ -396,6 +409,12 @@ async def handle_owner_add_product(state: RabtaGraphState) -> RabtaGraphState:
     data = state.get("nlu_add_product_data") or {}
     raw_msg = (state.get("raw_message") or "").strip()
     raw_lower = raw_msg.lower()
+
+    # If owner cancels or aborts, clear pending state immediately and let copilot respond
+    CANCEL_WORDS = ["cancel", "nahi", "no", "mat karo", "stop", "band", "chhoro", "rehne do", "add nahi", "chutiye", "pagal"]
+    if any(w in raw_lower for w in CANCEL_WORDS):
+        state_cleared = {**state, "product_pending_state": None, "product_pending_item": None}
+        return await owner_fallback(state_cleared)
 
     # 1. Parse fields
     name_from_data = data.get("product_name") if data.get("intent") == "ADD_PRODUCT" else None
