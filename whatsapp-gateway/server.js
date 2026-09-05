@@ -187,9 +187,19 @@ async function handleIncomingMessage(msg) {
 
         // 2. Send image(s) or text reply to the sender
         const rawMediaUrls = response.data?.media_urls;
-        const mediaUrls = (Array.isArray(rawMediaUrls) && rawMediaUrls.length > 0)
-            ? rawMediaUrls
-            : (mediaUrl ? [{ url: mediaUrl, caption: replyText || undefined }] : []);
+        let mediaUrls = [];
+        if (Array.isArray(rawMediaUrls) && rawMediaUrls.length > 0) {
+            mediaUrls = rawMediaUrls.map((u, idx) => {
+                const urlStr = typeof u === 'string' ? u : (u ? u.url : null);
+                const captionStr = typeof u === 'string' ? (idx === 0 ? (replyText || undefined) : undefined) : (u ? u.caption : undefined);
+                return { url: urlStr, caption: captionStr };
+            }).filter(item => item && item.url);
+        } else if (mediaUrl) {
+            const urlStr = typeof mediaUrl === 'string' ? mediaUrl : mediaUrl?.url;
+            if (urlStr) {
+                mediaUrls = [{ url: urlStr, caption: replyText || undefined }];
+            }
+        }
 
         if (mediaUrls.length > 0) {
             for (let i = 0; i < mediaUrls.length; i++) {

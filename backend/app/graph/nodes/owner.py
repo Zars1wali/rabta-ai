@@ -69,12 +69,13 @@ def route_owner(state: RabtaGraphState) -> str:
             state["product_pending_item"] = None
             return "owner_fallback"
 
-    # 5. Direct photo vision intake
-    if state.get("image_base64") and (not msg or state.get("nlu_is_add_product")):
+    # 5. Direct photo vision intake or follow-up on uploaded photo
+    ADD_TRIGGERS = ["add", "naya", "item", "product", "rifle", "pistol", "gun", "kardo", "kar do", "eska", "iska", "price", "rate", "this"]
+    if state.get("image_base64") and (not msg or state.get("nlu_is_add_product") or any(w in msg for w in ADD_TRIGGERS)):
         return "handle_owner_add_product"
 
-    # 6. Explicit Add Product intent (only if explicit add keywords present)
-    if state.get("nlu_is_add_product") and any(w in msg for w in ["add product", "naya product", "item add", "add item", "new rifle", "naya item"]):
+    # 6. Explicit Add Product intent
+    if state.get("nlu_is_add_product") or any(w in msg for w in ["add product", "naya product", "item add", "add item", "new rifle", "naya item", "add this", "isko add", "ye add"]):
         return "handle_owner_add_product"
 
     # 7. ALL OTHER NATURAL OWNER INTERACTIONS:
@@ -1054,7 +1055,7 @@ async def owner_fallback(state: RabtaGraphState) -> RabtaGraphState:
         "reply_text": reply,
         "reply_chunks": [reply],
         "media_url": media_url,
-        "media_urls": [media_url] if media_url else None,
+        "media_urls": res.get("media_urls") or ([media_url] if media_url else None),
         "owner_alert": None,
         "forward_to_customer": forward_to_customer,
         "forward_message": forward_message,

@@ -20,9 +20,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/gateway", tags=["WhatsApp QR Gateway Bridge"])
 
 # ---------------------------------------------------------------------------
-# Catalog cache (60s TTL) + metrics
+# Catalog cache (60s TTL) + recent media cache (300s TTL) + metrics
 # ---------------------------------------------------------------------------
 _catalog_cache: Dict[str, Any] = {}
+_recent_media_cache: Dict[str, Tuple[float, str]] = {}
 _metrics = {
     "total_incoming": 0,
     "total_replies": 0,
@@ -133,6 +134,17 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 tenant_id, payload.customer_phone if not is_boss else norm_from, limit=10
             )
 
+            # Preserve uploaded media across short follow-up messages (e.g. Turn 1: photo, Turn 2: "Add this" or "Price 700k")
+            effective_image_b64 = payload.image_base64
+            if payload.image_base64:
+                _recent_media_cache[norm_from] = (time.time(), payload.image_base64)
+            elif norm_from in _recent_media_cache:
+                cached_ts, cached_b64 = _recent_media_cache[norm_from]
+                if (time.time() - cached_ts) < 300:  # 5 minutes TTL
+                    msg_l = effective_message.lower()
+                    if any(kw in msg_l for kw in ["add", "photo", "image", "pic", "tasveer", "ye", "yeh", "isko", "is ko", "this", "kardo", "kar do", "rate", "price"]):
+                        effective_image_b64 = cached_b64
+
             # ---------------------------------------------------------------
             # 4. LANGGRAPH INVOCATION
             # ---------------------------------------------------------------
@@ -150,7 +162,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 "industry": industry,
                 "raw_message": effective_message,
                 "catalog_context": catalog_context,
-                "image_base64": payload.image_base64,
+                "image_base64": effective_image_b64,
                 "conversation_history": history,
                 # Reset turn-specific outputs explicitly so nothing bleeds from prior turns in checkpointer
                 "reply_text": "",

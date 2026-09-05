@@ -189,7 +189,8 @@ You function like an exceptionally capable, respectful, sharp employee texting y
 - Language: Natural Pakistani Roman Urdu mixed with clear English firearm/business terms.
 - Cognitive Freedom: You have free thoughts and true business intelligence. You understand guns, pricing, customer negotiation, stock availability, and shop operations deeply.
 - Zero robotic templates, zero markdown asterisks (*), zero emojis.
-- Never make hollow promises like "main check karke batata hoon". You have the full live catalog and store data below, so answer directly with actual facts.
+- Never make hollow promises like "main check karke batata hoon", and NEVER claim you will walk to Namak Mandi or call suppliers on phone ("market se pata karta hoon"). You are an AI inventory manager. If a model is not in stock or catalog, state clearly: "Filhal hamare catalog mein nahi hai bhai, agar aap stock mein lana chahte hain toh rate batayein main add kar deta hoon."
+- Accurate Firearm Knowledge: FN Five-seveN / FN 5.7 is 5.7x28mm caliber (Belgium/USA). Ruger 5.7 is 5.7x28mm. Diamondback DB10 is .308 WIN / 7.62x51mm. Diamondback DB15 is 5.56x45mm / .223 Rem. Glock 17/19/26/45/43X are 9x19mm Parabellum. Never confuse calibers.
 
 === LIVE INVENTORY CATALOG ===
 {catalog_text}
@@ -210,7 +211,7 @@ You function like an exceptionally capable, respectful, sharp employee texting y
 DECIDE AND RESPOND:
 Analyze Haider bhai's message in context of the conversation and store state.
 Determine if any operational action is needed:
-1. "SEND_PHOTO": Owner asks for photo/pic of a product (e.g. "taurus g3 ki pic dekhana", "photo bhejo").
+1. "SEND_PHOTO": Owner asks for photo/pic of a product or brand (e.g. "taurus g3 ki pic dekhana", "photo bhejo", "taurus ke konse models hai un saro ke pics send kardo").
    Provide product_name.
 2. "PRICE_UPDATE": Owner instructs to change or update a catalog price (e.g. "Glock 19 Gen 5 ab 490k kar do", "Taurus G3 160000").
    Provide product_name, new_price (as numeric PKR).
@@ -258,7 +259,6 @@ Return STRICT JSON only:
                     data = json.loads(raw)
                 except Exception as parse_err:
                     logger.warning("[OwnerCopilot:AGI] Direct JSON parse failed: %s. Raw: %s", parse_err, raw[:300])
-                    # Robust regex recovery for partially truncated or malformed JSON
                     r_match = re.search(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)', raw)
                     if r_match:
                         try:
@@ -296,25 +296,35 @@ Return STRICT JSON only:
         reply_text = re.sub(r'[\U00010000-\U0010ffff]', '', reply_text, flags=re.UNICODE).strip()
 
         media_url = None
+        media_urls = []
         forward_to_customer = None
         forward_message = None
 
         # --- ACTION 1: SEND_PHOTO ---
-        if action == "SEND_PHOTO" or any(kw in msg_clean.lower() for kw in ["pic", "photo", "tasveer", "image", "tasvir"]):
+        if action == "SEND_PHOTO" or any(kw in msg_clean.lower() for kw in ["pic", "pics", "photo", "photos", "tasveer", "tasveerein", "image", "images", "tasvir"]):
             p_cand = data.get("product_name")
-            matched_item = None
+            matched_items = []
             if p_cand:
                 for it in items:
                     if p_cand.lower() in it.name.lower():
-                        matched_item = it
-                        break
-            if not matched_item:
-                m_list = self._smart_match_catalog_products(msg_clean, items, history=conversation_history)
-                if m_list:
-                    matched_item = m_list[0]
-            if matched_item and matched_item.images:
-                raw_img = matched_item.images[0]
-                media_url = f"http://65.20.90.130{raw_img}" if raw_img.startswith("/") else raw_img
+                        matched_items.append(it)
+            if not matched_items:
+                matched_items = self._smart_match_catalog_products(msg_clean, items, history=conversation_history)
+
+            for it in matched_items:
+                if it.images:
+                    for raw_img in it.images[:2]:
+                        full_img = f"http://65.20.90.130{raw_img}" if raw_img.startswith("/") else raw_img
+                        if full_img not in media_urls:
+                            media_urls.append(full_img)
+
+            # Cap to 5 photos max
+            media_urls = media_urls[:5]
+            if media_urls:
+                media_url = media_urls[0]
+                if not reply_text or "hukum karein" in reply_text:
+                    item_names = ", ".join([it.name for it in matched_items[:3]])
+                    reply_text = f"Jee Haider bhai, {item_names} ki photo bhej raha hoon."
 
         # --- ACTION 2: PRICE_UPDATE ---
         elif action == "PRICE_UPDATE":
@@ -414,6 +424,7 @@ Return STRICT JSON only:
             "action": action,
             "message": reply_text,
             "media_url": media_url,
+            "media_urls": media_urls,
             "forward_to_customer": forward_to_customer,
             "forward_message": forward_message,
         }
