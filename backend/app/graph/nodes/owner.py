@@ -172,7 +172,8 @@ async def handle_owner_command(state: RabtaGraphState) -> RabtaGraphState:
             reply = "Sab clear hai bhai, koi pending inquiry nahi."
 
     elif cmd == "/pause":
-        target = cmd_parts[1] if len(cmd_parts) > 1 else state.get("active_takeover_customer_phone")
+        raw_target = " ".join(cmd_parts[1:]) if len(cmd_parts) > 1 else state.get("active_takeover_customer_phone")
+        target = tenant_repo.normalize_phone(raw_target) if raw_target else None
         if not target:
             reply = "Bhai customer number batayein: /pause 03001234567"
         else:
@@ -181,7 +182,8 @@ async def handle_owner_command(state: RabtaGraphState) -> RabtaGraphState:
             reply = f"AI paused for {target}. Aap khud baat karein. Baad mein /resume likhein."
 
     elif cmd == "/resume":
-        target = cmd_parts[1] if len(cmd_parts) > 1 else None
+        raw_target = " ".join(cmd_parts[1:]) if len(cmd_parts) > 1 else None
+        target = tenant_repo.normalize_phone(raw_target) if raw_target else None
         async with AsyncSessionLocal() as session:
             await tenant_repo.set_human_takeover(session, tenant_id, None)
         reply = f"AI resumed{f' for {target}' if target else ' for all'}."
