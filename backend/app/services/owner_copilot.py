@@ -229,9 +229,9 @@ Determine if any operational action is needed:
 
 Return STRICT JSON only:
 {{
-  "thought": "<internal reasoning analyzing Haider bhai's intent, firearms discussed, and required action>",
-  "reply": "<natural, respectful, conversational Roman Urdu response addressed to Haider bhai>",
+  "reply": "<natural, respectful, conversational Roman Urdu response addressed to Haider bhai answering his exact question with actual rates, specs, and status>",
   "action": "SEND_PHOTO" | "PRICE_UPDATE" | "STOCK_UPDATE" | "MARGIN_PREFERENCE" | "RELAY_TO_CUSTOMER" | "PAUSE_AI" | "RESUME_AI" | "DAILY_CONFIRM" | "NONE",
+  "thought": "<brief 1-sentence reasoning>",
   "product_name": string or null,
   "new_price": number or null,
   "is_in_stock": boolean or null,
@@ -249,17 +249,49 @@ Return STRICT JSON only:
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         temperature=0.2,
-                        max_output_tokens=450,
+                        max_output_tokens=1500,
                         response_mime_type="application/json",
                     ),
                 )
                 raw = (resp.text or "").strip()
-                data = json.loads(raw)
+                try:
+                    data = json.loads(raw)
+                except Exception as parse_err:
+                    logger.warning("[OwnerCopilot:AGI] Direct JSON parse failed: %s. Raw: %s", parse_err, raw[:300])
+                    # Robust regex recovery for partially truncated or malformed JSON
+                    r_match = re.search(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)', raw)
+                    if r_match:
+                        try:
+                            data["reply"] = r_match.group(1).encode('utf-8').decode('unicode_escape', errors='ignore')
+                        except Exception:
+                            data["reply"] = r_match.group(1).replace(r'\"', '"').replace(r'\n', '\n')
+                    a_match = re.search(r'"action"\s*:\s*"([^"]+)"', raw)
+                    if a_match:
+                        data["action"] = a_match.group(1)
+                    p_match = re.search(r'"product_name"\s*:\s*"([^"]+)"', raw)
+                    if p_match:
+                        data["product_name"] = p_match.group(1)
+                    np_match = re.search(r'"new_price"\s*:\s*([0-9]+(?:\.[0-9]+)?)', raw)
+                    if np_match:
+                        data["new_price"] = float(np_match.group(1))
             except Exception as err:
                 logger.warning("[OwnerCopilot:AGI] Generation error: %s", err)
 
         action = data.get("action", "NONE")
-        reply_text = data.get("reply") or "Jee Haider bhai note kar liya."
+        reply_text = data.get("reply")
+        if not reply_text:
+            matched = self._smart_match_catalog_products(msg_clean, items, history=conversation_history)
+            if matched:
+                lines = [f"Jee Haider bhai, {matched[0].name.split()[0]} ke rates yeh hain:"]
+                for it in matched[:8]:
+                    stk = "In stock" if it.in_stock else "Out of stock"
+                    lines.append(f"• {it.name}: PKR {int(it.price):,} ({stk})")
+                reply_text = "\n".join(lines)
+            elif any(w in msg_clean.lower() for w in ["?", "kya", "kia", "kaun", "kon", "kese", "rates", "rate", "batao", "bata"]):
+                reply_text = "Jee Haider bhai, kis firearm ya catalog item ki details chahiye?"
+            else:
+                reply_text = "Jee Haider bhai, hukum karein. Sab update hai."
+
         reply_text = re.sub(r'[\*\#\_`]', '', reply_text)
         reply_text = re.sub(r'[\U00010000-\U0010ffff]', '', reply_text, flags=re.UNICODE).strip()
 

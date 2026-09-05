@@ -1025,7 +1025,7 @@ async def owner_fallback(state: RabtaGraphState) -> RabtaGraphState:
             on_cache_invalidate=_invalidate,
         )
 
-    reply = res.get("message") or "Jee Haider bhai note kar liya."
+    reply = res.get("message") or "Jee Haider bhai, hukum karein. Sab update hai."
     media_url = res.get("media_url")
     forward_to_customer = res.get("forward_to_customer")
     forward_message = res.get("forward_message")
