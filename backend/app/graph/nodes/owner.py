@@ -39,11 +39,7 @@ def route_owner(state: RabtaGraphState) -> str:
     if msg.startswith("/"):
         return "handle_owner_command"
 
-    # 2. Owner asking for image or details
-    if any(kw in msg for kw in ["image", "photo", "pic", "tasveer", "dekao", "dikhao", "bhejo"]):
-        return "handle_owner_info_request"
-
-    # 3. Owner greetings (support all Urdu/English variations: asalam, assalam, salam, slam, aoa, etc.)
+    # 2. Owner greetings (support all Urdu/English variations: asalam, assalam, salam, slam, aoa, etc.)
     GREETING_REGEX = re.compile(
         r'^(?:a+s+[a-z]*a+l+a+m+(?:\s*(?:o|u|wa|o-|u-)?\s*a+l+a+i+k+u+m)?|s+a*l+a+m|s+l+a+m|a+o+a|a+\.o+\.a|hello|hi|hey|k[yi]a\s+h[aa]+l\s+h?a?i?|k[ae]se\s+ho)\b',
         re.IGNORECASE
@@ -51,7 +47,7 @@ def route_owner(state: RabtaGraphState) -> str:
     if GREETING_REGEX.search(msg) or msg in ["hello", "hi", "salam", "aoa", "assalam", "asalam", "aslam", "aslaam", "kese ho", "kia haal hai"]:
         return "handle_owner_greeting"
 
-    # 4. Explicit escalation reply — always takes priority even over active price flow
+    # 3. Explicit escalation reply — always takes priority
     RELAY_DECISION_PHRASES = [
         "ko bolo", "ko batao", "ko keh do", "ko bol do", "ko dedo", "ko de do",
         "give it to him", "give him", "give for", "tell him", "tell them", "quote him", "offer him",
@@ -68,26 +64,42 @@ def route_owner(state: RabtaGraphState) -> str:
         except (ValueError, AttributeError):
             pass
 
-    # 5. In active product addition confirmation flow? Only route to handle_confirmation if this is actually a yes/no reply
+    # 4. Confirmation replies in pending flows
     CONFIRM_WORDS = ["haan", "han", "yes", "confirm", "add kardo", "add kar do", "bilkul", "zaroor"]
     CANCEL_WORDS = ["cancel", "nahi", "no", "mat karo", "stop", "band"]
     is_confirmation_reply = any(w in msg for w in CONFIRM_WORDS + CANCEL_WORDS)
     if state.get("product_pending_state") == "AWAITING_CONFIRMATION" and is_confirmation_reply:
         return "handle_confirmation"
-
-    # 6. In active product addition details/price flow? Route to add product handler (pass-through for multi-turn)
     if state.get("product_pending_state") in ("AWAITING_PRICE", "AWAITING_DETAILS"):
         return "handle_owner_add_product"
-
-    # 7. In active disambiguation flow?
     if ps == "AWAITING_DISAMBIGUATION":
         return "handle_disambiguation"
-
-    # 8. In active price confirmation flow?
     if ps == "AWAITING_CONFIRMATION" and is_confirmation_reply:
         return "handle_confirmation"
 
-    # 9. Check if there are pending customer escalations
+    # 5. Price update intent (ONLY when a product AND a price/amount or explicit update keyword is provided!)
+    if state.get("nlu_is_price_update") and state.get("nlu_price_product") and state.get("nlu_price_amount"):
+        return "extract_and_match_price"
+
+    # 6. Add product intent
+    if state.get("nlu_is_add_product"):
+        return "handle_owner_add_product"
+
+    # 7. Owner asking for catalog info, price inquiry, stock, specs, or product photo
+    CATALOG_INFO_KEYWORDS = [
+        "image", "photo", "pic", "tasveer", "tasvir", "dekao", "dikhao", "dikhana", "bhejo", "send",
+        "price", "rate", "rates", "cost", "current price", "kitne ka", "kitne ki", "kya rate", "kia rate",
+        "kya price", "kia price", "bhao", "specs", "spec", "specification", "specifications", "detail", "details",
+        "maloomat", "stock", "available", "parha hai", "parhi hai", "pari hai", "para hai"
+    ]
+    is_catalog_info = (
+        bool(state.get("nlu_is_owner_info_request"))
+        or any(kw in msg for kw in CATALOG_INFO_KEYWORDS)
+    )
+    if is_catalog_info:
+        return "handle_owner_info_request"
+
+    # 8. Check if there are pending customer escalations
     tenant_id_str = state.get("tenant_id", "")
     try:
         tenant_id = uuid.UUID(tenant_id_str)
@@ -98,34 +110,34 @@ def route_owner(state: RabtaGraphState) -> str:
     if pending_escs:
         # Check if owner explicitly requested a permanent catalog price update
         is_explicit_catalog_update = any(kw in msg for kw in ["update", "kardo", "krdo", "kar do", "badal do", "change", "set karo", "catalog"])
-        
-        # If owner is asking for clarification about the customer inquiry
+
         CLARIFY_KEYWORDS = [
             "kon hai", "koon hai", "kaun hai", "kiska", "kis ka", "kia poochna",
             "kya poochna", "kia note", "kya note", "kya sawal", "kia sawal",
-            "details", "samajh nahi", "kya masla", "kia masla", "kya rate", "kis cheez", "kis model",
-            "kia price", "kya price", "price dia", "price bataya", "discount dia", "discount diya",
-            "kin teeno", "konse teen", "what price", "which price", "did you quote", "which guns", "which weapons"
+            "samajh nahi", "kya masla", "kia masla", "price dia", "price bataya",
+            "discount dia", "discount diya", "kin teeno", "konse teen",
+            "what price did you quote", "which guns", "which weapons"
         ]
-        is_clarification = any(kw in msg for kw in CLARIFY_KEYWORDS) or ("?" in msg and not is_explicit_catalog_update)
+        is_clarification = any(kw in msg for kw in CLARIFY_KEYWORDS)
         if is_clarification:
             return "handle_owner_inquiry_clarification"
 
-        # If owner gave a price/discount or text answer (e.g. "400k", "1500", "dedo 400 mein", "10k discount", "give it to him for 410k")
-        # and did NOT explicitly ask for a permanent catalog update -> route to relay_owner_answer
+        # If owner gave a price/discount or text answer (e.g. "400k", "1500", "dedo 400 mein")
         if not is_explicit_catalog_update and not state.get("nlu_is_add_product"):
             if not any(w in msg for w in ["theek", "ok", "acha", "shukriya", "sahi", "hello", "hi", "salam"]):
                 return "relay_owner_answer"
 
-    # 10. Add product intent
-    if state.get("nlu_is_add_product"):
-        return "handle_owner_add_product"
+    # 9. If message mentions a product or brand name without setting a price, handle as info request!
+    # (e.g. "Taurus G3", "Canik TP9", "Glock 19")
+    from app.graph.nodes.nlu import get_catalog_cache
+    cat = get_catalog_cache()
+    if cat:
+        for c_name in cat:
+            brand = c_name.split()[0]
+            if re.search(rf'\b{re.escape(c_name)}\b', msg) or re.search(rf'\b{re.escape(brand)}\b', msg):
+                return "handle_owner_info_request"
 
-    # 11. Price update detection (with an actual product name specified)
-    if state.get("nlu_is_price_update") and state.get("nlu_price_product"):
-        return "extract_and_match_price"
-
-    # 12. Fallback
+    # 10. Fallback
     return "owner_fallback"
 
 
@@ -805,73 +817,132 @@ async def handle_owner_greeting(state: RabtaGraphState) -> RabtaGraphState:
     }
 
 
+def _smart_match_catalog_products(text: str, catalog_items: list, history: list = None) -> list:
+    """
+    Match products in catalog given user text.
+    Handles:
+    - Full contiguous name matches (e.g. "Taurus G3 Tactical", "Taurus G3")
+    - Brand-shared multi-model matches (e.g. "Taurus G3 and G3C and G3 Tactical")
+    - Model-only mentions (e.g. "G3 Tactical", "G3C", "G3", "PT92")
+    - Conversation history context (e.g. "pic or specs" preceded by "taurus G3")
+    - Brand-only mentions (e.g. "taurus", "glock") -> returns all variants of that brand
+    Returns list of CatalogItem instances in order of specificity.
+    """
+    t = (text or "").lower()
+    matched = []
+    seen_ids = set()
+
+    def add_match(item):
+        if item.id not in seen_ids:
+            matched.append(item)
+            seen_ids.add(item.id)
+
+    # 1. Direct full name match (longest first)
+    for item in sorted(catalog_items, key=lambda x: len(x.name), reverse=True):
+        pat = re.escape(item.name.lower())
+        if re.search(r'\b' + pat + r'\b', t):
+            add_match(item)
+
+    # 2. Brand-context matching: if brand is present, check sub-models
+    brands = {}
+    for item in catalog_items:
+        brand = item.name.split()[0].lower()
+        brands.setdefault(brand, []).append(item)
+
+    for brand, b_items in brands.items():
+        if re.search(r'\b' + re.escape(brand) + r'\b', t):
+            for item in sorted(b_items, key=lambda x: len(x.name), reverse=True):
+                model_part = item.name[len(brand):].strip().lower()
+                if model_part and re.search(r'\b' + re.escape(model_part) + r'\b', t):
+                    add_match(item)
+
+    # 3. Model-only matching without brand (e.g. 'g3 tactical', 'g3c', 'pt92', 'tp9')
+    if not matched:
+        for item in sorted(catalog_items, key=lambda x: len(x.name), reverse=True):
+            parts = item.name.split()
+            if len(parts) > 1:
+                model_part = " ".join(parts[1:]).lower()
+                if len(model_part) >= 2 and re.search(r'\b' + re.escape(model_part) + r'\b', t):
+                    add_match(item)
+
+    # 4. History fallback: if no product matched in current turn, check conversation history
+    if not matched and history:
+        for turn in reversed(history):
+            h_text = turn.get("text", "")
+            if h_text and h_text != text:
+                h_matched = _smart_match_catalog_products(h_text, catalog_items, history=None)
+                if h_matched:
+                    return h_matched
+
+    # 5. Brand-only match: if user only said 'taurus', return all taurus items
+    if not matched:
+        for brand, b_items in brands.items():
+            if re.search(r'\b' + re.escape(brand) + r'\b', t):
+                for item in b_items:
+                    add_match(item)
+
+    return matched
+
+
 # --------------------------------------------------------------------------
 # Node: handle_owner_info_request
 # --------------------------------------------------------------------------
 async def handle_owner_info_request(state: RabtaGraphState) -> RabtaGraphState:
+    from app.db.session import AsyncSessionLocal
+    from app.models.database import CatalogItem
+    from sqlalchemy import select
+
     try:
         tenant_id = uuid.UUID(state.get("tenant_id", ""))
     except (ValueError, AttributeError):
         tenant_id = uuid.uuid4()
 
-    msg_lower = state.get("raw_message", "").lower()
+    raw_msg = state.get("raw_message", "")
+    history = state.get("conversation_history") or []
     media_url = None
 
-    from app.graph.nodes.nlu import (
-        _BRANDS, _refresh_catalog_cache_if_needed,
-        _extract_products_from_text, _catalog_cache,
-    )
-    await _refresh_catalog_cache_if_needed()
-    live_catalog = _catalog_cache
+    try:
+        async with AsyncSessionLocal() as session:
+            q = select(CatalogItem).where(CatalogItem.tenant_id == tenant_id)
+            res = await session.execute(q)
+            all_items = list(res.scalars().all())
+    except Exception as db_err:
+        logger.warning("[Node:handle_owner_info_request] DB load failed: %s", db_err)
+        all_items = []
 
-    product_cand = None
-    matched = _extract_products_from_text(msg_lower, live_catalog)
-    if matched:
-        product_cand = matched[0]
-    if not product_cand:
-        for brand, default_model in sorted(_BRANDS.items(), key=lambda x: len(x[0]), reverse=True):
-            if re.search(rf'\b{re.escape(brand)}\b', msg_lower):
-                product_cand = default_model
-                break
+    matched_items = _smart_match_catalog_products(raw_msg, all_items, history=history)
 
-    if product_cand:
-        try:
-            from app.db.session import AsyncSessionLocal
-            from app.models.database import CatalogItem
-            from sqlalchemy import select
+    if matched_items:
+        if len(matched_items) > 1:
+            # Multiple items matched (e.g. multi-product price inquiry or brand list)
+            lines = ["Haider bhai, catalog ke mutabiq details yeh hain:"]
+            for it in matched_items:
+                stk = "In stock" if it.in_stock else "Out of stock"
+                lines.append(f"• {it.name}: PKR {int(it.price):,} ({stk})")
+            reply = "\n".join(lines)
+        else:
+            # Single exact item matched
+            it = matched_items[0]
+            imgs = it.images or []
+            if imgs:
+                raw_img = imgs[0]
+                media_url = f"http://65.20.90.130{raw_img}" if raw_img.startswith("/") else raw_img
 
-            async with AsyncSessionLocal() as session:
-                q = select(CatalogItem).where(
-                    CatalogItem.tenant_id == tenant_id,
-                    CatalogItem.name.ilike(f"%{product_cand}%")
-                ).limit(1)
-                res = await session.execute(q)
-                item = res.scalar_one_or_none()
+            meta = it.metadata_json or {}
+            specs_parts = []
+            if meta.get("origin"):
+                specs_parts.append(str(meta["origin"]))
+            if meta.get("caliber"):
+                specs_parts.append(str(meta["caliber"]))
+            if meta.get("action"):
+                specs_parts.append(str(meta["action"]))
+            if meta.get("capacity"):
+                specs_parts.append(str(meta["capacity"]))
+            specs_str = f"\nSpecs: {' | '.join(specs_parts)}" if specs_parts else (f"\nDetails: {it.description}" if it.description else "")
 
-                if item:
-                    imgs = item.images or []
-                    if imgs:
-                        raw_img = imgs[0]
-                        media_url = f"http://65.20.90.130{raw_img}" if raw_img.startswith("/") else raw_img
-                        fallback = f"Haider bhai, {item.name} catalog mein mojood hai (PKR {int(item.price):,}). Yeh lijiye iski photo:"
-                    else:
-                        fallback = f"Haider bhai, {item.name} catalog mein mojood hai (PKR {int(item.price):,}), lekin iski photo abhi upload nahi hui."
-                    
-                    reply = await _generate_grounded_owner_reply(
-                        scenario=f"Owner asked about {item.name}. Status: in stock, price PKR {int(item.price)}, has_photo={bool(imgs)}.",
-                        raw_message=state.get("raw_message", ""),
-                        fallback=fallback,
-                    )
-                else:
-                    fallback = f"Haider bhai, {product_cand} catalog mein nahi mila."
-                    reply = await _generate_grounded_owner_reply(
-                        scenario=f"Product {product_cand} not found in catalog.",
-                        raw_message=state.get("raw_message", ""),
-                        fallback=fallback,
-                    )
-        except Exception as err:
-            logger.warning("[Node:handle_owner_info_request] DB error: %s", err)
-            reply = f"Haider bhai, {product_cand} check karne mein issue aaya: {err}"
+            stk = "In stock" if it.in_stock else "Out of stock"
+            has_photo_str = " aur tasweer bhej raha hoon" if media_url else ""
+            reply = f"Jee Haider bhai, {it.name} stock mein available hai ({stk}), price PKR {int(it.price):,}{has_photo_str}.{specs_str}"
     else:
         pending_escs = _esc_service.get_pending_for_tenant(tenant_id)
         if pending_escs:
@@ -886,7 +957,7 @@ async def handle_owner_info_request(state: RabtaGraphState) -> RabtaGraphState:
             fallback = "Haider bhai, batayein kis firearm ya catalog item ki details ya photo chahiye?"
             reply = await _generate_grounded_owner_reply(
                 scenario="Owner asked general info query without naming a specific product or active escalation.",
-                raw_message=state.get("raw_message", ""),
+                raw_message=raw_msg,
                 fallback=fallback,
             )
 

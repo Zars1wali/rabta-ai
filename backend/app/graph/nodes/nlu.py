@@ -63,11 +63,17 @@ async def _refresh_catalog_cache_if_needed() -> None:
                 q = select(CatalogItem.name).distinct()
                 res = await session.execute(q)
                 names = [r[0] for r in res.all() if r[0]]
-            _catalog_cache = [str(n).lower() for n in names if n]
+            _catalog_cache.clear()
+            _catalog_cache.extend([str(n).lower() for n in names if n])
             _catalog_cache_ts = time.time()
             logger.info("[NLU] Catalog cache refreshed: %d products", len(_catalog_cache))
         except Exception as exc:
             logger.warning("[NLU] Failed to refresh catalog cache: %s", exc)
+
+
+def get_catalog_cache() -> List[str]:
+    return list(_catalog_cache)
+
 
 
 def _extract_products_from_text(text: str, catalog_names: List[str]) -> List[str]:
@@ -573,10 +579,18 @@ Return STRICT JSON only:
     is_add_keyword = any(kw in msg_lower for kw in ["add product", "product add", "naya product", "new product", "item add", "add item", "new rifle", "naya item"])
     is_add_product = (intent == "ADD_PRODUCT" or is_add_keyword or in_add_flow)
     is_price_update = (intent == "PRICE_UPDATE" and bool(result.get("new_price")) and not is_add_product)
+    
+    CATALOG_INFO_KEYWORDS = [
+        "image", "photo", "pic", "tasveer", "tasvir", "dekao", "dikhao", "dikhana", "bhejo", "send",
+        "price", "rate", "rates", "cost", "current price", "kitne ka", "kitne ki", "kya rate", "kia rate",
+        "kya price", "kia price", "bhao", "specs", "spec", "specification", "specifications", "detail", "details",
+        "maloomat", "stock", "available", "parha hai", "parhi hai", "pari hai", "para hai"
+    ]
+    is_info_request = (intent == "INFO_REQUEST") or any(kw in msg_lower for kw in CATALOG_INFO_KEYWORDS)
 
     logger.info(
-        "[NLU:owner] intent=%s product=%s price=%s is_add=%s is_price_upd=%s in_add_flow=%s",
-        intent, result.get("product_name"), result.get("new_price"), is_add_product, is_price_update, in_add_flow
+        "[NLU:owner] intent=%s product=%s price=%s is_add=%s is_price_upd=%s is_info_req=%s in_add_flow=%s",
+        intent, result.get("product_name"), result.get("new_price"), is_add_product, is_price_update, is_info_request, in_add_flow
     )
 
     return {
@@ -587,11 +601,12 @@ Return STRICT JSON only:
         "nlu_price_origin": result.get("origin"),
         "nlu_is_add_product": is_add_product,
         "nlu_add_product_data": result if is_add_product else None,
+        "nlu_is_owner_info_request": is_info_request,
+        "nlu_extracted_product": result.get("product_name"),
         # Clear customer fields on owner turn
         "nlu_delivery_intent": False,
         "nlu_legal_intent": False,
         "nlu_extracted_city": None,
-        "nlu_extracted_product": None,
         "nlu_extracted_name": None,
     }
 

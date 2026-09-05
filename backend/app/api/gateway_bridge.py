@@ -129,11 +129,9 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             # 3. CONTEXT GATHERING
             # ---------------------------------------------------------------
             catalog_context = await _get_cached_catalog(session, str(tenant_id))
-            history = []
-            if not is_boss:
-                history = await conversation_store.get_history_async(
-                    tenant_id, payload.customer_phone, limit=6
-                )
+            history = await conversation_store.get_history_async(
+                tenant_id, payload.customer_phone if not is_boss else norm_from, limit=6
+            )
 
             # ---------------------------------------------------------------
             # 4. LANGGRAPH INVOCATION
@@ -184,6 +182,13 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                         tenant_id, payload.customer_phone, "assistant", reply_text
                     )
             else:
+                await conversation_store.add_message_async(
+                    tenant_id, norm_from, "customer", effective_message
+                )
+                if reply_text:
+                    await conversation_store.add_message_async(
+                        tenant_id, norm_from, "assistant", reply_text
+                    )
                 # If boss replied to an escalation, relay & save in customer thread
                 if forward_to_customer and forward_message:
                     norm_cust = normalize_phone(forward_to_customer)

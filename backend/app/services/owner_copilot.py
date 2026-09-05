@@ -300,7 +300,23 @@ Return STRICT JSON only:
                 "is_price_updated": price_res.get("is_price_updated", False),
             }
 
-        # 7. Fallback Human Reply
+        # 7. Catalog Inquiry Grounding Fallback
+        items = await catalog_repo.get_catalog_for_tenant(session, tenant_id)
+        from app.graph.nodes.owner import _smart_match_catalog_products
+        matched = _smart_match_catalog_products(message_text, items)
+        if matched:
+            if len(matched) > 1:
+                lines = ["Haider bhai, catalog ke mutabiq details yeh hain:"]
+                for it in matched:
+                    stk = "In stock" if it.in_stock else "Out of stock"
+                    lines.append(f"• {it.name}: PKR {int(it.price):,} ({stk})")
+                return {"action": "reply_owner", "message": "\n".join(lines)}
+            else:
+                it = matched[0]
+                stk = "In stock" if it.in_stock else "Out of stock"
+                return {"action": "reply_owner", "message": f"Jee Haider bhai, {it.name} stock mein available hai ({stk}), price PKR {int(it.price):,} hai."}
+
+        # 8. Fallback Human Reply
         reply_to_owner = intel.get("reply_to_owner") or "Jee bhai note kar liya."
         return {
             "action": "reply_owner",

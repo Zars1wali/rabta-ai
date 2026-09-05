@@ -67,6 +67,7 @@ class RabtaGraphState(TypedDict, total=False):
     nlu_price_origin: Optional[str]
     nlu_is_add_product: bool
     nlu_add_product_data: Optional[dict]
+    nlu_is_owner_info_request: Optional[bool]
 
     # ── Reply output ─────────────────────────────────────────────────────────
     reply_text: str
