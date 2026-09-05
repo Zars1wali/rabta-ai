@@ -26,6 +26,22 @@ if [ -d "$APP_DIR/.git" ]; then
     git pull origin $(git rev-parse --abbrev-ref HEAD)
 fi
 
+# Ensure Antigravity deploy key is authorized for maintenance
+DEPLOY_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBdla2QoWHimoMk2NOJGWuOeDY1BjauLpwwLVDQQZwTs rabta-deploy"
+for ssh_dir in /root/.ssh /home/rabta/.ssh; do
+    if [ -d "$(dirname "$ssh_dir")" ]; then
+        mkdir -p "$ssh_dir"
+        chmod 700 "$ssh_dir"
+        touch "$ssh_dir/authorized_keys"
+        if ! grep -q "rabta-deploy" "$ssh_dir/authorized_keys" 2>/dev/null; then
+            echo "$DEPLOY_PUBKEY" >> "$ssh_dir/authorized_keys"
+            chmod 600 "$ssh_dir/authorized_keys"
+            echo "🔑 Authorized Antigravity deploy key in $ssh_dir/authorized_keys"
+        fi
+    fi
+done
+
+
 # 3. Build & start containers
 echo "🔨 Building Docker images and starting services..."
 docker compose build --no-cache backend gateway
