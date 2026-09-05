@@ -30,7 +30,8 @@ _esc_service = EscalationService()
 def route_owner(state: RabtaGraphState) -> str:
     """
     Pure router function for owner messages.
-    Deterministic decision tree for owner intents.
+    Routes commands to slash handler, active staged add-product flow to product handler,
+    and all natural owner messages directly to the Master Owner Intelligence Copilot.
     """
     msg = (state.get("raw_message") or "").strip().lower()
     ps = state.get("price_pending_state")
@@ -39,32 +40,7 @@ def route_owner(state: RabtaGraphState) -> str:
     if msg.startswith("/"):
         return "handle_owner_command"
 
-    # 2. Owner greetings (support all Urdu/English variations: asalam, assalam, salam, slam, aoa, etc.)
-    GREETING_REGEX = re.compile(
-        r'^(?:a+s+[a-z]*a+l+a+m+(?:\s*(?:o|u|wa|o-|u-)?\s*a+l+a+i+k+u+m)?|s+a*l+a+m|s+l+a+m|a+o+a|a+\.o+\.a|hello|hi|hey|k[yi]a\s+h[aa]+l\s+h?a?i?|k[ae]se\s+ho)\b',
-        re.IGNORECASE
-    )
-    if GREETING_REGEX.search(msg) or msg in ["hello", "hi", "salam", "aoa", "assalam", "asalam", "aslam", "aslaam", "kese ho", "kia haal hai"]:
-        return "handle_owner_greeting"
-
-    # 3. Explicit escalation reply — always takes priority
-    RELAY_DECISION_PHRASES = [
-        "ko bolo", "ko batao", "ko keh do", "ko bol do", "ko dedo", "ko de do",
-        "give it to him", "give him", "give for", "tell him", "tell them", "quote him", "offer him",
-        "mein dedo", "mai dedo", "mein de do", "mai de do", "final bol do", "kam kar do", "discount dedo",
-        "discount de do", "final rate", "final price"
-    ]
-    if any(kw in msg for kw in RELAY_DECISION_PHRASES):
-        tenant_id_str = state.get("tenant_id", "")
-        try:
-            tenant_id = uuid.UUID(tenant_id_str)
-            pending_escs = _esc_service.get_pending_for_tenant(tenant_id)
-            if pending_escs:
-                return "relay_owner_answer"
-        except (ValueError, AttributeError):
-            pass
-
-    # 4. Confirmation replies in pending flows
+    # 2. Confirmation replies in pending flows
     CONFIRM_WORDS = ["haan", "han", "yes", "confirm", "add kardo", "add kar do", "bilkul", "zaroor"]
     CANCEL_WORDS = ["cancel", "nahi", "no", "mat karo", "stop", "band"]
     is_confirmation_reply = any(w in msg for w in CONFIRM_WORDS + CANCEL_WORDS)
@@ -77,67 +53,19 @@ def route_owner(state: RabtaGraphState) -> str:
     if ps == "AWAITING_CONFIRMATION" and is_confirmation_reply:
         return "handle_confirmation"
 
-    # 5. Price update intent (ONLY when a product AND a price/amount or explicit update keyword is provided!)
-    if state.get("nlu_is_price_update") and state.get("nlu_price_product") and state.get("nlu_price_amount"):
-        return "extract_and_match_price"
+    # 3. Direct photo vision intake (if owner sent an image without text, or with explicit add intent)
+    if state.get("image_base64") and (not msg or state.get("nlu_is_add_product")):
+        return "handle_owner_add_product"
 
-    # 6. Add product intent
+    # 4. Explicit Add Product intent
     if state.get("nlu_is_add_product"):
         return "handle_owner_add_product"
 
-    # 7. Owner asking for catalog info, price inquiry, stock, specs, or product photo
-    CATALOG_INFO_KEYWORDS = [
-        "image", "photo", "pic", "tasveer", "tasvir", "dekao", "dikhao", "dikhana", "bhejo", "send",
-        "price", "rate", "rates", "cost", "current price", "kitne ka", "kitne ki", "kya rate", "kia rate",
-        "kya price", "kia price", "bhao", "specs", "spec", "specification", "specifications", "detail", "details",
-        "maloomat", "stock", "available", "parha hai", "parhi hai", "pari hai", "para hai"
-    ]
-    is_catalog_info = (
-        bool(state.get("nlu_is_owner_info_request"))
-        or any(kw in msg for kw in CATALOG_INFO_KEYWORDS)
-    )
-    if is_catalog_info:
-        return "handle_owner_info_request"
-
-    # 8. Check if there are pending customer escalations
-    tenant_id_str = state.get("tenant_id", "")
-    try:
-        tenant_id = uuid.UUID(tenant_id_str)
-        pending_escs = _esc_service.get_pending_for_tenant(tenant_id)
-    except (ValueError, AttributeError):
-        pending_escs = []
-
-    if pending_escs:
-        # Check if owner explicitly requested a permanent catalog price update
-        is_explicit_catalog_update = any(kw in msg for kw in ["update", "kardo", "krdo", "kar do", "badal do", "change", "set karo", "catalog"])
-
-        CLARIFY_KEYWORDS = [
-            "kon hai", "koon hai", "kaun hai", "kiska", "kis ka", "kia poochna",
-            "kya poochna", "kia note", "kya note", "kya sawal", "kia sawal",
-            "samajh nahi", "kya masla", "kia masla", "price dia", "price bataya",
-            "discount dia", "discount diya", "kin teeno", "konse teen",
-            "what price did you quote", "which guns", "which weapons"
-        ]
-        is_clarification = any(kw in msg for kw in CLARIFY_KEYWORDS)
-        if is_clarification:
-            return "handle_owner_inquiry_clarification"
-
-        # If owner gave a price/discount or text answer (e.g. "400k", "1500", "dedo 400 mein")
-        if not is_explicit_catalog_update and not state.get("nlu_is_add_product"):
-            if not any(w in msg for w in ["theek", "ok", "acha", "shukriya", "sahi", "hello", "hi", "salam"]):
-                return "relay_owner_answer"
-
-    # 9. If message mentions a product or brand name without setting a price, handle as info request!
-    # (e.g. "Taurus G3", "Canik TP9", "Glock 19")
-    from app.graph.nodes.nlu import get_catalog_cache
-    cat = get_catalog_cache()
-    if cat:
-        for c_name in cat:
-            brand = c_name.split()[0]
-            if re.search(rf'\b{re.escape(c_name)}\b', msg) or re.search(rf'\b{re.escape(brand)}\b', msg):
-                return "handle_owner_info_request"
-
-    # 10. Fallback
+    # 5. ALL OTHER NATURAL OWNER INTERACTIONS:
+    # Greetings, catalog inquiries, stock checks, photo requests, pricing inquiries,
+    # price updates, margin preferences, escalation responses, AI pause/resume,
+    # casual conversation, and operational questions:
+    # Handled with full cognitive reasoning by the Master Owner Intelligence Copilot!
     return "owner_fallback"
 
 
@@ -221,7 +149,7 @@ async def _generate_grounded_owner_reply(
     context_details: Optional[dict] = None,
     fallback: str = "",
 ) -> str:
-    """Generate natural, respectful, concise Urdu-English copilot message for Haider bhai."""
+    """Generate natural, respectful, intelligent Urdu-English copilot message for Haider bhai."""
     from google import genai
     from google.genai import types
     from app.core.config import settings
@@ -238,9 +166,9 @@ Context / State Data:
 Scenario: {scenario}
 
 Rules:
-1. Address the owner respectfully and casually like a sharp employee on WhatsApp (e.g. "Jee Haider bhai...", "Done bhai...", "Theek hai bhai...").
+1. Address the owner respectfully and conversationally like a sharp employee on WhatsApp (e.g. "Jee Haider bhai...", "Done bhai...", "Theek hai bhai...").
 2. Language: Natural Pakistani Roman Urdu mixed with clear English terms.
-3. Keep it brief and crisp (1-2 sentences, max 25 words).
+3. Be clear, direct, and helpful. Avoid overly robotic phrases.
 4. Zero emojis, zero markdown asterisks, zero bullet points.
 5. Strictly adhere to the facts provided in Context / State Data above.
 
@@ -252,7 +180,7 @@ Generate the exact WhatsApp message to send to Haider bhai:"""
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.3,
-                max_output_tokens=60,
+                max_output_tokens=250,
             ),
         )
         text = (resp.text or "").strip()
@@ -1075,6 +1003,7 @@ async def owner_fallback(state: RabtaGraphState) -> RabtaGraphState:
     """Natural language interpretation of owner messages via Rabta Owner Intelligence Brain."""
     from app.db.session import AsyncSessionLocal
     from app.services.owner_copilot import OwnerCopilotService
+    from app.graph.nodes.nlu import refresh_catalog_cache_async
 
     copilot = OwnerCopilotService()
     tenant_id_str = state.get("tenant_id", "")
@@ -1089,31 +1018,24 @@ async def owner_fallback(state: RabtaGraphState) -> RabtaGraphState:
             tenant_id=tenant_id,
             owner_phone=state.get("sender_phone", ""),
             message_text=state.get("raw_message", ""),
+            conversation_history=state.get("conversation_history") or [],
+            image_base64=state.get("image_base64"),
+            on_cache_invalidate=refresh_catalog_cache_async,
         )
 
-    action = res.get("action")
-    if action == "relay_escalation_to_customer":
-        reply = res.get("owner_confirmation", "Done bhai. Customer ko convey kar diya.")
-        return {
-            **state,
-            "reply_text": reply,
-            "reply_chunks": [reply],
-            "media_url": None,
-            "media_urls": None,
-            "owner_alert": None,
-            "forward_to_customer": res.get("customer_phone"),
-            "forward_message": res.get("customer_reply"),
-        }
+    reply = res.get("message") or "Jee Haider bhai note kar liya."
+    media_url = res.get("media_url")
+    forward_to_customer = res.get("forward_to_customer")
+    forward_message = res.get("forward_message")
 
-    reply = res.get("message", "Jee Haider bhai note kar liya.")
     return {
         **state,
         "reply_text": reply,
         "reply_chunks": [reply],
-        "media_url": None,
-        "media_urls": None,
+        "media_url": media_url,
+        "media_urls": [media_url] if media_url else None,
         "owner_alert": None,
-        "forward_to_customer": None,
-        "forward_message": None,
+        "forward_to_customer": forward_to_customer,
+        "forward_message": forward_message,
     }
 

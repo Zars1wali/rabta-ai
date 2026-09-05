@@ -130,7 +130,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             # ---------------------------------------------------------------
             catalog_context = await _get_cached_catalog(session, str(tenant_id))
             history = await conversation_store.get_history_async(
-                tenant_id, payload.customer_phone if not is_boss else norm_from, limit=6
+                tenant_id, payload.customer_phone if not is_boss else norm_from, limit=10
             )
 
             # ---------------------------------------------------------------

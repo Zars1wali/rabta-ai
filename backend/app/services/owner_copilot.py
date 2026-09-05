@@ -115,146 +115,222 @@ class OwnerCopilotService:
             "message": "Bhai command samajh nahi aayi. Natural batayein kya update karna hai.",
         }
 
-    async def _understand_owner_intent_agi(
-        self,
-        message_text: str,
-        open_inquiries: List[EscalationRecord],
-    ) -> Dict[str, Any]:
-        """
-        Uses Gemini 3.5 Flash-Lite to understand natural owner texts:
-        - daily_confirm: owner confirming today's prices
-        - relay_to_customer: owner replying to an open customer inquiry
-        - margin_preference: owner instructing to prioritize / push a product
-        - stock_update: owner updating stock status (sold out, available count)
-        - price_update: owner providing a new rate for an item
-        - general_chat: conversational acknowledgment
-        """
-        if not self.client:
-            return {"intent": "general"}
-
-        inquiries_summary = []
-        for e in open_inquiries:
-            inquiries_summary.append({
-                "id": str(e.escalation_id),
-                "customer": e.customer_phone,
-                "question": e.customer_question,
-                "product": e.product_context,
-            })
-
-        prompt = f"""You are the Owner Intelligence Agent for Haider Arms (Pakistan firearms dealership).
-The owner (Shahzad Haider Bhai) just sent this WhatsApp message:
-"{message_text}"
-
-Current Open Customer Inquiries waiting for owner answer:
-{json.dumps(inquiries_summary, indent=2)}
-
-Determine the owner's exact intent:
-1. "daily_confirm": Owner confirming daily prices (e.g. "confirmed", "theek hai sab", "prices ok")
-2. "relay_to_customer": Owner answering one of the open customer inquiries (e.g. "dedo 480 me", "1500 delivery charges", "available hai", "tell him out of stock")
-3. "margin_preference": Owner setting priority/push rule (e.g. "push this one - good margin", "give priority to canik")
-4. "stock_update": Owner updating inventory availability (e.g. "sold out", "2 pieces left", "we don't sell this anymore")
-5. "price_update": Owner updating permanent catalog price (e.g. "Glock 19 Gen 5 is 485k", "price changed to 510")
-6. "chat": General greeting or conversation
-
-Return STRICT JSON only:
-{{
-  "intent": "daily_confirm" | "relay_to_customer" | "margin_preference" | "stock_update" | "price_update" | "chat",
-  "target_escalation_id": string or null,
-  "clean_relay_answer": string or null,
-  "product_name": string or null,
-  "new_price": number or null,
-  "stock_count": number or null,
-  "is_sold_out": boolean or null,
-  "preference_reason": string or null,
-  "reply_to_owner": string (short natural Pakistani Roman Urdu response like a capable employee, e.g. "Got it. Updated." or "Done bhai, customer ko convey kar diya.")
-}}"""
-
-        try:
-            resp = await self.client.aio.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    response_mime_type="application/json",
-                ),
-            )
-            raw = (resp.text or "").strip()
-            return json.loads(raw)
-        except Exception as err:
-            logger.warning("[OwnerCopilot:AGI] Intent understanding failed: %s", err)
-            return {"intent": "general"}
-
     async def handle_owner_natural_message(
         self,
         session: AsyncSession,
         tenant_id: uuid.UUID,
         owner_phone: str,
         message_text: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        image_base64: Optional[str] = None,
         on_cache_invalidate: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
-        Processes natural WhatsApp communication from Shahzad Haider Bhai.
-        Implements Section 3, 5, 12, 13, 19 of Rabta Owner Intelligence Agent v2.0.
+        Master Owner Intelligence Agent (Version 2.0).
+        Cognitive business partner for Shahzad Haider Bhai with full context,
+        free thoughts, natural Urdu-English fluency, and reliable action execution.
         """
         msg_clean = message_text.strip()
         open_inquiries = self.escalation_service.get_pending_for_tenant(tenant_id)
+        items = await catalog_repo.get_catalog_for_tenant(session, tenant_id)
 
-        # 1. Run AGI Cognitive Understanding
-        intel = await self._understand_owner_intent_agi(msg_clean, open_inquiries)
-        intent = intel.get("intent", "general")
+        # 1. Fetch store status & preferences
+        stmt_t = select(Tenant).where(Tenant.id == tenant_id)
+        res_t = await session.execute(stmt_t)
+        tenant_obj = res_t.scalar_one_or_none()
+        cfg = dict(tenant_obj.ai_persona_config or {}) if tenant_obj else {}
 
-        # 2. Daily Morning Price Confirmation (Section 13)
-        if intent == "daily_confirm" or msg_clean.lower() in ("confirmed", "confirm", "sab theek hai", "theek hai"):
-            stmt_t = select(Tenant).where(Tenant.id == tenant_id)
-            res_t = await session.execute(stmt_t)
-            t = res_t.scalar_one_or_none()
-            if t:
-                cfg = dict(t.ai_persona_config or {})
-                cfg["prices_confirmed_today"] = True
-                cfg["prices_confirmed_date"] = date.today().isoformat()
-                t.ai_persona_config = cfg
-                await session.commit()
-                if on_cache_invalidate:
-                    await on_cache_invalidate()
-                return {
-                    "action": "reply_owner",
-                    "message": "Got it bhai. Aaj ke prices confirmed mark ho gaye hain. Rabta confident quote karega.",
-                }
+        # 2. Build live catalog context
+        catalog_lines = []
+        for it in items:
+            stk = "In stock" if it.in_stock else "Sold out"
+            meta = it.metadata_json or {}
+            specs = []
+            if meta.get("origin"): specs.append(str(meta["origin"]))
+            if meta.get("caliber"): specs.append(str(meta["caliber"]))
+            if meta.get("action"): specs.append(str(meta["action"]))
+            if meta.get("capacity"): specs.append(f"{meta['capacity']} rds")
+            specs_str = " | ".join(specs) if specs else (it.description or "Standard")
+            has_pic = "Has photo" if it.images else "No photo"
+            catalog_lines.append(f"- {it.name} | PKR {int(it.price):,} | {stk} | {specs_str} | {has_pic}")
+        catalog_text = "\n".join(catalog_lines)
 
-        # 3. Relay answer to open customer inquiry / escalation (Section 14 & 19)
-        if intent == "relay_to_customer" or (open_inquiries and not intent == "price_update"):
-            target_id_str = intel.get("target_escalation_id")
-            target_esc = None
-            if target_id_str:
-                for e in open_inquiries:
-                    if str(e.escalation_id) == target_id_str:
-                        target_esc = e
+        # 3. Build active inquiries context
+        inquiries_lines = []
+        for e in open_inquiries:
+            inquiries_lines.append(
+                f"- ESC-{str(e.escalation_id)[:8]}: Customer {e.customer_name or 'Buyer'} ({e.customer_phone}) | Product: {e.product_context or 'Firearm'} | Question: \"{e.customer_question}\""
+            )
+        inquiries_text = "\n".join(inquiries_lines) if inquiries_lines else "None. All customer queries are currently resolved."
+
+        # 4. Build store status context
+        status_lines = [
+            f"- AI Status: {'PAUSED for all' if tenant_obj and tenant_obj.is_ai_paused else ('PAUSED for ' + tenant_obj.active_takeover_customer_phone if tenant_obj and tenant_obj.active_takeover_customer_phone else 'ACTIVE')}",
+            f"- Today Prices Confirmed: {'YES' if cfg.get('prices_confirmed_today') else 'NO'}",
+        ]
+        preferred = cfg.get("owner_preferred_products", {})
+        if preferred:
+            pref_strs = [f"{p} ({d.get('reason', 'Margin push')})" for p, d in preferred.items()]
+            status_lines.append(f"- Active Push/Margin Priorities: {', '.join(pref_strs)}")
+        status_text = "\n".join(status_lines)
+
+        # 5. Build recent conversation history
+        hist_turns = []
+        for h in (conversation_history or [])[-8:]:
+            spk = "Haider bhai" if h.get("role") in ("customer", "owner", "user") else "Assistant"
+            hist_turns.append(f"{spk}: {h.get('text', '')}")
+        hist_text = "\n".join(hist_turns) if hist_turns else "None (start of session)."
+
+        # 6. Master Cognitive Prompt for Owner Intelligence Agent
+        prompt = f"""You are the Owner Intelligence Agent for Haider Arms (Peshawar, Pakistan).
+You are the personal AI executive assistant, store manager, and inventory copilot for Shahzad Haider Bhai (the store owner) on WhatsApp.
+You function like an exceptionally capable, respectful, sharp employee texting your boss:
+- Tone: Highly intelligent, capable, respectful, conversational, and loyal. Address him as "Jee Haider bhai", "Done bhai", "Theek hai bhai".
+- Language: Natural Pakistani Roman Urdu mixed with clear English firearm/business terms.
+- Cognitive Freedom: You have free thoughts and true business intelligence. You understand guns, pricing, customer negotiation, stock availability, and shop operations deeply.
+- Zero robotic templates, zero markdown asterisks (*), zero emojis.
+- Never make hollow promises like "main check karke batata hoon". You have the full live catalog and store data below, so answer directly with actual facts.
+
+=== LIVE INVENTORY CATALOG ===
+{catalog_text}
+
+=== ACTIVE CUSTOMER INQUIRIES / ESCALATIONS ===
+{inquiries_text}
+
+=== STORE & SYSTEM STATUS ===
+{status_text}
+
+=== RECENT CONVERSATION HISTORY WITH HAIDER BHAI ===
+{hist_text}
+
+=== HAIDER BHAI'S LATEST MESSAGE ===
+"{msg_clean}"
+
+═══════════════════════════════════════════════════════
+DECIDE AND RESPOND:
+Analyze Haider bhai's message in context of the conversation and store state.
+Determine if any operational action is needed:
+1. "SEND_PHOTO": Owner asks for photo/pic of a product (e.g. "taurus g3 ki pic dekhana", "photo bhejo").
+   Provide product_name.
+2. "PRICE_UPDATE": Owner instructs to change or update a catalog price (e.g. "Glock 19 Gen 5 ab 490k kar do", "Taurus G3 160000").
+   Provide product_name, new_price (as numeric PKR).
+3. "STOCK_UPDATE": Owner updates inventory availability (e.g. "Taurus G3 sold out", "2 pieces left", "available hai").
+   Provide product_name, is_in_stock (boolean).
+4. "MARGIN_PREFERENCE": Owner wants to push a firearm for better margin (e.g. "Canik ko push karo acha margin hai").
+   Provide product_name, preference_reason.
+5. "RELAY_TO_CUSTOMER": Owner is answering an escalated customer question or giving a discount (e.g. "dedo 400 mein", "customer ko bolo 5k discount mil jayega").
+   Provide target_escalation_id (or null), customer_reply (sanitized polite message for customer in Roman Urdu).
+6. "PAUSE_AI": Owner wants to pause AI for a customer or store.
+   Provide target_customer_phone (or null for all).
+7. "RESUME_AI": Owner wants to resume AI.
+   Provide target_customer_phone (or null for all).
+8. "DAILY_CONFIRM": Owner confirms morning prices (e.g. "confirmed", "sab theek hai").
+9. "NONE": Conversational reply, status check, price inquiry, specs inquiry, advice, greetings, discussion.
+
+Return STRICT JSON only:
+{{
+  "thought": "<internal reasoning analyzing Haider bhai's intent, firearms discussed, and required action>",
+  "reply": "<natural, respectful, conversational Roman Urdu response addressed to Haider bhai>",
+  "action": "SEND_PHOTO" | "PRICE_UPDATE" | "STOCK_UPDATE" | "MARGIN_PREFERENCE" | "RELAY_TO_CUSTOMER" | "PAUSE_AI" | "RESUME_AI" | "DAILY_CONFIRM" | "NONE",
+  "product_name": string or null,
+  "new_price": number or null,
+  "is_in_stock": boolean or null,
+  "preference_reason": string or null,
+  "customer_reply": string or null,
+  "target_escalation_id": string or null,
+  "target_customer_phone": string or null
+}}"""
+
+        data = {}
+        if self.client:
+            try:
+                resp = await self.client.aio.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.2,
+                        max_output_tokens=450,
+                        response_mime_type="application/json",
+                    ),
+                )
+                raw = (resp.text or "").strip()
+                data = json.loads(raw)
+            except Exception as err:
+                logger.warning("[OwnerCopilot:AGI] Generation error: %s", err)
+
+        action = data.get("action", "NONE")
+        reply_text = data.get("reply") or "Jee Haider bhai note kar liya."
+        reply_text = re.sub(r'[\*\#\_`]', '', reply_text)
+        reply_text = re.sub(r'[\U00010000-\U0010ffff]', '', reply_text, flags=re.UNICODE).strip()
+
+        media_url = None
+        forward_to_customer = None
+        forward_message = None
+
+        # --- ACTION 1: SEND_PHOTO ---
+        if action == "SEND_PHOTO" or any(kw in msg_clean.lower() for kw in ["pic", "photo", "tasveer", "image", "tasvir"]):
+            p_cand = data.get("product_name")
+            matched_item = None
+            if p_cand:
+                for it in items:
+                    if p_cand.lower() in it.name.lower():
+                        matched_item = it
                         break
-            if not target_esc and open_inquiries:
-                target_esc = open_inquiries[0]
+            if not matched_item:
+                m_list = self._smart_match_catalog_products(msg_clean, items, history=conversation_history)
+                if m_list:
+                    matched_item = m_list[0]
+            if matched_item and matched_item.images:
+                raw_img = matched_item.images[0]
+                media_url = f"http://65.20.90.130{raw_img}" if raw_img.startswith("/") else raw_img
 
-            if target_esc:
-                clean_ans = intel.get("clean_relay_answer") or msg_clean
-                resolved = self.escalation_service.resolve_escalation(target_esc.escalation_id, clean_ans)
-                if resolved:
-                    reply_owner = intel.get("reply_to_owner") or "Done bhai. Customer ko convey kar diya."
-                    return {
-                        "action": "relay_escalation_to_customer",
-                        "customer_phone": resolved.customer_phone,
-                        "customer_reply": clean_ans,
-                        "escalation_id": resolved.escalation_id,
-                        "owner_confirmation": reply_owner,
-                    }
+        # --- ACTION 2: PRICE_UPDATE ---
+        elif action == "PRICE_UPDATE":
+            p_name = data.get("product_name")
+            new_p = data.get("new_price")
+            if p_name and new_p and float(new_p) > 0:
+                matched_item = None
+                for it in items:
+                    if p_name.lower() in it.name.lower():
+                        matched_item = it
+                        break
+                if matched_item:
+                    from app.models.database import PriceChangeLog
+                    old_p = float(matched_item.price)
+                    matched_item.price = float(new_p)
+                    log_entry = PriceChangeLog(
+                        tenant_id=tenant_id,
+                        catalog_item_id=matched_item.id,
+                        item_name=matched_item.name,
+                        old_price=old_p,
+                        new_price=float(new_p),
+                        changed_by_phone=owner_phone,
+                        confirmed_at=datetime.utcnow(),
+                        metadata_json=matched_item.metadata_json or {},
+                    )
+                    session.add(log_entry)
+                    await session.commit()
+                    if on_cache_invalidate:
+                        await on_cache_invalidate()
 
-        # 4. Margin & Owner Preference Rule (Section 5)
-        if intent == "margin_preference" or "margin" in msg_clean.lower() or "push" in msg_clean.lower():
-            p_name = intel.get("product_name") or "preferred firearm"
-            reason = intel.get("preference_reason") or msg_clean
-            stmt_t = select(Tenant).where(Tenant.id == tenant_id)
-            res_t = await session.execute(stmt_t)
-            t = res_t.scalar_one_or_none()
-            if t:
-                cfg = dict(t.ai_persona_config or {})
+        # --- ACTION 3: STOCK_UPDATE ---
+        elif action == "STOCK_UPDATE":
+            p_name = data.get("product_name")
+            is_stk = data.get("is_in_stock", False)
+            if p_name:
+                for it in items:
+                    if p_name.lower() in it.name.lower():
+                        it.in_stock = bool(is_stk)
+                        await session.commit()
+                        if on_cache_invalidate:
+                            await on_cache_invalidate()
+                        break
+
+        # --- ACTION 4: MARGIN_PREFERENCE ---
+        elif action == "MARGIN_PREFERENCE":
+            p_name = data.get("product_name") or "preferred item"
+            reason = data.get("preference_reason") or msg_clean
+            if tenant_obj:
                 prefs = dict(cfg.get("owner_preferred_products", {}))
                 prefs[p_name] = {
                     "type": "margin",
@@ -262,65 +338,52 @@ Return STRICT JSON only:
                     "date_set": datetime.utcnow().isoformat(),
                 }
                 cfg["owner_preferred_products"] = prefs
-                t.ai_persona_config = cfg
+                tenant_obj.ai_persona_config = cfg
                 await session.commit()
-                return {
-                    "action": "reply_owner",
-                    "message": f"Got it. {p_name} priority recorded. Customer requirement match hone par Rabta lead karega.",
-                }
 
-        # 5. Stock Update (Section 17 & 19)
-        if intent == "stock_update":
-            p_name = intel.get("product_name")
-            is_sold = intel.get("is_sold_out", False)
-            if p_name:
-                items = await catalog_repo.get_catalog_for_tenant(session, tenant_id)
-                for it in items:
-                    if p_name.lower() in it.name.lower():
-                        it.in_stock = not is_sold
-                        await session.commit()
-                        status_str = "Sold out" if is_sold else "In stock"
-                        return {
-                            "action": "reply_owner",
-                            "message": f"Got it. {it.name} ab {status_str} mark ho gaya.",
-                        }
+        # --- ACTION 5: RELAY_TO_CUSTOMER ---
+        elif action == "RELAY_TO_CUSTOMER":
+            clean_ans = data.get("customer_reply") or msg_clean
+            target_esc = None
+            t_id = data.get("target_escalation_id")
+            if t_id:
+                for e in open_inquiries:
+                    if t_id in str(e.escalation_id):
+                        target_esc = e
+                        break
+            if not target_esc and open_inquiries:
+                target_esc = open_inquiries[0]
+            if target_esc:
+                resolved = self.escalation_service.resolve_escalation(target_esc.escalation_id, clean_ans)
+                if resolved:
+                    forward_to_customer = resolved.customer_phone
+                    forward_message = clean_ans
 
-        # 6. Price Update (Section 12 & 16)
-        price_res = await self.price_service.process_owner_price_message(
-            session=session,
-            tenant_id=tenant_id,
-            owner_phone=owner_phone,
-            message_text=message_text,
-            on_cache_invalidate=on_cache_invalidate,
-        )
-        if price_res is not None:
-            return {
-                "action": "reply_owner",
-                "message": price_res["reply"],
-                "is_price_updated": price_res.get("is_price_updated", False),
-            }
+        # --- ACTION 6: PAUSE_AI ---
+        elif action == "PAUSE_AI":
+            target_cust = data.get("target_customer_phone")
+            await tenant_repo.set_human_takeover(session, tenant_id, target_cust)
 
-        # 7. Catalog Inquiry Grounding Fallback
-        items = await catalog_repo.get_catalog_for_tenant(session, tenant_id)
-        from app.graph.nodes.owner import _smart_match_catalog_products
-        matched = _smart_match_catalog_products(message_text, items)
-        if matched:
-            if len(matched) > 1:
-                lines = ["Haider bhai, catalog ke mutabiq details yeh hain:"]
-                for it in matched:
-                    stk = "In stock" if it.in_stock else "Out of stock"
-                    lines.append(f"• {it.name}: PKR {int(it.price):,} ({stk})")
-                return {"action": "reply_owner", "message": "\n".join(lines)}
-            else:
-                it = matched[0]
-                stk = "In stock" if it.in_stock else "Out of stock"
-                return {"action": "reply_owner", "message": f"Jee Haider bhai, {it.name} stock mein available hai ({stk}), price PKR {int(it.price):,} hai."}
+        # --- ACTION 7: RESUME_AI ---
+        elif action == "RESUME_AI":
+            await tenant_repo.set_human_takeover(session, tenant_id, None)
 
-        # 8. Fallback Human Reply
-        reply_to_owner = intel.get("reply_to_owner") or "Jee bhai note kar liya."
+        # --- ACTION 8: DAILY_CONFIRM ---
+        elif action == "DAILY_CONFIRM":
+            if tenant_obj:
+                cfg["prices_confirmed_today"] = True
+                cfg["prices_confirmed_date"] = date.today().isoformat()
+                tenant_obj.ai_persona_config = cfg
+                await session.commit()
+                if on_cache_invalidate:
+                    await on_cache_invalidate()
+
         return {
-            "action": "reply_owner",
-            "message": reply_to_owner,
+            "action": action,
+            "message": reply_text,
+            "media_url": media_url,
+            "forward_to_customer": forward_to_customer,
+            "forward_message": forward_message,
         }
 
     def format_escalation_alert(
@@ -345,3 +408,60 @@ Return STRICT JSON only:
             question=customer_question,
             inquiry_type=inquiry_type,
         )
+
+    @staticmethod
+    def _smart_match_catalog_products(text: str, catalog_items: list, history: list = None) -> list:
+        t = (text or "").lower()
+        matched = []
+        seen_ids = set()
+
+        def add_match(item):
+            if item.id not in seen_ids:
+                matched.append(item)
+                seen_ids.add(item.id)
+
+        # 1. Direct full name match (longest first)
+        for item in sorted(catalog_items, key=lambda x: len(x.name), reverse=True):
+            pat = re.escape(item.name.lower())
+            if re.search(r'\b' + pat + r'\b', t):
+                add_match(item)
+
+        # 2. Brand-context matching
+        brands = {}
+        for item in catalog_items:
+            brand = item.name.split()[0].lower()
+            brands.setdefault(brand, []).append(item)
+
+        for brand, b_items in brands.items():
+            if re.search(r'\b' + re.escape(brand) + r'\b', t):
+                for item in sorted(b_items, key=lambda x: len(x.name), reverse=True):
+                    model_part = item.name[len(brand):].strip().lower()
+                    if model_part and re.search(r'\b' + re.escape(model_part) + r'\b', t):
+                        add_match(item)
+
+        # 3. Model-only matching without brand
+        if not matched:
+            for item in sorted(catalog_items, key=lambda x: len(x.name), reverse=True):
+                parts = item.name.split()
+                if len(parts) > 1:
+                    model_part = " ".join(parts[1:]).lower()
+                    if len(model_part) >= 2 and re.search(r'\b' + re.escape(model_part) + r'\b', t):
+                        add_match(item)
+
+        # 4. History fallback
+        if not matched and history:
+            for turn in reversed(history):
+                h_text = turn.get("text", "")
+                if h_text and h_text != text:
+                    h_matched = OwnerCopilotService._smart_match_catalog_products(h_text, catalog_items, history=None)
+                    if h_matched:
+                        return h_matched
+
+        # 5. Brand-only fallback
+        if not matched:
+            for brand, b_items in brands.items():
+                if re.search(r'\b' + re.escape(brand) + r'\b', t):
+                    for item in b_items:
+                        add_match(item)
+
+        return matched
