@@ -996,23 +996,43 @@ async def handle_owner_inquiry_clarification(state: RabtaGraphState) -> RabtaGra
 
 
 # --------------------------------------------------------------------------
-# Node: owner_fallback (Grounded Intelligent Contextual Assistant)
+# Node: owner_fallback (Driven by Rabta Owner Intelligence Agent v2.0)
 # --------------------------------------------------------------------------
 async def owner_fallback(state: RabtaGraphState) -> RabtaGraphState:
-    """Fallback when no specific action matched — contextually helps Haider bhai."""
-    msg = state.get("raw_message", "")
-    msg_lower = msg.lower()
+    """Natural language interpretation of owner messages via Rabta Owner Intelligence Brain."""
+    from app.db.session import AsyncSessionLocal
+    from app.services.owner_copilot import OwnerCopilotService
 
-    if any(w in msg_lower for w in ["theek", "ok", "acha", "shukriya", "sahi"]):
-        fallback = "Jee theek hai Haider bhai."
-    else:
-        fallback = "Jee Haider bhai, batayein koi price update karni hai ya customer inquiry check karni hai?"
+    copilot = OwnerCopilotService()
+    tenant_id_str = state.get("tenant_id", "")
+    try:
+        tenant_id = uuid.UUID(tenant_id_str)
+    except (ValueError, AttributeError):
+        tenant_id = uuid.uuid4()
 
-    reply = await _generate_grounded_owner_reply(
-        scenario="Owner made a general comment, query, or unclassified remark.",
-        raw_message=msg,
-        fallback=fallback,
-    )
+    async with AsyncSessionLocal() as session:
+        res = await copilot.handle_owner_natural_message(
+            session=session,
+            tenant_id=tenant_id,
+            owner_phone=state.get("sender_phone", ""),
+            message_text=state.get("raw_message", ""),
+        )
+
+    action = res.get("action")
+    if action == "relay_escalation_to_customer":
+        reply = res.get("owner_confirmation", "Done bhai. Customer ko convey kar diya.")
+        return {
+            **state,
+            "reply_text": reply,
+            "reply_chunks": [reply],
+            "media_url": None,
+            "media_urls": None,
+            "owner_alert": None,
+            "forward_to_customer": res.get("customer_phone"),
+            "forward_message": res.get("customer_reply"),
+        }
+
+    reply = res.get("message", "Jee Haider bhai note kar liya.")
     return {
         **state,
         "reply_text": reply,

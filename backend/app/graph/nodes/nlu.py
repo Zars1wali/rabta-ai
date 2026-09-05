@@ -274,11 +274,10 @@ async def run_customer_nlu(state: RabtaGraphState) -> RabtaGraphState:
     client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
     result = None
 
-    # Fast-path: Greetings and presence checks without product/delivery inquiry
-    # Avoids expensive 20-30s LLM latency for simple greetings ("salam", "hello", "koi hai")
-    is_greeting_word = any(re.search(rf'\b{re.escape(w)}\b', msg_lower) for w in ["salam", "hello", "hi", "aoa", "koi hai", "kese ho", "kia haal hai", "kia hal hai", "assalam"])
-    has_spec_or_product_word = any(w in msg_lower for w in ["delivery", "bhejo", "pic", "photo", "tasweer", "price", "kitne", "kharidna", "license", "specs", "glock", "canik", "beretta", "rifle", "pistol", "shotgun"])
-    if is_greeting_word and not has_spec_or_product_word and len(msg.split()) <= 7:
+    # Fast-path ONLY for pure standalone greetings (e.g. "salam", "aoa", "hello")
+    # Never hijack questions, inquiries, or messages with content
+    pure_greetings = {"salam", "assalam o alaikum", "assalam u alaikum", "assalamualaikum", "aoa", "hello", "hi", "hey"}
+    if msg_lower.strip() in pure_greetings:
         result = {
             "is_delivery_intent": False,
             "is_photo_intent": False,
