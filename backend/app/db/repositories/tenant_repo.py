@@ -39,16 +39,26 @@ def format_pakistani_phone_display(phone: Optional[str], fallback_label: str = "
 
 
 async def get_tenant_by_phone(session: AsyncSession, phone: str) -> Optional[Tenant]:
-    """Find a tenant by either business_phone or owner_phone using normalized digits."""
+    """Find a tenant by either business_phone or owner_phone using normalized digits, falling back to Haider Arms."""
     norm = normalize_phone(phone)
-    if not norm:
-        return None
+    if norm:
+        stmt = select(Tenant).where(
+            (Tenant.business_phone.ilike(f"%{norm}%")) |
+            (Tenant.owner_phone.ilike(f"%{norm}%"))
+        )
+        result = await session.execute(stmt)
+        tenant = result.scalars().first()
+        if tenant:
+            return tenant
 
-    # Check exact match or suffix match
-    stmt = select(Tenant).where(
-        (Tenant.business_phone.ilike(f"%{norm}%")) |
-        (Tenant.owner_phone.ilike(f"%{norm}%"))
-    )
+    # Fallback to Haider Arms Official or sole active business tenant
+    stmt = select(Tenant).where(Tenant.name.ilike("%Haider Arms%"))
+    result = await session.execute(stmt)
+    tenant = result.scalars().first()
+    if tenant:
+        return tenant
+
+    stmt = select(Tenant).order_by(Tenant.created_at.desc())
     result = await session.execute(stmt)
     return result.scalars().first()
 

@@ -55,6 +55,26 @@ function extractTextMessage(message) {
 // Per-customer async queue
 const customerQueues = new Map();
 
+// Outgoing message deduplication cache (prevents duplicate messages to the same JID within 30 seconds)
+const recentOutgoingCache = new Map();
+function isDuplicateOutgoing(jid, text) {
+    if (!text || !jid) return false;
+    const cleanText = text.trim();
+    const key = `${jid}:${cleanText}`;
+    const now = Date.now();
+    const lastSent = recentOutgoingCache.get(key);
+    if (lastSent && (now - lastSent) < 30000) {
+        return true;
+    }
+    recentOutgoingCache.set(key, now);
+    if (recentOutgoingCache.size > 500) {
+        for (const [k, ts] of recentOutgoingCache.entries()) {
+            if (now - ts > 60000) recentOutgoingCache.delete(k);
+        }
+    }
+    return false;
+}
+
 function enqueueCustomerMessage(phone, taskFn) {
     const prev = customerQueues.get(phone) || Promise.resolve();
     const next = prev.then(taskFn).catch(err => {
@@ -262,18 +282,26 @@ async function handleIncomingMessage(msg) {
             const custJid = (global._customerJidMap && global._customerJidMap.get(forwardCustomer))
                 || (global._customerJidMap && global._customerJidMap.get(cleanPhoneNumber(forwardCustomer)))
                 || `${cleanPhoneNumber(forwardCustomer)}@s.whatsapp.net`;
-            console.log(`📨 [RELAY] Forwarding Boss decision to customer [${forwardCustomer}] (JID: ${custJid}): "${forwardMessage.substring(0, 80)}..."`);
-            await new Promise(r => setTimeout(r, 1500));
-            const sent = await sock.sendMessage(custJid, { text: forwardMessage });
-            if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+            if (isDuplicateOutgoing(custJid, forwardMessage)) {
+                console.log(`🛡️ [DEDUP] Suppressed duplicate relay to customer [${forwardCustomer}]`);
+            } else {
+                console.log(`📨 [RELAY] Forwarding Boss decision to customer [${forwardCustomer}] (JID: ${custJid}): "${forwardMessage.substring(0, 80)}..."`);
+                await new Promise(r => setTimeout(r, 1500));
+                const sent = await sock.sendMessage(custJid, { text: forwardMessage });
+                if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+            }
         }
 
         // 4. Send clean notification to the Boss
         if (ownerAlert && ownerPhone) {
             const targetOwnerJid = global._lastKnownOwnerJid || `${cleanPhoneNumber(ownerPhone)}@s.whatsapp.net`;
-            console.log(`🚨 [ALERT] Notifying Boss on [${targetOwnerJid}]`);
-            const sent = await sock.sendMessage(targetOwnerJid, { text: ownerAlert });
-            if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+            if (isDuplicateOutgoing(targetOwnerJid, ownerAlert)) {
+                console.log(`🛡️ [DEDUP] Suppressed duplicate alert to Boss on [${targetOwnerJid}]`);
+            } else {
+                console.log(`🚨 [ALERT] Notifying Boss on [${targetOwnerJid}]`);
+                const sent = await sock.sendMessage(targetOwnerJid, { text: ownerAlert });
+                if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+            }
         }
     } catch (error) {
         console.error(`[${senderPhone}] Gateway bridge error: ${error.message}`);
@@ -449,6 +477,10 @@ app.post('/api/send-message', async (req, res) => {
             } else {
                 jid = `${cleanPhone}@s.whatsapp.net`;
             }
+        }
+        if (isDuplicateOutgoing(jid, message)) {
+            console.log(`🛡️ [/api/send-message] [DEDUP] Suppressed duplicate message to [${jid}]`);
+            return res.json({ success: true, jid, deduped: true });
         }
         const sent = await sock.sendMessage(jid, { text: message });
         if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);

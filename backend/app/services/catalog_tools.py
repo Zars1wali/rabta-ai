@@ -638,20 +638,6 @@ async def _tool_escalate_delivery_quote(tenant_id: str, args: Dict[str, Any], co
         }
         state_updates["escalation_id"] = esc.escalation_id
 
-    # Also attempt direct gateway forward to owner if gateway is reachable
-    try:
-        import httpx
-        owner_phone = context.get("owner_phone") or "61379545444551"
-        for gw_url in ["http://rabta_gateway:3001/api/send-message", "http://localhost:3001/api/send-message"]:
-            try:
-                async with httpx.AsyncClient(timeout=3.0) as client:
-                    await client.post(gw_url, json={"to": owner_phone, "message": owner_alert})
-                    break
-            except Exception:
-                pass
-    except Exception:
-        pass
-
     return {
         "status": "success",
         "escalation_id": esc.escalation_id,
@@ -687,23 +673,22 @@ async def _tool_get_payment_bank_details(tenant_id: str, args: Dict[str, Any], c
 
     if accounts and auto_share:
         pay_text = tenant_repo.format_payment_accounts_text(accounts, cust_name)
-        owner_alert = build_owner_inquiry_alert(
-            customer_name=cust_name,
-            customer_phone=contact_sim,
-            product=product,
-            city=city,
-            inquiry_type="payment_share_alert",
-        )
-        if isinstance(context, dict):
-            state_updates = context.setdefault("state_updates", {})
-            state_updates["owner_alert"] = owner_alert
+        qr_url = next((acc.get("qr_code_url") for acc in accounts if acc.get("qr_code_url")), None)
+        photos = []
+        if qr_url:
+            photos.append({
+                "product_name": "The Bank of Punjab E-Payment QR Code",
+                "url": qr_url,
+                "caption": pay_text,
+            })
 
         return {
             "status": "success",
             "auto_shared": True,
             "payment_text": pay_text,
-            "owner_alert": owner_alert,
-            "message": f"Bank account details retrieved successfully. Present these exact official payment details to {cust_name}:\n\n{pay_text}",
+            "photos": photos,
+            "owner_alert": None,
+            "message": f"Official verified payment details retrieved. Share these exact payment details with {cust_name} (and the official QR code will be sent automatically):\n\n{pay_text}",
         }
     else:
         cust_jid = context.get("sender_phone") or contact_sim
@@ -1000,24 +985,6 @@ async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context:
         state_updates["forward_to_customer"] = target_dest
         state_updates["forward_message"] = formatted_customer_reply
         state_updates["escalation_resolved_id"] = esc.escalation_id
-
-    # Also try sending directly via gateway HTTP endpoint if available
-    try:
-        import httpx
-        for gw_url in ["http://rabta_gateway:3001/api/send-message", "http://localhost:3001/api/send-message", "http://127.0.0.1:3001/api/send-message"]:
-            try:
-                async with httpx.AsyncClient(timeout=4.0) as client:
-                    resp = await client.post(gw_url, json={
-                        "to": target_dest,
-                        "message": formatted_customer_reply,
-                    })
-                    if resp.status_code == 200:
-                        logger.info("[Relay] Direct gateway delivery OK to %s via %s", target_dest, gw_url)
-                        break
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug("[Relay] Gateway direct HTTP attempt note: %s", e)
 
     owner_confirm = f"Jee boss, {cust_name} ({esc.customer_city or 'customer'}) ko message deliver kar diya hai: '{formatted_customer_reply}'"
     return {

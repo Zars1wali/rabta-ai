@@ -194,11 +194,12 @@ class ReActAgentHarness:
                     if tool_result.get("owner_alert"):
                         gathered_owner_alerts.append(tool_result["owner_alert"])
 
-                    # Extract any media URLs returned by tools (e.g. photos)
-                    if fn_name == "get_product_photos" and tool_result.get("photos"):
-                        for p in tool_result["photos"]:
+                    # Extract any media URLs returned by tools (e.g. photos, payment QR codes)
+                    photos_list = tool_result.get("photos") or tool_result.get("media_urls")
+                    if photos_list and isinstance(photos_list, list):
+                        for p in photos_list:
                             gathered_media.append({
-                                "name": p.get("product_name", ""),
+                                "name": p.get("product_name") or p.get("name", ""),
                                 "url": p.get("url", ""),
                                 "caption": p.get("caption", ""),
                             })
