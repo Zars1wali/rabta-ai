@@ -576,6 +576,8 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     current_name = state.get("customer_name")
     current_city = state.get("customer_city")
     current_sim = state.get("customer_sim_phone")
+    address = state.get("customer_address")
+    escalation_id = state.get("escalation_id")
 
     # Detect real SIM phone
     clean_sender = re.sub(r'[^\d]', '', sender_phone)
@@ -1000,6 +1002,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         "customer_state": customer_state,
         "customer_name": name,
         "customer_city": city,
+        "customer_address": address,
         "customer_sim_phone": sim,
         "customer_product": product,
         "escalation_id": escalation_id,
