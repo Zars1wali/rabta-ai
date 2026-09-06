@@ -34,7 +34,13 @@ def is_valid_human_name(n: Optional[str]) -> bool:
     clean = re.sub(r'[^A-Za-z\s]', '', str(n)).strip()
     if len(clean) < 3:
         return False
-    if clean.lower() in ("customer", "user", "guest", "none", "unknown", "whatsapp", "haider arms", "owner"):
+    tokens = clean.lower().split()
+    non_name = {
+        "customer", "user", "guest", "none", "unknown", "whatsapp", "haider arms", "owner",
+        "delivery", "deliver", "chahiye", "bhejo", "bhej", "karo", "rate", "price", "kitna", "kitne",
+        "kya", "discount", "account", "bank", "details", "firearm", "pistol", "gun", "ammo", "available"
+    }
+    if any(t in non_name for t in tokens):
         return False
     return True
 
@@ -68,6 +74,25 @@ def extract_customer_entities(
     city = current_city
     sim = current_sim if is_valid_pakistani_sim(current_sim) else None
 
+    # 1. Extract Pakistani mobile SIM phone
+    if not sim:
+        sim_match = re.search(r'(?:(?:\+92|0092|92|0)?\s?3\d{2}[-\s]?\d{7})', text)
+        if sim_match:
+            raw_digits = re.sub(r'[^\d]', '', sim_match.group(0))
+            if raw_digits.startswith("0") and len(raw_digits) == 11:
+                raw_digits = "92" + raw_digits[1:]
+            elif raw_digits.startswith("3") and len(raw_digits) == 10:
+                raw_digits = "92" + raw_digits
+            if is_valid_pakistani_sim(raw_digits):
+                sim = raw_digits
+
+    # 2. Extract Pakistani City
+    if not city:
+        city_match = re.search(r'\b(lahore|karachi|islamabad|rawalpindi|peshawar|quetta|multan|faisalabad|sialkot|gujranwala|abbottabad|mardan|kohat|pindi|hyderabad|sukkur|bahawalpur|sargodha|dera ismail khan|swat)\b', text, re.IGNORECASE)
+        if city_match:
+            city = city_match.group(1).title()
+
+    # 3. Extract Customer Name
     if not name:
         name_match = re.search(r'(?:mera\s+naam|naam\s+hai|naam)\s+([A-Za-z\s]+?)(?:\s+(?:hai|he|hun|hoon|hy|,|\.|$))', text, re.IGNORECASE)
         if name_match:
@@ -81,22 +106,23 @@ def extract_customer_entities(
                 n = re.sub(r'\b(hai|he|hun|hoon|hy|aur|se|bhai)\b.*$', '', n, flags=re.IGNORECASE).strip()
                 if is_valid_human_name(n):
                     name = n.title()
+
+        # Handle combined messages like "Ahmed 0307 5659224" or "Ahmed Hyderabad"
+        if not name:
+            clean_for_name = text
+            clean_for_name = re.sub(r'(?:(?:\+92|0092|92|0)?\s?3\d{2}[-\s]?\d{7})', '', clean_for_name)
+            if city:
+                clean_for_name = re.sub(rf'\b{re.escape(city)}\b', '', clean_for_name, flags=re.IGNORECASE)
+            clean_for_name = re.sub(r'\b(hai|he|hun|hoon|hy|aur|se|bhai|bhi|main|mera|meri|number|no|whatsapp|sim)\b', '', clean_for_name, flags=re.IGNORECASE)
+            clean_for_name = re.sub(r'[^A-Za-z\s]', '', clean_for_name).strip()
+            tokens = clean_for_name.split()
+            if 1 <= len(tokens) <= 3:
+                cand = " ".join(tokens).title()
+                if is_valid_human_name(cand):
+                    name = cand
+
         if not name and push_name and is_valid_human_name(push_name) and len(push_name.split()) <= 3:
             name = push_name.strip().title()
-
-    if not city:
-        city_match = re.search(r'\b(lahore|karachi|islamabad|rawalpindi|peshawar|quetta|multan|faisalabad|sialkot|gujranwala|abbottabad|mardan|kohat|pindi|hyderabad|sukkur|bahawalpur|sargodha|dera ismail khan|swat)\b', text, re.IGNORECASE)
-        if city_match:
-            city = city_match.group(1).title()
-
-    if not sim:
-        sim_match = re.search(r'(?:(?:\+92|0092|92|0)?\s?3\d{2}[-\s]?\d{7})', text)
-        if sim_match:
-            raw_digits = re.sub(r'[^\d]', '', sim_match.group(0))
-            if raw_digits.startswith("0") and len(raw_digits) == 11:
-                raw_digits = "92" + raw_digits[1:]
-            if is_valid_pakistani_sim(raw_digits):
-                sim = raw_digits
 
     return name, city, sim
 
@@ -221,17 +247,24 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
     if not city and step == "city" and len(msg.split()) <= 3:
         city = msg.strip().title()
 
-    if not address and city:
-        if any(w in msg.lower() for w in ["road", "street", "gali", "phase", "sector", "block", "house", "dha", "town", "chowk"]):
+    # Address extraction: accept when step is address or text contains address keywords (and not purely phone)
+    addr_kws = ["road", "street", "gali", "phase", "sector", "block", "house", "dha", "town", "chowk", "near", "mohalla", "colony", "bazar", "market", "pull", "addah"]
+    is_phone_msg = bool(is_valid_pakistani_sim(msg) or re.search(r'(?:(?:\+92|0092|92|0)?\s?3\d{2}[-\s]?\d{7})', msg))
+    if not address:
+        if step == "address" and not is_phone_msg and len(msg) >= 3:
             address = msg
-        elif step == "address":
+        elif any(w in msg.lower() for w in addr_kws) and not is_phone_msg:
             address = msg
 
-    effective_sim = sim or phone
+    clean_sender_digits = re.sub(r'[^\d]', '', phone)
+    has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
+    effective_sim = sim if is_valid_pakistani_sim(sim) else (clean_sender_digits if is_valid_pakistani_sim(clean_sender_digits) else phone)
+    saved_sim = sim if is_valid_pakistani_sim(sim) else (clean_sender_digits if is_valid_pakistani_sim(clean_sender_digits) else None)
+    has_name = is_valid_human_name(name)
 
     # ── WORKFLOW A: Payment & Bank Details Collection ─────────────────────────
     if step == "payment_details" or esc_type == "payment":
-        if not name:
+        if not has_name:
             reply = "Jee bilkul bhai! Payment aur bank account details provide kar dete hain. Kindly apna Naam share kar dein taake invoice record generate ho sake."
             return {
                 **state,
@@ -239,6 +272,9 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 "info_collection_step": "payment_details",
                 "escalation_type": "payment",
                 "customer_name": None,
+                "customer_city": city,
+                "customer_address": address,
+                "customer_sim_phone": saved_sim,
                 "reply_text": reply,
                 "reply_chunks": [reply],
                 "owner_alert": None,
@@ -253,12 +289,14 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 "escalation_type": "payment",
                 "customer_name": name,
                 "customer_city": None,
+                "customer_address": address,
+                "customer_sim_phone": saved_sim,
                 "reply_text": reply,
                 "reply_chunks": [reply],
                 "owner_alert": None,
             }
 
-        if not sim and len(clean_sender) >= 13:
+        if not has_sim:
             reply = f"Jee {name}, apna WhatsApp SIM contact number share kar dein taake official order slip aur payment verification book ho sake."
             return {
                 **state,
@@ -267,6 +305,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 "escalation_type": "payment",
                 "customer_name": name,
                 "customer_city": city,
+                "customer_address": address,
                 "customer_sim_phone": None,
                 "reply_text": reply,
                 "reply_chunks": [reply],
@@ -286,6 +325,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 customer_phone=effective_sim,
                 product=product,
                 city=city,
+                address=address,
                 inquiry_type="payment_share_alert",
             )
             return {
@@ -295,6 +335,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 "escalation_type": None,
                 "customer_name": name,
                 "customer_city": city,
+                "customer_address": address,
                 "customer_sim_phone": effective_sim,
                 "reply_text": reply,
                 "reply_chunks": [reply],
@@ -315,6 +356,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 customer_phone=effective_sim,
                 product=product,
                 city=city,
+                address=address,
                 question="Customer ne bank account details maangi hain — please provide bank details",
                 inquiry_type="payment",
             )
@@ -324,6 +366,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 "customer_state": "ESCALATED",
                 "customer_name": name,
                 "customer_city": city,
+                "customer_address": address,
                 "customer_sim_phone": effective_sim,
                 "escalation_id": esc_record.escalation_id,
                 "info_collection_step": None,
@@ -335,17 +378,17 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
 
     # ── WORKFLOW C: General Inquiry / Delivery Charges Identity Collection ────
     if step == "inquiry_details":
-        clean_sender_digits = re.sub(r'[^\d]', '', phone)
-        has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
-        has_name = is_valid_human_name(name)
-
         if not has_name:
             reply = "Jee bilkul bhai, kindly apna Naam share kar dein taake shop se confirm kar sakein."
             return {
                 **state,
                 "customer_state": "COLLECTING_INFO",
                 "info_collection_step": "inquiry_details",
+                "escalation_type": esc_type or "inquiry",
                 "customer_name": None,
+                "customer_city": city,
+                "customer_address": address,
+                "customer_sim_phone": saved_sim,
                 "reply_text": reply,
                 "reply_chunks": [reply],
                 "owner_alert": None,
@@ -357,7 +400,10 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 **state,
                 "customer_state": "COLLECTING_INFO",
                 "info_collection_step": "inquiry_details",
+                "escalation_type": esc_type or "inquiry",
                 "customer_name": name,
+                "customer_city": city,
+                "customer_address": address,
                 "customer_sim_phone": None,
                 "reply_text": reply,
                 "reply_chunks": [reply],
@@ -396,6 +442,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             "escalation_type": None,
             "customer_name": name,
             "customer_city": city,
+            "customer_address": address,
             "customer_sim_phone": effective_sim,
             "escalation_id": esc.escalation_id,
             "reply_text": reply,
@@ -404,10 +451,6 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
         }
 
     # ── WORKFLOW B: Delivery Address Collection ───────────────────────────────
-    clean_sender_digits = re.sub(r'[^\d]', '', phone)
-    has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
-    has_name = is_valid_human_name(name)
-
     if not has_name:
         if not has_sim:
             reply = "Delivery bilkul ho sakti hai. Kindly apna Naam aur WhatsApp SIM contact number share kar dein taake shop record ban sake."
@@ -419,6 +462,9 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             "info_collection_step": "name",
             "escalation_type": "delivery",
             "customer_name": None,
+            "customer_city": city,
+            "customer_address": address,
+            "customer_sim_phone": saved_sim,
             "reply_text": reply,
             "reply_chunks": [reply],
             "owner_alert": None,
@@ -433,6 +479,8 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             "escalation_type": "delivery",
             "customer_name": name,
             "customer_city": None,
+            "customer_address": address,
+            "customer_sim_phone": saved_sim,
             "reply_text": reply,
             "reply_chunks": [reply],
             "owner_alert": None,
@@ -447,6 +495,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             "escalation_type": "delivery",
             "customer_name": name,
             "customer_city": city,
+            "customer_address": address,
             "customer_sim_phone": None,
             "reply_text": reply,
             "reply_chunks": [reply],
@@ -462,6 +511,8 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             "escalation_type": "delivery",
             "customer_name": name,
             "customer_city": city,
+            "customer_address": None,
+            "customer_sim_phone": saved_sim,
             "reply_text": reply,
             "reply_chunks": [reply],
             "owner_alert": None,
@@ -765,7 +816,8 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                 "escalation_type": inquiry_type,
                 "customer_name": name if has_name else None,
                 "customer_city": city,
-                "customer_sim_phone": sim if has_sim else None,
+                "customer_address": state.get("customer_address"),
+                "customer_sim_phone": sim if is_valid_pakistani_sim(sim) else (clean_sender_digits if is_valid_pakistani_sim(clean_sender_digits) else None),
                 "customer_product": product,
                 "pending_owner_query": query_payload,
                 "reply_text": prompt_reply,
@@ -872,7 +924,8 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                 "escalation_type": inq_type,
                 "customer_name": name if has_name else None,
                 "customer_city": city,
-                "customer_sim_phone": sim if has_sim else None,
+                "customer_address": state.get("customer_address"),
+                "customer_sim_phone": sim if is_valid_pakistani_sim(sim) else (clean_sender_digits if is_valid_pakistani_sim(clean_sender_digits) else None),
                 "customer_product": product,
                 "pending_owner_query": raw_message,
                 "reply_text": prompt_reply,

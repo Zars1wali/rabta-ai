@@ -292,3 +292,64 @@ async def test_delivery_inquiry_identity_gating_flow(monkeypatch):
     assert "216049773469898" not in res_turn2["owner_alert"]
 
 
+@pytest.mark.asyncio
+async def test_delivery_collection_no_infinite_loop(monkeypatch):
+    """
+    Directly tests the sequence from the user's screenshot:
+    Turn 1: Customer sends 'Ahmed 0307 5659224' when asked for name/SIM for delivery to Hyderabad.
+            Bot must extract Name='Ahmed', SIM='923075659224', prompt for address, AND retain SIM in state!
+    Turn 2: Customer replies 'Chungi chowk'.
+            Bot must retain Name, City, SIM, extract Address='Chungi chowk', escalate, and dispatch owner_alert.
+            Zero infinite loop between SIM and address!
+    """
+    from app.graph.nodes.customer import collect_customer_info
+
+    # State before customer sends Ahmed and phone number
+    state_turn1 = {
+        "tenant_id": str(uuid.uuid4()),
+        "sender_phone": "216049773469898",  # Multi-device LID
+        "raw_message": "Ahmed 0307 5659224",
+        "customer_state": "COLLECTING_INFO",
+        "info_collection_step": "name",
+        "escalation_type": "delivery",
+        "customer_product": "CZ P-10C",
+        "customer_city": "Hyderabad",
+        "customer_name": None,
+        "customer_address": None,
+        "customer_sim_phone": None,
+    }
+
+    res_turn1 = await collect_customer_info(state_turn1)
+
+    # In turn 1, Name and SIM are extracted. Address is needed next.
+    assert res_turn1["customer_state"] == "COLLECTING_INFO"
+    assert res_turn1["customer_name"] == "Ahmed"
+    assert res_turn1["customer_city"] == "Hyderabad"
+    assert res_turn1["customer_sim_phone"] == "923075659224"
+    assert res_turn1["info_collection_step"] == "address"
+    assert "address" in res_turn1["reply_text"].lower() or "area" in res_turn1["reply_text"].lower()
+    assert res_turn1["owner_alert"] is None
+
+    # Turn 2: Customer provides address 'Chungi chowk'
+    state_turn2 = {
+        **res_turn1,
+        "raw_message": "Chungi chowk",
+    }
+
+    res_turn2 = await collect_customer_info(state_turn2)
+
+    # Must NOT ask for WhatsApp SIM again! Must escalate and create owner alert!
+    assert res_turn2["customer_state"] == "ESCALATED"
+    assert res_turn2["customer_name"] == "Ahmed"
+    assert res_turn2["customer_city"] == "Hyderabad"
+    assert res_turn2["customer_address"] == "Chungi chowk"
+    assert res_turn2["customer_sim_phone"] == "923075659224"
+    assert res_turn2["owner_alert"] is not None
+    assert "0307-5659224" in res_turn2["owner_alert"]
+    assert "Ahmed" in res_turn2["owner_alert"]
+    assert "Hyderabad" in res_turn2["owner_alert"]
+    assert "Chungi chowk" in res_turn2["owner_alert"]
+    assert "216049773469898" not in res_turn2["owner_alert"]
+
+
+

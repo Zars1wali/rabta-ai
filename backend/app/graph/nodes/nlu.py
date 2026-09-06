@@ -403,21 +403,46 @@ Return STRICT JSON only:
     if any(p in msg_lower for p in ATTRIBUTE_WORDS) and not any(w in msg_lower for w in ["delivery", "deliver", "courier", "home delivery"]):
         delivery_intent = False
 
-    # Normalize city if needed
+    # Guard and normalize city against LLM hallucinations
     if city and isinstance(city, str):
-        city = city.strip().title()
-        if city.lower() in ["isb", "islamabad"]:
-            city = "Islamabad"
-        elif city.lower() in ["rwp", "pindi", "rawalpindi"]:
-            city = "Rawalpindi"
-        elif city.lower() in ["lhr", "lahore"]:
-            city = "Lahore"
-        elif city.lower() in ["khi", "karachi"]:
-            city = "Karachi"
-        elif city.lower() in ["fsd", "faisalabad"]:
-            city = "Faisalabad"
-        elif city.lower() in ["pew", "peshawar"]:
-            city = "Peshawar"
+        city_clean = city.strip().title()
+        aliases = [city_clean.lower()]
+        if city_clean.lower() == "islamabad":
+            aliases.append("isb")
+        elif city_clean.lower() in ["rawalpindi", "pindi"]:
+            aliases.extend(["rwp", "pindi"])
+        elif city_clean.lower() == "lahore":
+            aliases.append("lhr")
+        elif city_clean.lower() == "karachi":
+            aliases.append("khi")
+        elif city_clean.lower() == "faisalabad":
+            aliases.append("fsd")
+        elif city_clean.lower() == "peshawar":
+            aliases.append("pew")
+
+        # Only accept city if explicitly mentioned in raw message
+        if any(re.search(rf"\b{re.escape(a)}\b", msg_lower) for a in aliases):
+            city = city_clean
+            if city.lower() in ["isb", "islamabad"]:
+                city = "Islamabad"
+            elif city.lower() in ["rwp", "pindi", "rawalpindi"]:
+                city = "Rawalpindi"
+            elif city.lower() in ["lhr", "lahore"]:
+                city = "Lahore"
+            elif city.lower() in ["khi", "karachi"]:
+                city = "Karachi"
+            elif city.lower() in ["fsd", "faisalabad"]:
+                city = "Faisalabad"
+            elif city.lower() in ["pew", "peshawar"]:
+                city = "Peshawar"
+        else:
+            city = None
+
+    # Guard name against hallucinations
+    if name and isinstance(name, str):
+        name_clean = name.strip().title()
+        if not any(token.lower() in msg_lower for token in name_clean.split() if len(token) >= 3):
+            name = None
 
     # Merge into session state
     merged_product = product or state.get("customer_product")
