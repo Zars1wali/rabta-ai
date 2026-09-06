@@ -87,20 +87,6 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
             escalation_service.resolve_escalation(esc.escalation_id, cust_reply)
             target_dest = esc.customer_jid or esc.customer_phone
 
-            # Also try direct gateway delivery
-            try:
-                import httpx
-                for gw_url in ["http://rabta_gateway:3001/api/send-message", "http://localhost:3001/api/send-message", "http://127.0.0.1:3001/api/send-message"]:
-                    try:
-                        async with httpx.AsyncClient(timeout=4.0) as client:
-                            resp = await client.post(gw_url, json={"to": target_dest, "message": cust_reply})
-                            if resp.status_code == 200:
-                                break
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
             owner_confirm = f"Jee Haider bhai, {cust_name} ({esc.customer_city or 'inquiry'}) ko message deliver kar diya hai: '{cust_reply}'"
             return {
                 **state,
