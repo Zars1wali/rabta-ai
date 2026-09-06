@@ -153,16 +153,39 @@ async function handleIncomingMessage(msg) {
     }
     const effectiveSenderPhone = isOwnerMsg ? OWNER_PHONE : senderPhone;
 
+    // Detect Real SIM Phone Number (especially when privacy LID is used)
+    const isLid = sender.endsWith('@lid');
+    let realSimPhone = null;
+    if (!isLid && sender.endsWith('@s.whatsapp.net')) {
+        realSimPhone = sender.split('@')[0];
+    } else {
+        const p = msg.key?.participant || msg.participant || m?.extendedTextMessage?.contextInfo?.participant;
+        if (p && p.endsWith('@s.whatsapp.net')) {
+            realSimPhone = p.split('@')[0];
+        }
+    }
+    const pushName = msg.pushName || null;
+
+    // Track customer JID so relay back to customer always uses correct destination
+    if (!isOwnerMsg) {
+        if (!global._customerJidMap) global._customerJidMap = new Map();
+        global._customerJidMap.set(senderPhone, sender);
+        if (realSimPhone) global._customerJidMap.set(realSimPhone, sender);
+    }
+
     const promptText = textMessage
         || (imageBase64 ? (isOwnerMsg ? 'Add new product from photo' : 'Ye photo mein konsi product hai aur iski price kya hai?') : '')
         || (audioBase64 ? '[VOICE NOTE — transcribe and respond]' : '');
     if (!promptText && !imageBase64 && !audioBase64) return;
 
-    console.log(`📩 Incoming WhatsApp from [${effectiveSenderPhone}]: "${promptText.substring(0, 60)}"`);
+    console.log(`📩 Incoming WhatsApp from [${effectiveSenderPhone}] (SIM: ${realSimPhone || 'unknown'}, Name: ${pushName}): "${promptText.substring(0, 60)}"`);
 
     try {
         const response = await axios.post(`${PYTHON_BACKEND_URL}/api/gateway/process-message`, {
             customer_phone: effectiveSenderPhone,
+            real_phone: realSimPhone,
+            push_name: pushName,
+            sender_jid: sender,
             business_phone: connectedNumber || 'default',
             message: promptText,
             image_base64: imageBase64,
@@ -178,6 +201,7 @@ async function handleIncomingMessage(msg) {
         const ownerPhone = response.data?.owner_phone;
         const forwardCustomer = response.data?.forward_to_customer;
         const forwardMessage = response.data?.forward_message;
+
 
         // 1. Natural human typing delay for customer messages (2.5 - 3.8s)
         if (!isOwnerMsg) {
@@ -235,8 +259,10 @@ async function handleIncomingMessage(msg) {
 
         // 3. Relay owner answer to customer if owner answered
         if (forwardCustomer && forwardMessage) {
-            const custJid = `${cleanPhoneNumber(forwardCustomer)}@s.whatsapp.net`;
-            console.log(`📨 [RELAY] Forwarding Boss decision to customer [${forwardCustomer}]: "${forwardMessage.substring(0, 80)}..."`);
+            const custJid = (global._customerJidMap && global._customerJidMap.get(forwardCustomer))
+                || (global._customerJidMap && global._customerJidMap.get(cleanPhoneNumber(forwardCustomer)))
+                || `${cleanPhoneNumber(forwardCustomer)}@s.whatsapp.net`;
+            console.log(`📨 [RELAY] Forwarding Boss decision to customer [${forwardCustomer}] (JID: ${custJid}): "${forwardMessage.substring(0, 80)}..."`);
             await new Promise(r => setTimeout(r, 1500));
             const sent = await sock.sendMessage(custJid, { text: forwardMessage });
             if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);

@@ -232,6 +232,54 @@ OWNER_TOOLS_DECLARATIONS = [
             "required": ["reply_message"],
         },
     },
+    {
+        "name": "manage_payment_details",
+        "description": "View, add, update, or remove business bank accounts, JazzCash, EasyPaisa, or payment transfer details. Also controls whether bot auto-shares bank details with customers or asks owner first.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["view", "add", "update", "remove", "toggle_auto_share"],
+                    "description": "Action: 'view' to check saved bank accounts, 'add' to save a new bank/wallet, 'remove' to delete one, 'toggle_auto_share' to configure whether bot automatically shares or asks owner first."
+                },
+                "bank_name": {
+                    "type": "string",
+                    "description": "Name of bank or service (e.g. 'Meezan Bank', 'HBL', 'JazzCash', 'EasyPaisa', 'Allied Bank')"
+                },
+                "account_title": {
+                    "type": "string",
+                    "description": "Title of account (e.g. 'Shahzad Haider', 'Haider Arms')"
+                },
+                "account_number": {
+                    "type": "string",
+                    "description": "Account number, IBAN, or JazzCash/EasyPaisa mobile number"
+                },
+                "iban": {
+                    "type": "string",
+                    "description": "Optional IBAN (e.g. 'PK00MEZN00010203040506')"
+                },
+                "auto_share": {
+                    "type": "boolean",
+                    "description": "True if bot should share saved bank details with customer upon collecting their info; False if bot should ask owner first every time"
+                }
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "get_customer_details",
+        "description": "Look up details of the active customer who recently asked an inquiry, requested bank details, or triggered an escalation. Call this whenever the owner asks 'kon hai ye customer', 'ye kon hai', 'customer details kya hain', or asks who a customer is.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Customer phone, name, or 'latest' for the most recent customer inquiry"
+                }
+            }
+        }
+    },
 ]
 
 # ==============================================================================
@@ -265,11 +313,16 @@ async def execute_tool(tool_name: str, args: Dict[str, Any], context: Dict[str, 
             return await _tool_get_pending_escalations(tenant_id, args)
         elif tool_name == "relay_to_customer":
             return await _tool_relay_to_customer(tenant_id, args, context)
+        elif tool_name == "manage_payment_details":
+            return await _tool_manage_payment_details(tenant_id, args)
+        elif tool_name == "get_customer_details":
+            return await _tool_get_customer_details(tenant_id, args)
         else:
             return {"status": "error", "message": f"Unknown tool: {tool_name}"}
     except Exception as e:
         logger.error("[ToolExecutor] Error running %s: %s", tool_name, e, exc_info=True)
         return {"status": "error", "message": str(e)}
+
 
 
 async def _tool_search_catalog(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -662,8 +715,142 @@ async def get_business_profile(tenant_id: str) -> Dict[str, Any]:
         return {
             "business_name": prof.get("business_name") or tenant.name,
             "address": prof.get("address") or "",
-            "phone": tenant.phone,
+            "phone": tenant.business_phone or tenant.owner_phone or "",
             "city": prof.get("city") or "Peshawar",
             "maps_url": prof.get("maps_url") or "",
             "social_channels": prof.get("social_channels") or {},
         }
+
+
+async def _tool_manage_payment_details(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Allows store owner to view, add, update, or remove bank accounts and mobile wallets."""
+    from app.db.repositories import tenant_repo
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid tenant ID"}
+
+    action = (args.get("action") or "view").lower()
+    async with AsyncSessionLocal() as session:
+        if action == "view":
+            accounts = await tenant_repo.get_payment_accounts(session, t_uuid)
+            auto_share = await tenant_repo.is_payment_auto_share_enabled(session, t_uuid)
+            if not accounts:
+                return {
+                    "status": "success",
+                    "accounts_count": 0,
+                    "auto_share": auto_share,
+                    "message": "Abhi koi bank ya wallet account save nahi hai. Aap apna Meezan Bank, HBL, JazzCash ya EasyPaisa account add karwa sakte hain.",
+                }
+            acc_summary = []
+            for a in accounts:
+                acc_summary.append(f"• {a.get('bank_name')}: {a.get('account_title')} ({a.get('account_number')})")
+            mode_desc = "Auto-share ON (direct relay to customer with alert to you)" if auto_share else "Ask-first ON (alerts you before sending)"
+            return {
+                "status": "success",
+                "accounts_count": len(accounts),
+                "auto_share": auto_share,
+                "accounts": accounts,
+                "message": f"Saved payment accounts ({mode_desc}):\n" + "\n".join(acc_summary),
+            }
+
+        elif action in ("add", "update"):
+            bank_name = args.get("bank_name") or "Bank Account"
+            account_title = args.get("account_title") or "Haider Arms"
+            account_number = args.get("account_number") or ""
+            iban = args.get("iban")
+            if not account_number:
+                return {"status": "error", "message": "Account number ya mobile number lazmi provide karein."}
+
+            accounts = await tenant_repo.save_payment_account(
+                session=session,
+                tenant_id=t_uuid,
+                bank_name=bank_name,
+                account_title=account_title,
+                account_number=account_number,
+                iban=iban,
+            )
+            return {
+                "status": "success",
+                "bank_name": bank_name,
+                "account_title": account_title,
+                "account_number": account_number,
+                "total_accounts": len(accounts),
+                "message": f"Done bhai! {bank_name} ({account_number}) save hogaya hai. Customer ko payment ke waqt yehi details provide ki jayengi.",
+            }
+
+        elif action == "remove":
+            target = args.get("bank_name") or args.get("account_number") or ""
+            if not target:
+                return {"status": "error", "message": "Konsa bank ya account number delete karna hai?"}
+            removed = await tenant_repo.remove_payment_account(session, t_uuid, target)
+            if removed:
+                return {"status": "success", "message": f"{target} account delete kardiya gaya hai."}
+            return {"status": "not_found", "message": f"'{target}' se matching koi account nahi mila."}
+
+        elif action == "toggle_auto_share":
+            auto_share = bool(args.get("auto_share", True))
+            await tenant_repo.set_payment_auto_share(session, t_uuid, auto_share)
+            status_text = (
+                "Auto-share ON: Customer jab bank details maangega toh verified details direct relay hongi aur aapko foran notification aayegi."
+                if auto_share else
+                "Ask-First ON: Customer jab bank details maangega toh pehle aapko WhatsApp pe alert aayega aur aapki confirmation ke baad share hoga."
+            )
+            return {"status": "success", "auto_share": auto_share, "message": status_text}
+
+    return {"status": "error", "message": f"Unknown action: {action}"}
+
+
+async def _tool_get_customer_details(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Looks up the identity and inquiry of the active or pending customer."""
+    import re
+    from app.db.repositories.tenant_repo import format_pakistani_phone_display
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        t_uuid = uuid.uuid4()
+
+    pending = escalation_service.get_pending_escalations(t_uuid)
+    if not pending:
+        from app.services.escalation_service import _global_escalations
+        pending = [e for e in _global_escalations.values() if e.tenant_id == str(t_uuid)]
+        pending.sort(key=lambda x: x.created_at, reverse=True)
+
+    if not pending:
+        return {
+            "status": "not_found",
+            "message": "Haider bhai, abhi koi recent pending inquiry ya customer escalation record nahi mila.",
+        }
+
+    q = (args.get("query") or "latest").strip().lower()
+    target_esc = None
+    if q == "latest":
+        target_esc = pending[0]
+    else:
+        for esc in pending:
+            p_clean = re.sub(r"[^\d]", "", esc.customer_phone or "")
+            if q in p_clean or (esc.customer_name and q in esc.customer_name.lower()):
+                target_esc = esc
+                break
+        if not target_esc:
+            target_esc = pending[0]
+
+    formatted_sim = format_pakistani_phone_display(target_esc.customer_phone)
+    cust_name = target_esc.customer_name or "Customer"
+    prod = target_esc.product_context or "firearm"
+    quest = target_esc.customer_question or "Inquiry"
+
+    return {
+        "status": "success",
+        "customer_name": cust_name,
+        "customer_phone": target_esc.customer_phone,
+        "formatted_sim": formatted_sim,
+        "product": prod,
+        "inquiry": quest,
+        "escalation_id": target_esc.escalation_id,
+        "message": (
+            f"Bhai yeh customer {cust_name} hain (WhatsApp SIM: {formatted_sim}). "
+            f"Inhon ne {prod} ke liye poocha hai: \"{quest}\"."
+        ),
+    }
+

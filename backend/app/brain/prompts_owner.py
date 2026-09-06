@@ -64,6 +64,11 @@ Interpret casual owner messages intelligently:
 - "Push this one — better margin" → Set owner preference flag: YES (margin)
 - "Give this customer a special price" → Customer-specific instruction only, never general rule
 - "Confirmed" (in morning) → Set PRICES_CONFIRMED_TODAY = YES
+- "Bank details add kardo Meezan Bank..." → Call `manage_payment_details`
+- "Jazzcash number add kardo..." → Call `manage_payment_details`
+- "Bank details kya hain?" → Call `manage_payment_details` with action="view"
+- "Bank details customer ko khud share mat karo pehle mujhse poocho" → Call `manage_payment_details` with action="toggle_auto_share", auto_share=False
+- "Kon hai ye customer" / "Ye kon hai" / "Ye kaun hai" → Call `get_customer_details(query="latest")` to identify active customer!
 
 ═══════════════════════════════════════════════════════
 4. MARGIN & OWNER-PREFERRED PRODUCTS INTELLIGENCE
@@ -94,7 +99,31 @@ Reminders:
 - 10:00 AM: "Bhai last reminder — prices still pending. Jab free hon tab confirm kar lena."
 
 ═══════════════════════════════════════════════════════
-7. NO GUESSING RULE
+7. CUSTOMER IDENTITY INQUIRIES ("KON HAI YE CUSTOMER")
+═══════════════════════════════════════════════════════
+Whenever the owner asks:
+- "kon hai ye customer"
+- "ye kon hai"
+- "ye kaun hai"
+- "customer ki details kya hain"
+- "kis customer ki baat hai"
+ALWAYS immediately call `get_customer_details(query="latest")` to inspect the active pending escalation.
+Then answer Haider bhai directly in clear, respectful Roman Urdu:
+"Haider bhai, yeh customer [Name] hain [City] se (WhatsApp SIM: [SIM]). Inhon ne [Product] ke liye [Query] poocha hai."
+
+═══════════════════════════════════════════════════════
+8. BANK & PAYMENT ACCOUNTS MANAGEMENT
+═══════════════════════════════════════════════════════
+When owner shares or manages bank accounts, mobile wallets, or payment settings:
+- "Mera Meezan bank account add kardo A/C: ... Title: ..." → call `manage_payment_details` (action='add')
+- "Jazzcash number update kardo ..." → call `manage_payment_details` (action='add')
+- "Check saved bank accounts" / "Bank details kya hain?" → call `manage_payment_details` (action='view')
+- "Easypaisa account remove kardo" → call `manage_payment_details` (action='remove')
+- "Bank details customer ko khud share mat karo pehle mujhse poocho" → call `manage_payment_details` (action='toggle_auto_share', auto_share=False)
+- "Customer ko direct bank bhej diya karo" → call `manage_payment_details` (action='toggle_auto_share', auto_share=True)
+
+═══════════════════════════════════════════════════════
+9. NO GUESSING RULE
 ═══════════════════════════════════════════════════════
 Never guess prices, stock, or business policies. The owner is the ultimate authority.
 """
@@ -105,29 +134,87 @@ def build_owner_inquiry_alert(
     customer_phone: str,
     product: Optional[str],
     city: Optional[str],
-    address: Optional[str],
-    question: str,
+    address: Optional[str] = None,
+    question: str = "",
     inquiry_type: str = "inquiry",
 ) -> str:
     """
-    Formats a natural WhatsApp alert for Shahzad Haider Bhai following Section 3 of Owner Intelligence Agent.
-    Short. Natural. Specific. Easy to answer in one line.
+    Formats a natural WhatsApp alert for Shahzad Haider Bhai following Owner Intelligence Agent guidelines.
+    Never displays raw 15-digit WhatsApp LIDs; formats real Pakistani SIM numbers cleanly.
     """
-    ident = f"{customer_name} ({customer_phone})" if customer_name else f"Customer ({customer_phone})"
+    from app.db.repositories.tenant_repo import format_pakistani_phone_display
+
+    sim_display = format_pakistani_phone_display(customer_phone)
+    name_display = customer_name or "Customer"
     p_str = product or "firearm"
+    city_str = city or "City pending"
+
+    if inquiry_type == "payment":
+        return (
+            f"Haider bhai, Customer ne payment ke liye bank details maangi hain:\n"
+            f"• Naam: {name_display}\n"
+            f"• City: {city_str}\n"
+            f"• WhatsApp SIM: {sim_display}\n"
+            f"• Product: {p_str}\n"
+            f"Kya bank details share kar doon?"
+        )
+
+    if inquiry_type == "payment_share_alert":
+        return (
+            f"Haider bhai, Customer ko payment details share kardi hain:\n"
+            f"• Naam: {name_display}\n"
+            f"• City: {city_str}\n"
+            f"• WhatsApp SIM: {sim_display}\n"
+            f"• Product: {p_str}\n"
+            f"• Status: Customer payment transfer screenshot bhejega."
+        )
 
     if inquiry_type == "delivery":
         loc = f"{city}, {address}" if (city and address and city.lower() not in address.lower()) else (city or address or "city not specified")
-        return f"Haider bhai, {ident}\nAddress: {loc}\nProduct: {p_str}\nDelivery charges kya hain?"
+        return (
+            f"Haider bhai, Delivery charges query:\n"
+            f"• Naam: {name_display}\n"
+            f"• City / Address: {loc}\n"
+            f"• WhatsApp SIM: {sim_display}\n"
+            f"• Product: {p_str}\n"
+            f"Delivery charges kya hain?"
+        )
 
     if inquiry_type == "discount":
-        return f"Haider bhai, {ident} {p_str} ka final price / discount pooch raha hai. Kitna de sakte hain?"
+        return (
+            f"Haider bhai, Customer discount query:\n"
+            f"• Naam: {name_display}\n"
+            f"• City: {city_str}\n"
+            f"• WhatsApp SIM: {sim_display}\n"
+            f"• Product: {p_str}\n"
+            f"Final price / discount kitna de sakte hain?"
+        )
 
     if inquiry_type == "availability":
-        return f"Haider bhai, {ident} {p_str} maang raha hai. Available hai? Aur aaj ka price kya hai?"
+        return (
+            f"Haider bhai, Stock check:\n"
+            f"• Naam: {name_display}\n"
+            f"• WhatsApp SIM: {sim_display}\n"
+            f"• Product: {p_str}\n"
+            f"Available hai? Aur aaj ka rate kya hai?"
+        )
 
     if inquiry_type == "license":
-        return f"Haider bhai, {ident} ne licensing process ke baare mein poocha hai. Please guidance de dein."
+        return (
+            f"Haider bhai, Licensing guidance:\n"
+            f"• Naam: {name_display}\n"
+            f"• WhatsApp SIM: {sim_display}\n"
+            f"• Product: {p_str}\n"
+            f"Customer ne license process ke baare mein poocha hai."
+        )
 
     # Default rate / query
-    return f"Haider bhai, {ident} {p_str} ka pooch raha hai: \"{question}\". Aaj ka rate / update kya hai?"
+    return (
+        f"Haider bhai, Customer inquiry:\n"
+        f"• Naam: {name_display}\n"
+        f"• City: {city_str}\n"
+        f"• WhatsApp SIM: {sim_display}\n"
+        f"• Product: {p_str}\n"
+        f"• Query: \"{question}\""
+    )
+

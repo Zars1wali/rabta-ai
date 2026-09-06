@@ -61,10 +61,14 @@ class GatewayMessagePayload(BaseModel):
     customer_phone: str
     business_phone: str
     message: str
+    real_phone: Optional[str] = None
+    push_name: Optional[str] = None
+    sender_jid: Optional[str] = None
     image_base64: Optional[str] = None
     audio_base64: Optional[str] = None
     audio_mime: Optional[str] = None
     platform: str = "baileys_qr"
+
 
 
 @router.post("/process-message")
@@ -152,6 +156,12 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             graph = await get_graph_async()
             thread_config = make_thread_config(str(tenant_id), norm_from)
 
+            # Detect real SIM phone
+            detected_sim = payload.real_phone or (
+                norm_from if len(norm_from) <= 12 and (norm_from.startswith("923") or norm_from.startswith("03") or norm_from.startswith("3"))
+                else None
+            )
+
             input_state: RabtaGraphState = {
                 "tenant_id": str(tenant_id),
                 "is_boss": is_boss,
@@ -164,9 +174,12 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 "catalog_context": catalog_context,
                 "image_base64": effective_image_b64,
                 "conversation_history": history,
+                "customer_sim_phone": detected_sim,
+                "push_name": payload.push_name,
                 # Reset turn-specific outputs explicitly so nothing bleeds from prior turns in checkpointer
                 "reply_text": "",
                 "reply_chunks": [],
+
                 "media_url": None,
                 "media_urls": None,
                 "owner_alert": None,

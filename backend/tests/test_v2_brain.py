@@ -73,8 +73,9 @@ def test_owner_alert_formatting():
         question="delivery charges kya hain?",
         inquiry_type="delivery",
     )
-    assert "Haider bhai, Kamran (03001234567)" in alert_del
-    assert "Address: Lahore, DHA Phase 5" in alert_del
+    assert "Kamran" in alert_del
+    assert "0300-1234567" in alert_del
+    assert "Lahore, DHA Phase 5" in alert_del
     assert "Delivery charges kya hain?" in alert_del
 
     # Discount alert
@@ -88,4 +89,7 @@ def test_owner_alert_formatting():
         inquiry_type="discount",
     )
     assert "Beretta 92FS" in alert_disc
-    assert "final price / discount" in alert_disc
+    assert "Usman" in alert_disc
+    assert "0300-9876543" in alert_disc
+    assert "Final price / discount" in alert_disc
+

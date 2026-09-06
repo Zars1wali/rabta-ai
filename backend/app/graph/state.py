@@ -31,9 +31,13 @@ class RabtaGraphState(TypedDict, total=False):
     customer_city: Optional[str]      # city explicitly stated by customer
     customer_name: Optional[str]      # name explicitly stated by customer
     customer_address: Optional[str]   # full address for delivery (mohalla/street/area)
+    customer_sim_phone: Optional[str] # verified Pakistani SIM phone number provided or detected
+    push_name: Optional[str]          # WhatsApp profile display name
     escalation_id: Optional[str]      # active ESC-XX id if any
-    info_collection_step: Optional[str]  # "name" | "city" | "address" — which field being collected
-    escalation_type: Optional[str]    # "delivery" | "inquiry" — what triggered info collection
+    info_collection_step: Optional[str]  # "name" | "city" | "address" | "payment_details"
+    escalation_type: Optional[str]    # "delivery" | "inquiry" | "payment"
+    pending_owner_query: Optional[str] # stored inquiry awaiting customer details before sending to owner
+
 
     # ── Owner price-update session state ─────────────────────────────────────
     price_pending_state: Optional[Literal[
