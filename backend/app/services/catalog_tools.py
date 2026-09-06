@@ -1187,7 +1187,8 @@ async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context:
     # If the reply is just a raw number or brief phrase like "3500" or "charges 3500"
     clean_text = reply_msg
     if re.match(r'^\d+[\d,.]*$', clean_text.strip()):
-        clean_text = f"Delivery charges Rs. {clean_text.strip()} hain."
+        city_prefix = f"{esc.customer_city} ke liye " if esc.customer_city else ""
+        clean_text = f"{city_prefix}delivery charges Rs. {clean_text.strip()} hain."
     elif not clean_text.lower().startswith("jee") and not clean_text.lower().startswith("walaikum"):
         clean_text = f"Shop owner se confirm kar liya hai: {clean_text}"
 
