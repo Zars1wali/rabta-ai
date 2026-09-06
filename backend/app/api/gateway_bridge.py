@@ -197,6 +197,36 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             forward_to_customer = result_state.get("forward_to_customer")
             forward_message = result_state.get("forward_message")
 
+            # Strict Global Security Safeguard: Never leak internal flags or agent directives to customer
+            if not is_boss and reply_text:
+                from app.brain.flags import strip_rabta_flags, parse_rabta_flag
+                detected_leak = parse_rabta_flag(reply_text)
+                if detected_leak and not owner_alert:
+                    t_uuid = uuid.UUID(str(tenant_id)) if tenant_id else uuid.uuid4()
+                    esc = escalation_service.create_escalation(
+                        tenant_id=t_uuid,
+                        customer_phone=detected_sim or payload.customer_phone,
+                        customer_name=result_state.get("customer_name"),
+                        question=detected_leak.payload or effective_message,
+                        product_context=result_state.get("customer_product"),
+                    )
+                    from app.brain.prompts_owner import build_owner_inquiry_alert
+                    inq_type = "delivery" if any(w in (detected_leak.payload or "").lower() for w in ["delivery", "cargo", "charges", "hyderabad"]) else "inquiry"
+                    owner_alert = build_owner_inquiry_alert(
+                        customer_name=result_state.get("customer_name"),
+                        customer_phone=detected_sim or payload.customer_phone,
+                        product=result_state.get("customer_product"),
+                        city=result_state.get("customer_city"),
+                        question=detected_leak.payload or effective_message,
+                        inquiry_type=inq_type,
+                    )
+                reply_text = strip_rabta_flags(reply_text)
+                if not reply_text.strip():
+                    reply_text = "Jee bilkul bhai, main shop se confirm karke aapko abhi batata hoon, thoda sa wait karein."
+                reply_chunks = [strip_rabta_flags(c) for c in reply_chunks if strip_rabta_flags(c).strip()]
+                if not reply_chunks:
+                    reply_chunks = [reply_text]
+
             # Persist messages in DB
             if not is_boss:
                 await conversation_store.add_message_async(

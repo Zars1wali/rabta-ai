@@ -19,7 +19,7 @@ from app.services.store_agent import WhatsAppStoreAgent
 from app.services.escalation_service import EscalationService
 from app.services.owner_copilot import OwnerCopilotService
 from app.services.catalog_tools import get_product_photos
-from app.brain.flags import RabtaFlag
+from app.brain.flags import RabtaFlag, strip_rabta_flags, parse_rabta_flag
 
 logger = logging.getLogger(__name__)
 _store_agent = WhatsAppStoreAgent()
@@ -585,13 +585,48 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     # 3. Handle OWNER_QUERY Flag (Section A.29)
     elif flag and flag.flag_type == "OWNER_QUERY":
         customer_state = "ESCALATED"
+        query_payload = flag.payload or raw_message
+        q_lower = query_payload.lower()
+
+        # Extract city from query if not already known
+        if not city:
+            common_cities = [
+                "lahore", "karachi", "islamabad", "rawalpindi", "peshawar", "hyderabad",
+                "multan", "faisalabad", "quetta", "sialkot", "gujranwala", "abbottabad",
+                "mardan", "sukkur", "sargodha", "bahawalpur", "gujrat", "mirpur"
+            ]
+            for c in common_cities:
+                if re.search(rf"\b{c}\b", q_lower):
+                    city = c.title()
+                    break
+
+        # Determine specific inquiry type
+        if any(w in q_lower for w in ["delivery", "cargo", "courier", "charges", "pahunch", "hyderabad"]):
+            inquiry_type = "delivery"
+            wait_reply = f"Jee bilkul bhai, main {'(' + city + ') ' if city else ''}delivery charges shop se confirm karke aapko abhi batata hoon, thoda sa wait karein."
+        elif any(w in q_lower for w in ["discount", "kam", "gunjaish", "final price"]):
+            inquiry_type = "discount"
+            wait_reply = "Jee bilkul bhai, main final discount aur rate shop owner se pooch kar aapko abhi batata hoon, thoda sa wait karein."
+        elif any(w in q_lower for w in ["available", "stock", "stock mein", "available hai"]):
+            inquiry_type = "availability"
+            wait_reply = "Jee bhai, main shop se stock check karke abhi confirm karta hoon, thoda sa wait karein."
+        elif "license" in q_lower:
+            inquiry_type = "license"
+            wait_reply = "Jee bhai, licensing process ki guidance ke liye main shop owner ko notify kar raha hoon, thoda sa wait karein."
+        else:
+            inquiry_type = "inquiry"
+            wait_reply = "Jee bilkul bhai, main shop se confirm karke aapko abhi update karta hoon, thoda sa wait karein."
+
+        reply_text = wait_reply
+        reply_chunks = [reply_text]
+
         try:
             t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
             esc = _esc_service.create_escalation(
                 tenant_id=t_uuid,
                 customer_phone=effective_sim,
                 customer_name=name,
-                question=flag.payload or raw_message,
+                question=query_payload,
                 product_context=product,
                 conversation_snippet=(state.get("conversation_history") or [])[-6:],
             )
@@ -601,8 +636,9 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                 customer_phone=effective_sim,
                 product=product,
                 city=city,
-                question=flag.payload or raw_message,
-                inquiry_type="inquiry",
+                address=state.get("customer_address"),
+                question=query_payload,
+                inquiry_type=inquiry_type,
             )
         except Exception as e:
             logger.error("[Node:customer_sales_chat] Failed creating owner query: %s", e)
@@ -627,6 +663,15 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             )
         except Exception as e:
             logger.error("[Node:customer_sales_chat] Failed creating bulk lead: %s", e)
+
+    # Final Security Check: Never send internal flags or directives to customer
+    if reply_text:
+        reply_text = strip_rabta_flags(reply_text)
+        if not reply_text.strip():
+            reply_text = "Jee bilkul bhai, main shop se confirm karke aapko abhi batata hoon, thoda sa wait karein."
+        reply_chunks = [strip_rabta_flags(c) for c in reply_chunks if strip_rabta_flags(c).strip()]
+        if not reply_chunks:
+            reply_chunks = [reply_text]
 
     return {
         **state,

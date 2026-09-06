@@ -165,3 +165,62 @@ async def test_customer_payment_gating_flow():
     assert "Tariq Mehmood" in res_turn2["owner_alert"]
     assert "Lahore" in res_turn2["owner_alert"]
 
+
+@pytest.mark.asyncio
+async def test_owner_query_flag_never_leaks_to_customer(monkeypatch):
+    from app.brain.flags import parse_rabta_flag, strip_rabta_flags
+    from app.graph.nodes.customer import customer_sales_chat
+    import app.graph.nodes.customer as cust_node
+
+    flag_raw = "OWNER_QUERY: customer — delivery to Hyderabad for Glock 19 Gen 5, Beretta M9A4, Sig Sauer P320 M18, and CZ Shadow 2 Orange — what are the delivery charges?"
+    
+    # 1. Test strip_rabta_flags
+    assert strip_rabta_flags(flag_raw) == ""
+    mixed = f"Jee bilkul bhai.\n{flag_raw}"
+    assert strip_rabta_flags(mixed) == "Jee bilkul bhai."
+
+    # 2. Test parse_rabta_flag
+    parsed = parse_rabta_flag(flag_raw)
+    assert parsed is not None
+    assert parsed.flag_type == "OWNER_QUERY"
+    assert "Hyderabad" in parsed.payload
+
+    # 3. Mock store agent to simulate model outputting the exact raw OWNER_QUERY flag
+    async def mock_handle(*args, **kwargs):
+        return {
+            "reply_text": flag_raw,
+            "reply_chunks": [flag_raw],
+            "media_urls": [],
+            "flag": parsed,
+            "needs_escalation": True,
+        }
+
+    monkeypatch.setattr(cust_node._store_agent, "handle_customer_interaction", mock_handle)
+
+    state = {
+        "tenant_id": str(uuid.uuid4()),
+        "sender_phone": "923146446144",
+        "raw_message": "Hyderabad delivery charges kitni hain?",
+        "customer_state": "BROWSING",
+        "customer_product": "Glock 19 Gen 5, Beretta M9A4, Sig Sauer P320 M18, CZ Shadow 2 Orange",
+        "customer_name": "Tariq",
+        "customer_city": None,
+        "customer_sim_phone": "923146446144",
+    }
+
+    res = await customer_sales_chat(state)
+
+    # Verify: Customer NEVER receives OWNER_QUERY
+    assert "OWNER_QUERY" not in res["reply_text"]
+    for c in res["reply_chunks"]:
+        assert "OWNER_QUERY" not in c
+    assert "delivery charges" in res["reply_text"].lower()
+    assert "wait" in res["reply_text"].lower() or "confirm" in res["reply_text"].lower()
+
+    # Verify: Owner alert WAS generated for Haider bhai!
+    assert res["owner_alert"] is not None
+    assert "Haider bhai, Delivery charges query:" in res["owner_alert"]
+    assert "Hyderabad" in res["owner_alert"]
+    assert "0314-6446144" in res["owner_alert"]
+    assert "Tariq" in res["owner_alert"]
+

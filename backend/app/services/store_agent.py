@@ -23,7 +23,7 @@ from google.genai import types
 
 from app.core.config import settings
 from app.brain.prompts_customer import build_customer_sales_prompt
-from app.brain.flags import parse_rabta_flag, RabtaFlag
+from app.brain.flags import parse_rabta_flag, strip_rabta_flags, RabtaFlag
 from app.services.agent_harness import react_agent_harness
 from app.services.catalog_tools import get_product_photos
 
@@ -114,34 +114,60 @@ class WhatsAppStoreAgent:
             )
 
             reply_text = harness_result.get("reply_text", "").strip()
-            reply_chunks = harness_result.get("reply_chunks") or [reply_text]
+            reply_chunks = harness_result.get("reply_chunks") or ([reply_text] if reply_text else [])
             media_urls = harness_result.get("media_urls") or []
             tool_calls = harness_result.get("tool_calls_executed") or []
 
-            # Check if escalate_inquiry was called
-            needs_escalation = "escalate_inquiry" in tool_calls
-            flag = None
+            # 1. Parse structured system flags from the model's output
+            flag = parse_rabta_flag(reply_text)
+
+            # 2. Check if escalate_inquiry was called or an escalation flag was produced
+            needs_escalation = "escalate_inquiry" in tool_calls or (flag is not None and flag.flag_type in ("ESCALATE", "OWNER_QUERY", "BULK_LEAD"))
 
             # Backward-compatibility flag mapping if tools were called
-            if "get_product_photos" in tool_calls and not media_urls:
-                # Fallback check if model called it but image wasn't in result
-                flag = RabtaFlag(flag_type="IMAGE_REQUEST", product=customer_message)
-            elif needs_escalation:
-                flag = RabtaFlag(flag_type="ESCALATE", payload=customer_message)
+            if not flag:
+                if "get_product_photos" in tool_calls and not media_urls:
+                    flag = RabtaFlag(flag_type="IMAGE_REQUEST", product=customer_message)
+                elif "escalate_inquiry" in tool_calls:
+                    flag = RabtaFlag(flag_type="ESCALATE", payload=customer_message)
+
+            # 3. CRITICAL SAFEGUARD: Never leak raw flags or internal directives to the customer!
+            clean_reply_text = strip_rabta_flags(reply_text)
+            clean_reply_chunks = [strip_rabta_flags(c) for c in reply_chunks if strip_rabta_flags(c).strip()]
+
+            # If the model ONLY emitted a flag (e.g. OWNER_QUERY: ...), provide a warm customer acknowledgment
+            if not clean_reply_text:
+                if flag and flag.flag_type == "OWNER_QUERY":
+                    payload_l = (flag.payload or customer_message or "").lower()
+                    if any(w in payload_l for w in ["delivery", "cargo", "charges", "pahunch", "hyderabad", "karachi", "lahore"]):
+                        clean_reply_text = "Jee bilkul bhai, main delivery charges shop se confirm karke aapko abhi batata hoon, thoda sa wait karein."
+                    elif any(w in payload_l for w in ["discount", "kam", "gunjaish", "final price"]):
+                        clean_reply_text = "Jee bilkul bhai, main final discount aur rate shop owner se confirm karke aapko abhi batata hoon, thoda sa wait karein."
+                    elif any(w in payload_l for w in ["available", "stock", "stock mein"]):
+                        clean_reply_text = "Jee bhai, main shop se stock check karke abhi confirm karta hoon, thoda sa wait karein."
+                    else:
+                        clean_reply_text = "Jee bilkul bhai, main shop se confirm karke aapko abhi batata hoon, thoda sa wait karein."
+                elif flag and flag.flag_type == "ESCALATE":
+                    clean_reply_text = ""
+                else:
+                    clean_reply_text = "Jee bilkul bhai, batayein mazeed kya maloomat chahiye?"
+
+                clean_reply_chunks = [clean_reply_text] if clean_reply_text else []
 
             latency = int((time.monotonic() - t0) * 1000)
             logger.info(
-                "[%s] Customer turn completed in %dms (tools=%s, media=%d, reply='%s')",
+                "[%s] Customer turn completed in %dms (tools=%s, flag=%s, media=%d, reply='%s')",
                 request_id,
                 latency,
                 tool_calls,
+                flag.flag_type if flag else None,
                 len(media_urls),
-                reply_text[:50],
+                clean_reply_text[:50],
             )
 
             return {
-                "reply_text": reply_text,
-                "reply_chunks": reply_chunks,
+                "reply_text": clean_reply_text,
+                "reply_chunks": clean_reply_chunks,
                 "media_urls": media_urls,
                 "flag": flag,
                 "needs_escalation": needs_escalation,

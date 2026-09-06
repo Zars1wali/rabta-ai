@@ -109,3 +109,25 @@ def parse_rabta_flag(text: str) -> Optional[RabtaFlag]:
         return RabtaFlag(flag_type="SYSTEM_ERROR", payload=desc, raw_flag=clean_text)
 
     return None
+
+
+def strip_rabta_flags(text: str) -> str:
+    """
+    Strips internal system flags from customer-facing text so internal directives
+    (OWNER_QUERY, ESCALATE, etc.) never leak to customers on WhatsApp.
+    """
+    if not text:
+        return ""
+    # Strip any line or substring starting with a flag declaration
+    clean = re.sub(
+        r'(?im)^\s*(?:OWNER_QUERY|ESCALATE|IMAGE_REQUEST|BULK_LEAD|LIMIT_REACHED|AI_PAUSED|SYSTEM_ERROR):.*?(?:\n|$)',
+        '',
+        text
+    )
+    # Also strip if flag is inline or trailing
+    clean = re.sub(
+        r'(?i)(?:OWNER_QUERY|ESCALATE|IMAGE_REQUEST|BULK_LEAD|LIMIT_REACHED|AI_PAUSED|SYSTEM_ERROR):.*?(?:\n|$)',
+        '',
+        clean
+    )
+    return clean.strip()
