@@ -593,6 +593,36 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     sim = ext_sim or current_sim
     effective_sim = sim or sender_phone
 
+    # PDF 1 §A.16: Collect customer Name and City before sharing bank details or triggering alert
+    raw_l = raw_message.lower()
+    is_payment_req = any(w in raw_l for w in ["bank", "account", "jazzcash", "easypaisa", "raast", "payment details", "paise transfer", "online payment", "advance payment", "bank details", "a/c", "khata"])
+    if is_payment_req and (not name or not city or (len(clean_sender) >= 13 and not sim)):
+        if not name and not city:
+            if len(clean_sender) >= 13 and not sim:
+                prompt_reply = "Jee bilkul bhai! Payment aur bank account details provide kar dete hain. Kindly apna Naam, City aur WhatsApp contact number share kar dein taake aapka order aur invoice record mein register ho sake."
+            else:
+                prompt_reply = "Jee bilkul bhai! Payment aur bank account details provide kar dete hain. Kindly apna Naam aur City share kar dein taake aapka order aur invoice record mein register ho sake."
+        elif not name:
+            prompt_reply = "Jee bilkul bhai! Payment aur bank details share karne ke liye aapka shubh naam kya hai?"
+        elif not city:
+            prompt_reply = f"Jee {name} bhai! Kis city se hain aap taake invoice record ban sake?"
+        else:
+            prompt_reply = f"Jee {name} bhai! Apna WhatsApp SIM contact number share kar dein taake official order slip book ho sake."
+
+        return {
+            **state,
+            "customer_state": "COLLECTING_INFO",
+            "customer_name": name,
+            "customer_city": city,
+            "customer_sim_phone": sim,
+            "customer_product": state.get("customer_product"),
+            "info_collection_step": "payment_details",
+            "escalation_type": "payment",
+            "reply_text": prompt_reply,
+            "reply_chunks": [prompt_reply],
+            "owner_alert": None,
+        }
+
     # Call the Sales Intelligence Agent
     reply_data = await _store_agent.handle_customer_interaction(
         customer_message=raw_message,

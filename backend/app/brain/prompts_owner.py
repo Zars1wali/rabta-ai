@@ -130,10 +130,10 @@ Never guess prices, stock, or business policies. The owner is the ultimate autho
 
 
 def build_owner_inquiry_alert(
-    customer_name: Optional[str],
-    customer_phone: str,
-    product: Optional[str],
-    city: Optional[str],
+    customer_name: Optional[str] = None,
+    customer_phone: str = "",
+    product: Optional[str] = None,
+    city: Optional[str] = None,
     address: Optional[str] = None,
     question: str = "",
     inquiry_type: str = "inquiry",

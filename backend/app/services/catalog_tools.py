@@ -1206,7 +1206,7 @@ async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context:
         state_updates["forward_message"] = formatted_customer_reply
         state_updates["escalation_resolved_id"] = esc.escalation_id
 
-    owner_confirm = f"Jee boss, {cust_name} ({esc.customer_city or 'customer'}) ko message deliver kar diya hai: '{formatted_customer_reply}'"
+    owner_confirm = f"Jee Haider bhai, {cust_name} ({esc.customer_city or 'customer'}) ko message deliver kar diya hai: '{formatted_customer_reply}'"
     return {
         "status": "success",
         "escalation_id": esc.escalation_id,
