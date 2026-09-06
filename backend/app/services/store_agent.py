@@ -121,14 +121,20 @@ class WhatsAppStoreAgent:
             # 1. Parse structured system flags from the model's output
             flag = parse_rabta_flag(reply_text)
 
-            # 2. Check if escalate_inquiry was called or an escalation flag was produced
-            needs_escalation = "escalate_inquiry" in tool_calls or (flag is not None and flag.flag_type in ("ESCALATE", "OWNER_QUERY", "BULK_LEAD"))
+            owner_alert = harness_result.get("owner_alert")
+            state_updates = harness_result.get("state_updates") or {}
+            if not owner_alert and state_updates.get("owner_alert"):
+                owner_alert = state_updates.get("owner_alert")
+
+            # 2. Check if escalation tools were called or an escalation flag was produced
+            escalation_tools = ("escalate_inquiry", "escalate_delivery_quote", "escalate_custom_inquiry")
+            needs_escalation = bool(owner_alert) or any(t in tool_calls for t in escalation_tools) or (flag is not None and flag.flag_type in ("ESCALATE", "OWNER_QUERY", "BULK_LEAD"))
 
             # Backward-compatibility flag mapping if tools were called
             if not flag:
                 if "get_product_photos" in tool_calls and not media_urls:
                     flag = RabtaFlag(flag_type="IMAGE_REQUEST", product=customer_message)
-                elif "escalate_inquiry" in tool_calls:
+                elif any(t in tool_calls for t in escalation_tools):
                     flag = RabtaFlag(flag_type="ESCALATE", payload=customer_message)
 
             # 3. CRITICAL SAFEGUARD: Never leak raw flags or internal directives to the customer!
@@ -156,11 +162,12 @@ class WhatsAppStoreAgent:
 
             latency = int((time.monotonic() - t0) * 1000)
             logger.info(
-                "[%s] Customer turn completed in %dms (tools=%s, flag=%s, media=%d, reply='%s')",
+                "[%s] Customer turn completed in %dms (tools=%s, flag=%s, alert=%s, media=%d, reply='%s')",
                 request_id,
                 latency,
                 tool_calls,
                 flag.flag_type if flag else None,
+                bool(owner_alert),
                 len(media_urls),
                 clean_reply_text[:50],
             )
@@ -171,6 +178,8 @@ class WhatsAppStoreAgent:
                 "media_urls": media_urls,
                 "flag": flag,
                 "needs_escalation": needs_escalation,
+                "owner_alert": owner_alert,
+                "state_updates": state_updates,
                 "tool_calls": tool_calls,
                 "request_id": request_id,
                 "latency_ms": latency,
@@ -179,13 +188,14 @@ class WhatsAppStoreAgent:
 
         except Exception as e:
             logger.error("[%s] Customer agent generation failed: %s", request_id, e, exc_info=True)
-            fallback = "Jee bhai, Haider Arms se rabta karne ka shukriya. Batayein kis firearm ya product ke baare mein maloomat chahiye?"
+            fallback = "Bhai, technical error aaya hai. Main details check karke aapko abhi batata hoon."
             return {
                 "reply_text": fallback,
                 "reply_chunks": [fallback],
                 "media_urls": [],
                 "flag": None,
                 "needs_escalation": False,
+                "owner_alert": None,
                 "tool_calls": [],
                 "request_id": request_id,
                 "latency_ms": int((time.monotonic() - t0) * 1000),

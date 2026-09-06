@@ -30,9 +30,10 @@ logger = logging.getLogger(__name__)
 class ReActAgentHarness:
     """Executes ReAct conversational turns with Native Gemini Tool Calling."""
 
-    def __init__(self):
+    def __init__(self, max_iterations: int = 3):
         self.model = settings.GEMINI_MODEL  # defaults to gemini-3.5-flash-lite
         self.api_key = settings.GEMINI_API_KEY
+        self.max_iterations = max_iterations
         self._client: Optional[genai.Client] = None
 
     @property
@@ -63,7 +64,7 @@ class ReActAgentHarness:
         execution_context: Optional[Dict[str, Any]] = None,
         image_bytes: Optional[bytes] = None,
         image_mime: str = "image/jpeg",
-        max_iterations: int = 3,
+        max_iterations: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Runs a complete conversational turn using Native Gemini Tool Calling.
@@ -111,11 +112,13 @@ class ReActAgentHarness:
         contents.append(types.Content(role="user", parts=current_parts))
 
         gathered_media = []
+        gathered_owner_alerts = []
         tool_calls_executed = []
         last_tool_message = None
 
         # Run ReAct loop
-        for iteration in range(self.max_iterations):
+        effective_iterations = max_iterations if max_iterations is not None else self.max_iterations
+        for iteration in range(effective_iterations):
             try:
                 config = types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -164,12 +167,14 @@ class ReActAgentHarness:
                         final_text = last_tool_message or "Maaf kijiye, main is query par baat nahi kar sakta."
                     chunks = [c.strip() for c in final_text.split("\n\n") if c.strip()]
                     state_updates = context.get("state_updates") or {} if isinstance(context, dict) else {}
+                    owner_alert = "\n\n".join(gathered_owner_alerts) if gathered_owner_alerts else state_updates.get("owner_alert")
                     return {
                         "reply_text": final_text.strip(),
                         "reply_chunks": chunks if chunks else [final_text.strip()],
                         "media_urls": gathered_media,
                         "tool_calls_executed": tool_calls_executed,
                         "state_updates": state_updates,
+                        "owner_alert": owner_alert,
                         "forward_to_customer": state_updates.get("forward_to_customer"),
                         "forward_message": state_updates.get("forward_message"),
                         "escalation_resolved_id": state_updates.get("escalation_resolved_id"),
@@ -186,6 +191,8 @@ class ReActAgentHarness:
                     tool_result = await execute_tool(fn_name, fn_args, context)
                     if tool_result.get("message"):
                         last_tool_message = tool_result.get("message")
+                    if tool_result.get("owner_alert"):
+                        gathered_owner_alerts.append(tool_result["owner_alert"])
 
                     # Extract any media URLs returned by tools (e.g. photos)
                     if fn_name == "get_product_photos" and tool_result.get("photos"):
@@ -203,8 +210,8 @@ class ReActAgentHarness:
                         )
                     )
 
-                # Feed tool results back to the model with correct role="tool"
-                contents.append(types.Content(role="tool", parts=function_response_parts))
+                # Feed tool results back to the model with correct role="user" (Gemini requires role="user" for function responses)
+                contents.append(types.Content(role="user", parts=function_response_parts))
 
             except Exception as e:
                 logger.error("[ReActHarness] Error in ReAct turn iteration %d: %s", iteration, e, exc_info=True)
@@ -220,12 +227,14 @@ class ReActAgentHarness:
             )
         )
         state_updates = context.get("state_updates") or {} if isinstance(context, dict) else {}
+        owner_alert = "\n\n".join(gathered_owner_alerts) if gathered_owner_alerts else state_updates.get("owner_alert")
         return {
             "reply_text": fallback,
             "reply_chunks": [fallback],
             "media_urls": gathered_media,
             "tool_calls_executed": tool_calls_executed,
             "state_updates": state_updates,
+            "owner_alert": owner_alert,
             "forward_to_customer": state_updates.get("forward_to_customer"),
             "forward_message": state_updates.get("forward_message"),
             "escalation_resolved_id": state_updates.get("escalation_resolved_id"),

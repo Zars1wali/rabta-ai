@@ -611,10 +611,36 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     media_urls = reply_data.get("media_urls") or None
     media_url = media_urls[0]["url"] if media_urls else None
     customer_state = state.get("customer_state", "BROWSING")
-    escalation_id = state.get("escalation_id")
     product = reply_data.get("extracted_item") or reply_data.get("product") or state.get("customer_product")
 
-    # Check if this interaction is asking for payment / bank account details
+    # Native Tool Execution Check: If tool created an escalation or owner alert, handle directly
+    if reply_data.get("owner_alert"):
+        owner_alert = reply_data["owner_alert"]
+        profile = (reply_data.get("state_updates") or {}).get("customer_profile") or {}
+        if profile.get("name"):
+            name = profile["name"]
+        if profile.get("city"):
+            city = profile["city"]
+        if profile.get("address"):
+            address = profile["address"]
+        if profile.get("sim"):
+            sim = profile["sim"]
+        esc_id = (reply_data.get("state_updates") or {}).get("escalation_id") or escalation_id
+        return {
+            **state,
+            "customer_state": "ESCALATED",
+            "customer_name": name,
+            "customer_city": city,
+            "customer_address": address or state.get("customer_address"),
+            "customer_sim_phone": sim,
+            "customer_product": product,
+            "escalation_id": esc_id,
+            "media_url": media_url,
+            "media_urls": media_urls,
+            "reply_text": reply_text,
+            "reply_chunks": reply_chunks,
+            "owner_alert": owner_alert,
+        }
     raw_l = raw_message.lower()
     flag_payload_l = (flag.payload or "").lower() if flag else ""
     is_payment_inquiry = any(w in raw_l for w in ["bank", "account", "jazzcash", "easypaisa", "raast", "payment details", "paise transfer", "online payment", "advance payment", "bank details", "a/c", "khata"]) or (

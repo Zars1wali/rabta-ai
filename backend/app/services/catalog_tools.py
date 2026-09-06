@@ -97,6 +97,92 @@ CUSTOMER_TOOLS_DECLARATIONS = [
             "required": ["reason"],
         },
     },
+    {
+        "name": "escalate_delivery_quote",
+        "description": "Escalate to the store owner to calculate and quote exact delivery charges. Call this ONLY after you have collected the customer's full Name, Pakistani WhatsApp contact SIM number, destination City, and delivery Area/Address.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_name": {
+                    "type": "string",
+                    "description": "Customer's real human name (e.g. 'Ahmed', 'Tariq Mehmood')",
+                },
+                "contact_sim": {
+                    "type": "string",
+                    "description": "Customer's Pakistani mobile SIM phone number (e.g. '03075659224' or '03001234567')",
+                },
+                "destination_city": {
+                    "type": "string",
+                    "description": "Destination city in Pakistan (e.g. 'Hyderabad', 'Lahore', 'Karachi', 'Multan')",
+                },
+                "delivery_address": {
+                    "type": "string",
+                    "description": "Specific delivery address, street, chowk, or area (e.g. 'Chungi chowk', 'DHA Phase 5')",
+                },
+                "product_name": {
+                    "type": "string",
+                    "description": "Product or firearm being delivered (e.g. 'CZ P-10C', 'Taurus G3', 'AR-15')",
+                },
+            },
+            "required": ["customer_name", "contact_sim", "destination_city", "delivery_address"],
+        },
+    },
+    {
+        "name": "get_payment_bank_details",
+        "description": "Retrieve official verified bank account / JazzCash / EasyPaisa details to provide to the customer for advance payment. Call this ONLY after customer has provided their Name and City.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_name": {
+                    "type": "string",
+                    "description": "Customer's name for invoice registration",
+                },
+                "customer_city": {
+                    "type": "string",
+                    "description": "Customer's city",
+                },
+                "contact_sim": {
+                    "type": "string",
+                    "description": "Customer's Pakistani WhatsApp SIM contact number if available",
+                },
+                "product_name": {
+                    "type": "string",
+                    "description": "Product being purchased",
+                },
+            },
+            "required": ["customer_name", "customer_city"],
+        },
+    },
+    {
+        "name": "escalate_custom_inquiry",
+        "description": "Escalate custom pricing, out-of-stock items, dealer bulk rates, or special owner requests to the store owner. Call this ONLY after collecting customer Name and contact SIM.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_name": {
+                    "type": "string",
+                    "description": "Customer's name",
+                },
+                "contact_sim": {
+                    "type": "string",
+                    "description": "Customer's WhatsApp contact SIM",
+                },
+                "question": {
+                    "type": "string",
+                    "description": "Customer's exact question or request",
+                },
+                "inquiry_type": {
+                    "type": "string",
+                    "description": "Type of inquiry: 'discount', 'availability', 'license', or 'inquiry'",
+                },
+                "product_name": {
+                    "type": "string",
+                    "description": "Product involved in inquiry",
+                },
+            },
+            "required": ["customer_name", "contact_sim", "question"],
+        },
+    },
 ]
 
 OWNER_TOOLS_DECLARATIONS = [
@@ -304,6 +390,12 @@ async def execute_tool(tool_name: str, args: Dict[str, Any], context: Dict[str, 
             return await _tool_check_delivery_policy(tenant_id, args)
         elif tool_name == "escalate_inquiry":
             return await _tool_escalate_inquiry(tenant_id, args, context)
+        elif tool_name == "escalate_delivery_quote":
+            return await _tool_escalate_delivery_quote(tenant_id, args, context)
+        elif tool_name == "get_payment_bank_details":
+            return await _tool_get_payment_bank_details(tenant_id, args, context)
+        elif tool_name == "escalate_custom_inquiry":
+            return await _tool_escalate_custom_inquiry(tenant_id, args, context)
         elif tool_name == "update_price":
             return await _tool_update_price(tenant_id, args, context)
         elif tool_name == "update_stock_status":
@@ -496,6 +588,196 @@ async def _tool_escalate_inquiry(tenant_id: str, args: Dict[str, Any], context: 
         "status": "success",
         "escalation_id": esc.escalation_id,
         "message": "Inquiry recorded for store owner review.",
+    }
+
+
+async def _tool_escalate_delivery_quote(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    from app.brain.prompts_owner import build_owner_inquiry_alert
+    from app.db.repositories.tenant_repo import format_pakistani_phone_display
+
+    cust_name = (args.get("customer_name") or "").strip()
+    contact_sim = (args.get("contact_sim") or "").strip()
+    city = (args.get("destination_city") or "").strip()
+    address = (args.get("delivery_address") or "").strip()
+    product = (args.get("product_name") or "firearm").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        t_uuid = uuid.uuid4()
+
+    cust_jid = context.get("sender_phone") or contact_sim
+
+    esc = escalation_service.create_escalation(
+        tenant_id=t_uuid,
+        customer_phone=contact_sim,
+        customer_jid=cust_jid,
+        customer_city=city,
+        customer_name=cust_name,
+        question=f"Delivery to {city} ({address}) for {product}",
+        product_context=product,
+    )
+
+    owner_alert = build_owner_inquiry_alert(
+        customer_name=cust_name,
+        customer_phone=contact_sim,
+        product=product,
+        city=city,
+        address=address,
+        inquiry_type="delivery",
+    )
+
+    if isinstance(context, dict):
+        state_updates = context.setdefault("state_updates", {})
+        state_updates["owner_alert"] = owner_alert
+        state_updates["customer_profile"] = {
+            "name": cust_name,
+            "sim": contact_sim,
+            "city": city,
+            "address": address,
+        }
+        state_updates["escalation_id"] = esc.escalation_id
+
+    # Also attempt direct gateway forward to owner if gateway is reachable
+    try:
+        import httpx
+        owner_phone = context.get("owner_phone") or "61379545444551"
+        for gw_url in ["http://rabta_gateway:3001/api/send-message", "http://localhost:3001/api/send-message"]:
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    await client.post(gw_url, json={"to": owner_phone, "message": owner_alert})
+                    break
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "escalation_id": esc.escalation_id,
+        "owner_alert": owner_alert,
+        "customer_name": cust_name,
+        "city": city,
+        "address": address,
+        "message": (
+            f"Delivery details verified for {cust_name} ({city}, {address}). "
+            f"Owner Haider bhai has been alerted to calculate and quote delivery charges. "
+            f"Please politely reassure {cust_name} bhai in Roman Urdu that you have forwarded the details to the shop and will share the exact delivery charges shortly."
+        ),
+    }
+
+
+async def _tool_get_payment_bank_details(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    from app.db.repositories import tenant_repo
+    from app.brain.prompts_owner import build_owner_inquiry_alert
+
+    cust_name = (args.get("customer_name") or "").strip()
+    city = (args.get("customer_city") or "").strip()
+    contact_sim = (args.get("contact_sim") or context.get("sender_phone") or "").strip()
+    product = (args.get("product_name") or "firearm").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        t_uuid = uuid.uuid4()
+
+    async with AsyncSessionLocal() as session:
+        accounts = await tenant_repo.get_payment_accounts(session, t_uuid)
+        auto_share = await tenant_repo.is_payment_auto_share_enabled(session, t_uuid)
+
+    if accounts and auto_share:
+        pay_text = tenant_repo.format_payment_accounts_text(accounts, cust_name)
+        owner_alert = build_owner_inquiry_alert(
+            customer_name=cust_name,
+            customer_phone=contact_sim,
+            product=product,
+            city=city,
+            inquiry_type="payment_share_alert",
+        )
+        if isinstance(context, dict):
+            state_updates = context.setdefault("state_updates", {})
+            state_updates["owner_alert"] = owner_alert
+
+        return {
+            "status": "success",
+            "auto_shared": True,
+            "payment_text": pay_text,
+            "owner_alert": owner_alert,
+            "message": f"Bank account details retrieved successfully. Present these exact official payment details to {cust_name}:\n\n{pay_text}",
+        }
+    else:
+        cust_jid = context.get("sender_phone") or contact_sim
+        esc = escalation_service.create_escalation(
+            tenant_id=t_uuid,
+            customer_phone=contact_sim,
+            customer_jid=cust_jid,
+            customer_city=city,
+            customer_name=cust_name,
+            question=f"Customer {cust_name} from {city} requested verified bank details for {product}",
+            product_context=product,
+        )
+        owner_alert = build_owner_inquiry_alert(
+            customer_name=cust_name,
+            customer_phone=contact_sim,
+            product=product,
+            city=city,
+            question="Customer requested official bank account details — please provide bank account",
+            inquiry_type="payment",
+        )
+        if isinstance(context, dict):
+            state_updates = context.setdefault("state_updates", {})
+            state_updates["owner_alert"] = owner_alert
+            state_updates["escalation_id"] = esc.escalation_id
+
+        return {
+            "status": "success",
+            "auto_shared": False,
+            "escalation_id": esc.escalation_id,
+            "owner_alert": owner_alert,
+            "message": f"Shop owner has been notified to provide verified bank accounts for {cust_name}. Politely reassure customer in Roman Urdu that you are checking verified bank details with the shop.",
+        }
+
+
+async def _tool_escalate_custom_inquiry(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    from app.brain.prompts_owner import build_owner_inquiry_alert
+
+    cust_name = (args.get("customer_name") or "").strip()
+    contact_sim = (args.get("contact_sim") or context.get("sender_phone") or "").strip()
+    question = (args.get("question") or "").strip()
+    inq_type = (args.get("inquiry_type") or "inquiry").strip()
+    product = (args.get("product_name") or "").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        t_uuid = uuid.uuid4()
+
+    cust_jid = context.get("sender_phone") or contact_sim
+    esc = escalation_service.create_escalation(
+        tenant_id=t_uuid,
+        customer_phone=contact_sim,
+        customer_jid=cust_jid,
+        customer_name=cust_name,
+        question=question,
+        product_context=product,
+    )
+    owner_alert = build_owner_inquiry_alert(
+        customer_name=cust_name,
+        customer_phone=contact_sim,
+        product=product,
+        question=question,
+        inquiry_type=inq_type,
+    )
+    if isinstance(context, dict):
+        state_updates = context.setdefault("state_updates", {})
+        state_updates["owner_alert"] = owner_alert
+        state_updates["escalation_id"] = esc.escalation_id
+
+    return {
+        "status": "success",
+        "escalation_id": esc.escalation_id,
+        "owner_alert": owner_alert,
+        "message": f"Inquiry escalated to store owner. Reassure {cust_name} politely in Roman Urdu that you are confirming with the shop owner.",
     }
 
 
