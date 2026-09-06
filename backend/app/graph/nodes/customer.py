@@ -446,10 +446,13 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
 
     # ── CASE 1: Payment & Bank Details Inquiries ─────────────────────────────
     if is_payment_inquiry:
-        # If customer details (Name, City, SIM) are missing, gate the escalation
-        if not name or not city or (len(clean_sender) >= 13 and not sim):
+        need_sim = (len(clean_sender) >= 13 and not sim)
+        if not name or not city or need_sim:
             if not name and not city:
-                prompt_reply = "Jee bilkul bhai! Payment aur bank account details provide kar dete hain. Kindly apna Naam, City aur WhatsApp contact number share kar dein taake aapka order aur invoice record mein register ho sake."
+                if need_sim:
+                    prompt_reply = "Jee bilkul bhai! Payment aur bank account details provide kar dete hain. Kindly apna Naam, City aur WhatsApp contact number share kar dein taake aapka order aur invoice record mein register ho sake."
+                else:
+                    prompt_reply = "Jee bilkul bhai! Payment aur bank account details provide kar dete hain. Kindly apna Naam aur City share kar dein taake aapka order aur invoice record mein register ho sake."
             elif not name:
                 prompt_reply = "Jee bilkul bhai! Payment aur bank details share karne ke liye aapka shubh naam kya hai?"
             elif not city:
