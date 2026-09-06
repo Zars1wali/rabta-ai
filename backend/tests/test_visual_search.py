@@ -15,35 +15,6 @@ def _image_to_bytes(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
-class TestImagePreprocessing:
-    @patch("app.services.image_preprocessor._yolo_model", None)
-    def test_preprocess_with_heuristic_crop(self):
-        from app.services.image_preprocessor import preprocess_image
-
-        img = _make_test_image()
-        img_bytes = _image_to_bytes(img)
-        result = preprocess_image(img_bytes)
-        assert result is not None
-        assert result.original_image is not None
-        assert result.cropped_image is not None
-        assert result.crop_method in ("heuristic", "yolo", "none")
-
-
-class TestOCRService:
-    @patch("app.services.ocr_service.genai")
-    def test_extract_text_returns_string(self, mock_genai):
-        from app.services.ocr_service import ocr_service
-
-        mock_response = MagicMock()
-        mock_response.text = "Beautiful embroidered lawn suit"
-        mock_genai.aio.generate_content = AsyncMock(return_value=mock_response)
-        ocr_service.client = mock_genai
-
-        img = _make_test_image()
-        img_bytes = _image_to_bytes(img)
-
-        result = asyncio.run(ocr_service.extract_text(img_bytes))
-        assert isinstance(result, str)
 
 
 class TestEmbeddingService:

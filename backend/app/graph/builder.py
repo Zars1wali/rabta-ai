@@ -25,6 +25,7 @@ from app.graph.nodes.customer import (
     customer_sales_chat,
 )
 from app.graph.nodes.owner import (
+    owner_react_node,
     route_owner,
     handle_owner_command,
     handle_owner_add_product,
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------
 # Entry node: route_message
-# Determines is_boss and dispatches to the right NLU branch
+# Determines is_boss and dispatches to the right branch
 # --------------------------------------------------------------------------
 async def route_message(state: RabtaGraphState) -> RabtaGraphState:
     """
@@ -59,8 +60,8 @@ async def route_message(state: RabtaGraphState) -> RabtaGraphState:
 
 
 def _dispatch_route(state: RabtaGraphState) -> str:
-    """Edge after route_message: go to owner NLU or customer NLU."""
-    return "run_owner_nlu" if state.get("is_boss") else "run_customer_nlu"
+    """Edge after route_message: go to owner ReAct agent or customer NLU."""
+    return "owner_react_node" if state.get("is_boss") else "run_customer_nlu"
 
 
 # --------------------------------------------------------------------------
@@ -103,7 +104,11 @@ def build_graph(checkpointer=None) -> StateGraph:
     graph.add_node("escalate_to_owner", escalate_to_owner)
     graph.add_edge("escalate_to_owner", END)
 
-    # ── Owner branch ──────────────────────────────────────────────────────
+    # ── Owner ReAct Agent ─────────────────────────────────────────────────
+    graph.add_node("owner_react_node", owner_react_node)
+    graph.add_edge("owner_react_node", END)
+
+    # ── Legacy Owner nodes for checkpoint backwards-compatibility ────────
     graph.add_node("run_owner_nlu", run_owner_nlu)
     graph.add_conditional_edges("run_owner_nlu", route_owner)
 

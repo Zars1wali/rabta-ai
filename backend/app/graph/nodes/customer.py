@@ -32,12 +32,14 @@ def route_customer(state: RabtaGraphState) -> str:
     and dynamic Sales Intelligence chat.
     """
     cs = state.get("customer_state", "BROWSING")
+    msg = (state.get("raw_message") or "").lower()
 
     # If in active info collection, continue unless customer changes topic
-    if cs == "COLLECTING_INFO":
+    if cs in ("COLLECTING_INFO", "DELIVERY_ASKED"):
         return "collect_customer_info"
 
-    if cs == "DELIVERY_ASKED":
+    # Delivery intent initiates info collection (name -> city -> address)
+    if any(w in msg for w in ["delivery", "deliver", "bhejo", "bhej do"]):
         return "collect_customer_info"
 
     # All conversational queries, greetings, product questions route to customer_sales_chat
@@ -107,23 +109,32 @@ async def escalate_to_owner(state: RabtaGraphState) -> RabtaGraphState:
 # --------------------------------------------------------------------------
 async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
     """
-    Collects city/address when delivery is chosen, then alerts the owner for courier charges.
+    Progressively collects Name -> City -> Address when delivery is chosen,
+    then alerts the owner for courier charges.
     """
     msg = (state.get("raw_message") or "").strip()
     phone = state.get("sender_phone", "unknown")
+    name = state.get("customer_name")
     city = state.get("customer_city")
     address = state.get("customer_address")
     product = state.get("customer_product", "requested firearm")
     step = state.get("info_collection_step")
     tenant_id_str = state.get("tenant_id", "")
 
-    # Natural entity extraction from message
+    # Entity extraction
+    if not name:
+        name_match = re.search(r'(?:mera\s+naam|naam\s+hai|naam)\s+([A-Za-z\s]+)', msg, re.IGNORECASE)
+        if name_match:
+            name = name_match.group(1).strip().title()
+        elif step == "name" and len(msg.split()) <= 3 and not any(w in msg.lower() for w in ["lahore", "karachi", "delivery"]):
+            name = msg.strip().title()
+
     if not city:
         city_match = re.search(r'\b(lahore|karachi|islamabad|rawalpindi|peshawar|quetta|multan|faisalabad|sialkot|gujranwala|abbottabad|mardan|kohat|pindi)\b', msg, re.IGNORECASE)
         if city_match:
             city = city_match.group(1).title()
         elif step == "city" and len(msg.split()) <= 3:
-            city = msg.title()
+            city = msg.strip().title()
 
     if not address and city:
         if any(w in msg.lower() for w in ["road", "street", "gali", "phase", "sector", "block", "house", "dha", "town", "chowk"]):
@@ -131,12 +142,25 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
         elif step == "address":
             address = msg
 
+    if not name:
+        reply = "Delivery bilkul ho sakti hai. Aapka naam kya hai?"
+        return {
+            **state,
+            "customer_state": "COLLECTING_INFO",
+            "info_collection_step": "name",
+            "customer_name": None,
+            "reply_text": reply,
+            "reply_chunks": [reply],
+            "owner_alert": None,
+        }
+
     if not city:
-        reply = "Delivery bilkul ho sakti hai. Aapka city kya hai?"
+        reply = f"Jee {name}, kis city mein delivery chahiye?"
         return {
             **state,
             "customer_state": "COLLECTING_INFO",
             "info_collection_step": "city",
+            "customer_name": name,
             "customer_city": None,
             "reply_text": reply,
             "reply_chunks": [reply],
@@ -149,6 +173,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             **state,
             "customer_state": "COLLECTING_INFO",
             "info_collection_step": "address",
+            "customer_name": name,
             "customer_city": city,
             "reply_text": reply,
             "reply_chunks": [reply],
@@ -166,14 +191,14 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
         customer_phone=phone,
         question=f"Delivery to {city} ({address}) for {product}",
         product_context=product,
-        customer_name=state.get("customer_name"),
+        customer_name=name,
         conversation_snippet=(state.get("conversation_history") or [])[-6:],
     )
 
     owner_alert = _copilot.format_escalation_alert(
         customer_phone=phone,
         customer_question=msg,
-        customer_name=state.get("customer_name"),
+        customer_name=name,
         extracted_item=product,
         extracted_city=city,
         customer_address=address,
@@ -184,6 +209,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
     return {
         **state,
         "customer_state": "ESCALATED",
+        "customer_name": name,
         "customer_city": city,
         "customer_address": address,
         "escalation_id": esc_record.escalation_id,
@@ -222,14 +248,14 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     reply_chunks = reply_data.get("reply_chunks") or ([reply_text] if reply_text else [])
 
     owner_alert = None
-    media_url = None
-    media_urls = None
+    media_urls = reply_data.get("media_urls") or None
+    media_url = media_urls[0]["url"] if media_urls else None
     customer_state = state.get("customer_state", "BROWSING")
     escalation_id = state.get("escalation_id")
-    product = state.get("customer_product")
+    product = reply_data.get("extracted_item") or reply_data.get("product") or state.get("customer_product")
 
-    # 1. Handle IMAGE_REQUEST Flag (Section A.24)
-    if flag and flag.flag_type == "IMAGE_REQUEST":
+    # 1. Handle Native Media or Legacy IMAGE_REQUEST Flag
+    if not media_urls and flag and flag.flag_type == "IMAGE_REQUEST":
         target_product = flag.product or reply_data.get("image_product") or product or "firearm"
         try:
             photos = await get_product_photos(
@@ -315,6 +341,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     return {
         **state,
         "customer_state": customer_state,
+        "customer_product": product,
         "escalation_id": escalation_id,
         "media_url": media_url,
         "media_urls": media_urls,

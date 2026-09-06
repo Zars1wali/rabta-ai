@@ -183,3 +183,16 @@ class EscalationService:
         _save_persisted_escalations()
         logger.info("[EscalationService] Resolved %s for customer=%s with answer=%s", escalation_id, esc.customer_phone, owner_answer[:40])
         return esc
+
+    def resolve_escalation_by_phone(self, customer_phone: str, owner_answer: str) -> Optional[EscalationRecord]:
+        _load_persisted_escalations()
+        clean_target = re.sub(r'[^\d]', '', customer_phone)
+        for esc in reversed(list(_global_escalations.values())):
+            clean_esc = re.sub(r'[^\d]', '', esc.customer_phone)
+            if clean_esc and (clean_esc in clean_target or clean_target in clean_esc) and esc.status == "PENDING":
+                return self.resolve_escalation(esc.escalation_id, owner_answer)
+        return None
+
+
+
+escalation_service = EscalationService()
