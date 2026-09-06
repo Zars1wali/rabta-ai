@@ -433,10 +433,20 @@ app.post('/api/send-message', async (req, res) => {
     if (connectionStatus !== 'CONNECTED') return res.status(503).json({ error: 'WhatsApp not connected' });
 
     try {
-        const cleanPhone = cleanPhoneNumber(phone);
-        const jid = `${cleanPhone}@s.whatsapp.net`;
+        let jid;
+        if (typeof phone === 'string' && (phone.endsWith('@lid') || phone.endsWith('@s.whatsapp.net'))) {
+            jid = phone;
+        } else {
+            const cleanPhone = cleanPhoneNumber(phone);
+            const OWNER_LID = process.env.OWNER_LID || '61379545444551';
+            if (cleanPhone === OWNER_LID || phone.includes(OWNER_LID)) {
+                jid = global._lastKnownOwnerJid || `${OWNER_LID}@lid`;
+            } else {
+                jid = `${cleanPhone}@s.whatsapp.net`;
+            }
+        }
         await sock.sendMessage(jid, { text: message });
-        res.json({ success: true });
+        res.json({ success: true, jid });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
