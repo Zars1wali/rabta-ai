@@ -40,11 +40,19 @@ def extract_customer_entities(
     sim = current_sim
 
     if not name:
-        name_match = re.search(r'(?:mera\s+naam|naam\s+hai|naam)\s+([A-Za-z\s]+)', text, re.IGNORECASE)
+        name_match = re.search(r'(?:mera\s+naam|naam\s+hai|naam)\s+([A-Za-z\s]+?)(?:\s+(?:hai|he|hun|hoon|hy|,|\.|$))', text, re.IGNORECASE)
         if name_match:
             name = name_match.group(1).strip().title()
-        elif push_name and len(push_name.split()) <= 3 and not any(w in push_name.lower() for w in ["whatsapp", "user", "guest"]):
+        else:
+            name_match2 = re.search(r'(?:mera\s+naam|naam)\s+([A-Za-z\s]+)', text, re.IGNORECASE)
+            if name_match2:
+                n = name_match2.group(1).strip()
+                n = re.sub(r'\b(hai|he|hun|hoon|hy|aur|se|bhai)\b.*$', '', n, flags=re.IGNORECASE).strip()
+                if n:
+                    name = n.title()
+        if not name and push_name and len(push_name.split()) <= 3 and not any(w in push_name.lower() for w in ["whatsapp", "user", "guest"]):
             name = push_name.strip().title()
+
 
     if not city:
         city_match = re.search(r'\b(lahore|karachi|islamabad|rawalpindi|peshawar|quetta|multan|faisalabad|sialkot|gujranwala|abbottabad|mardan|kohat|pindi|hyderabad|sukkur|bahawalpur|sargodha|dera ismail khan|swat)\b', text, re.IGNORECASE)

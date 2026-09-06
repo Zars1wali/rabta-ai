@@ -810,7 +810,7 @@ async def _tool_get_customer_details(tenant_id: str, args: Dict[str, Any]) -> Di
     except (ValueError, TypeError):
         t_uuid = uuid.uuid4()
 
-    pending = escalation_service.get_pending_escalations(t_uuid)
+    pending = escalation_service.get_pending_for_tenant(t_uuid)
     if not pending:
         from app.services.escalation_service import _global_escalations
         pending = [e for e in _global_escalations.values() if e.tenant_id == str(t_uuid)]
