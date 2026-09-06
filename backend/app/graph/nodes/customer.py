@@ -664,6 +664,55 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         except Exception as e:
             logger.error("[Node:customer_sales_chat] Failed creating bulk lead: %s", e)
 
+    # ── CASE 5: Implicit Owner Escalation Recovery ─────────────────────────────
+    # If the bot promised the customer it's checking with the owner / shop, OR if customer asked for delivery charges
+    # but no owner_alert was triggered by the model:
+    raw_lower = raw_message.lower()
+    reply_lower = (reply_text or "").lower()
+
+    asked_delivery = any(w in raw_lower for w in ["delivery", "cargo", "courier", "pahunch"]) and any(w in raw_lower for w in ["charges", "rate", "cost", "kitna", "kitne", "kya", "hyderabad", "karachi", "lahore", "islamabad"])
+    bot_promised_owner = any(w in reply_lower for w in [
+        "owner se confirm", "owner se pooch", "malik se pooch", "shop se confirm", "owner ko notify", "owner se baat", "confirm karne ke liye keh diya"
+    ])
+
+    if not owner_alert and (asked_delivery or bot_promised_owner):
+        customer_state = "ESCALATED"
+        common_cities = [
+            "lahore", "karachi", "islamabad", "rawalpindi", "peshawar", "hyderabad",
+            "multan", "faisalabad", "quetta", "sialkot", "gujranwala", "abbottabad",
+            "mardan", "sukkur", "sargodha", "bahawalpur", "gujrat", "mirpur"
+        ]
+        if not city:
+            for c in common_cities:
+                if re.search(rf"\b{c}\b", raw_lower) or re.search(rf"\b{c}\b", reply_lower):
+                    city = c.title()
+                    break
+
+        inq_type = "delivery" if (asked_delivery or "delivery" in reply_lower) else "inquiry"
+        try:
+            t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
+            esc = _esc_service.create_escalation(
+                tenant_id=t_uuid,
+                customer_phone=effective_sim,
+                customer_name=name,
+                question=raw_message,
+                product_context=product,
+                conversation_snippet=(state.get("conversation_history") or [])[-6:],
+            )
+            escalation_id = esc.escalation_id
+            owner_alert = build_owner_inquiry_alert(
+                customer_name=name,
+                customer_phone=effective_sim,
+                product=product,
+                city=city,
+                address=state.get("customer_address"),
+                question=raw_message,
+                inquiry_type=inq_type,
+            )
+            logger.info("[Recovery] Auto-created escalation and owner_alert for inquiry: %s", raw_message[:60])
+        except Exception as e:
+            logger.error("[Node:customer_sales_chat] Failed auto-creating escalation: %s", e)
+
     # Final Security Check: Never send internal flags or directives to customer
     if reply_text:
         reply_text = strip_rabta_flags(reply_text)
