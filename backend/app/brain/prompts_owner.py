@@ -149,6 +149,27 @@ def build_owner_inquiry_alert(
     p_str = product or "firearm"
     city_str = city or "City pending"
 
+    if inquiry_type in ("emergency", "legal_police", "fraud_claim", "critical_complaint"):
+        return (
+            f"🚨 URGENT: Haider bhai, Customer issue alert:\n"
+            f"• Naam: {name_display}\n"
+            f"• WhatsApp SIM: {sim_display}\n"
+            f"• Issue Type: {inquiry_type.upper()}\n"
+            f"• Customer Message: \"{question}\"\n"
+            f"Customer ko hold pe rakha hai, please isko personally check kar lein."
+        )
+
+    if inquiry_type == "bulk_lead":
+        return (
+            f"💼 HIGH VALUE BULK LEAD: Haider bhai, B2B inquiry aayi hai:\n"
+            f"• Naam: {name_display}\n"
+            f"• WhatsApp SIM: {sim_display}\n"
+            f"• City: {city_str}\n"
+            f"• Product: {p_str}\n"
+            f"• Quantity / Requirement: {question}\n"
+            f"Bulk dealer rate quote karein ya aapse direct call arrange karein?"
+        )
+
     if inquiry_type == "payment":
         return (
             f"Haider bhai, Customer ne payment ke liye bank details maangi hain:\n"

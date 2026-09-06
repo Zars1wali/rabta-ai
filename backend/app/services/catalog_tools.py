@@ -183,6 +183,123 @@ CUSTOMER_TOOLS_DECLARATIONS = [
             "required": ["customer_name", "contact_sim", "question"],
         },
     },
+    {
+        "name": "recommend_alternative",
+        "description": "Find and recommend catalog alternatives when an item is out of stock, customer budget is constrained, or customer is open to suggestions. Matches category, caliber, and budget while prioritizing verified in-stock options.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "original_product": {
+                    "type": "string",
+                    "description": "Original product requested (e.g. 'Glock 19', 'Taurus G3', 'Beretta 92FS')",
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Category (e.g. 'Pistols', 'Shotguns', 'Rifles', 'Ammunition')",
+                },
+                "caliber": {
+                    "type": "string",
+                    "description": "Caliber (e.g. '9mm', '12 Gauge', '7.62x39')",
+                },
+                "max_budget": {
+                    "type": "number",
+                    "description": "Customer's maximum budget in PKR if specified",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Reason for alternative: 'out_of_stock', 'budget_constraint', or 'general_recommendation'",
+                },
+            },
+            "required": ["original_product"],
+        },
+    },
+    {
+        "name": "escalate_silent_emergency",
+        "description": "Silently escalate serious issues (legal notices, police/FIA inquiries, fraud accusations, severe damage claims) directly to the owner without alarming the customer. The customer is given a calm, professional holding response.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "emergency_type": {
+                    "type": "string",
+                    "enum": ["legal_police", "fraud_claim", "damaged_shipment", "critical_complaint"],
+                    "description": "Type of emergency",
+                },
+                "customer_message": {
+                    "type": "string",
+                    "description": "The exact message or claim made by the customer",
+                },
+                "customer_name": {
+                    "type": "string",
+                    "description": "Customer's name if known",
+                },
+                "contact_sim": {
+                    "type": "string",
+                    "description": "Customer's contact SIM if known",
+                },
+            },
+            "required": ["emergency_type", "customer_message"],
+        },
+    },
+    {
+        "name": "escalate_bulk_lead",
+        "description": "Escalate wholesale, bulk orders, or institutional leads (e.g. security company, 5+ firearms, large ammo consignments) directly to the owner for personalized B2B dealer rates.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_name": {
+                    "type": "string",
+                    "description": "Customer or company representative name",
+                },
+                "contact_sim": {
+                    "type": "string",
+                    "description": "Pakistani WhatsApp mobile SIM",
+                },
+                "product_name": {
+                    "type": "string",
+                    "description": "Firearm or ammunition required",
+                },
+                "quantity": {
+                    "type": "string",
+                    "description": "Quantity requested (e.g. '10 pieces', '500 rounds')",
+                },
+                "destination_city": {
+                    "type": "string",
+                    "description": "City for delivery / deal",
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Any special requirements or company background",
+                },
+            },
+            "required": ["customer_name", "contact_sim", "product_name", "quantity"],
+        },
+    },
+    {
+        "name": "query_owner_for_missing_info",
+        "description": "Ask the store owner for specific technical specifications, custom barrel/finish options, or unpriced stock items that are not documented in the catalog.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_name": {
+                    "type": "string",
+                    "description": "Customer name",
+                },
+                "product_name": {
+                    "type": "string",
+                    "description": "Product name",
+                },
+                "question_details": {
+                    "type": "string",
+                    "description": "The exact question or spec customer requested",
+                },
+                "contact_sim": {
+                    "type": "string",
+                    "description": "Customer contact SIM",
+                },
+            },
+            "required": ["product_name", "question_details"],
+        },
+    },
 ]
 
 OWNER_TOOLS_DECLARATIONS = [
@@ -367,6 +484,97 @@ OWNER_TOOLS_DECLARATIONS = [
             }
         }
     },
+    {
+        "name": "recommend_alternative",
+        "description": "Find and recommend catalog alternatives when an item is out of stock, customer budget is constrained, or customer is open to suggestions. Matches category, caliber, and budget while prioritizing verified in-stock options.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "original_product": {
+                    "type": "string",
+                    "description": "Original product requested (e.g. 'Glock 19', 'Taurus G3', 'Beretta 92FS')",
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Category (e.g. 'Pistols', 'Shotguns', 'Rifles', 'Ammunition')",
+                },
+                "caliber": {
+                    "type": "string",
+                    "description": "Caliber (e.g. '9mm', '12 Gauge', '7.62x39')",
+                },
+                "max_budget": {
+                    "type": "number",
+                    "description": "Customer's maximum budget in PKR if specified",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Reason for alternative: 'out_of_stock', 'budget_constraint', or 'general_recommendation'",
+                },
+            },
+            "required": ["original_product"],
+        },
+    },
+    {
+        "name": "set_owner_preference",
+        "description": "Save owner business preference (e.g. push specific product like Taurus G3, prefer Turkish 9mm over local, set minimum margin, or mark overstock items to prioritize in recommendations).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "preference_type": {
+                    "type": "string",
+                    "enum": ["push_product", "push_category", "margin_target", "note"],
+                    "description": "Type of preference",
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Product name, category, or target value (e.g. 'Taurus G3', 'Shotguns', '15% margin')",
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Additional instructions from owner",
+                },
+            },
+            "required": ["preference_type", "target"],
+        },
+    },
+    {
+        "name": "onboard_product_from_image",
+        "description": "Add or update a firearm or ammo product using a photo uploaded by the owner and extracted specifications.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Product name and model (e.g. 'Zigana PX-9 Gen 3')",
+                },
+                "price": {
+                    "type": "number",
+                    "description": "Price in PKR",
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Category: 'Pistols', 'Rifles', 'Shotguns', 'Ammunition'",
+                },
+                "caliber": {
+                    "type": "string",
+                    "description": "Caliber (e.g. '9mm', '12 Gauge', '7.62x39')",
+                },
+                "capacity": {
+                    "type": "string",
+                    "description": "Magazine capacity (e.g. '18+1 rounds')",
+                },
+                "origin": {
+                    "type": "string",
+                    "description": "Country of origin (e.g. 'Turkey', 'USA', 'Austria', 'Pakistan')",
+                },
+                "image_url": {
+                    "type": "string",
+                    "description": "Image URL if already hosted or passed in context",
+                },
+            },
+            "required": ["name", "price"],
+        },
+    },
 ]
 
 # ==============================================================================
@@ -396,6 +604,14 @@ async def execute_tool(tool_name: str, args: Dict[str, Any], context: Dict[str, 
             return await _tool_get_payment_bank_details(tenant_id, args, context)
         elif tool_name == "escalate_custom_inquiry":
             return await _tool_escalate_custom_inquiry(tenant_id, args, context)
+        elif tool_name == "recommend_alternative":
+            return await _tool_recommend_alternative(tenant_id, args)
+        elif tool_name == "escalate_silent_emergency":
+            return await _tool_escalate_silent_emergency(tenant_id, args, context)
+        elif tool_name == "escalate_bulk_lead":
+            return await _tool_escalate_bulk_lead(tenant_id, args, context)
+        elif tool_name == "query_owner_for_missing_info":
+            return await _tool_query_owner_for_missing_info(tenant_id, args, context)
         elif tool_name == "update_price":
             return await _tool_update_price(tenant_id, args, context)
         elif tool_name == "update_stock_status":
@@ -410,6 +626,10 @@ async def execute_tool(tool_name: str, args: Dict[str, Any], context: Dict[str, 
             return await _tool_manage_payment_details(tenant_id, args)
         elif tool_name == "get_customer_details":
             return await _tool_get_customer_details(tenant_id, args)
+        elif tool_name == "set_owner_preference":
+            return await _tool_set_owner_preference(tenant_id, args)
+        elif tool_name == "onboard_product_from_image":
+            return await _tool_onboard_product_from_image(tenant_id, args, context)
         else:
             return {"status": "error", "message": f"Unknown tool: {tool_name}"}
     except Exception as e:
@@ -1152,4 +1372,337 @@ async def _tool_get_customer_details(tenant_id: str, args: Dict[str, Any]) -> Di
             f"Inhon ne {prod} ke liye poocha hai: \"{quest}\"."
         ),
     }
+
+
+async def _tool_recommend_alternative(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Finds and ranks in-stock alternatives based on caliber, category, and owner sales preferences."""
+    original_product = args.get("original_product", "").strip()
+    category = args.get("category")
+    caliber = args.get("caliber")
+    max_budget = args.get("max_budget")
+    reason = args.get("reason", "out_of_stock")
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid tenant ID"}
+
+    async with AsyncSessionLocal() as session:
+        # Load owner sales preferences
+        stmt = select(Tenant).where(Tenant.id == t_uuid)
+        res = await session.execute(stmt)
+        tenant = res.scalar_one_or_none()
+        sales_prefs = (tenant.business_profile or {}).get("sales_preferences") or [] if tenant else []
+
+        # Find in-stock items
+        query_stmt = select(CatalogItem).where(
+            CatalogItem.tenant_id == t_uuid,
+            CatalogItem.in_stock == True,
+        )
+        if category:
+            query_stmt = query_stmt.where(CatalogItem.category.ilike(f"%{category}%"))
+
+        c_res = await session.execute(query_stmt.limit(20))
+        all_items = c_res.scalars().all()
+
+    if not all_items:
+        return {
+            "status": "not_found",
+            "message": f"Filhal {original_product} ka koi alternate available nahi mila.",
+            "alternatives": [],
+        }
+
+    # Score and rank candidates
+    def score_item(it: CatalogItem) -> float:
+        score = 0.0
+        n_lower = (it.name or "").lower()
+        meta = it.metadata_json or {}
+        cal = (meta.get("caliber") or "").lower()
+        if caliber and caliber.lower() in (cal + " " + n_lower):
+            score += 10.0
+
+        for pref in sales_prefs:
+            target = (pref.get("target") or "").lower()
+            if target and target in n_lower:
+                score += 15.0
+
+        if max_budget and it.price:
+            if it.price <= max_budget:
+                score += 8.0
+            else:
+                score -= 10.0
+        return score
+
+    scored = sorted(all_items, key=score_item, reverse=True)
+    top_picks = scored[:3]
+
+    alternatives = []
+    for it in top_picks:
+        has_photo = bool(it.images and len(it.images) > 0)
+        alternatives.append({
+            "name": it.name,
+            "price_pkr": it.price,
+            "category": it.category,
+            "origin": (it.metadata_json or {}).get("origin", ""),
+            "caliber": (it.metadata_json or {}).get("caliber", ""),
+            "capacity": (it.metadata_json or {}).get("capacity", ""),
+            "has_photo": has_photo,
+            "photo_url": it.images[0] if has_photo else None,
+        })
+
+    return {
+        "status": "success",
+        "original_product": original_product,
+        "reason": reason,
+        "count": len(alternatives),
+        "alternatives": alternatives,
+        "message": f"{original_product} ke {len(alternatives)} suitable in-stock alternatives mil gaye hain.",
+    }
+
+
+async def _tool_escalate_silent_emergency(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 1 §A.28: Immediate and silent escalation of legal, police, fraud, or damaged complaints."""
+    emergency_type = args.get("emergency_type", "critical_complaint")
+    cust_msg = (args.get("customer_message") or "").strip()
+    cust_name = (args.get("customer_name") or "").strip()
+    contact_sim = (args.get("contact_sim") or context.get("sender_phone") or "").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        t_uuid = uuid.uuid4()
+
+    cust_jid = context.get("sender_phone") or contact_sim
+    esc = escalation_service.create_escalation(
+        tenant_id=t_uuid,
+        customer_phone=contact_sim,
+        customer_jid=cust_jid,
+        customer_name=cust_name or "Customer",
+        question=f"[{emergency_type.upper()}] {cust_msg}",
+        product_context="EMERGENCY",
+    )
+
+    from app.brain.prompts_owner import build_owner_inquiry_alert
+    owner_alert = build_owner_inquiry_alert(
+        customer_name=cust_name,
+        customer_phone=contact_sim,
+        product="URGENT ISSUE",
+        question=cust_msg,
+        inquiry_type=emergency_type,
+    )
+
+    if isinstance(context, dict):
+        state_updates = context.setdefault("state_updates", {})
+        state_updates["owner_alert"] = owner_alert
+        state_updates["escalation_id"] = esc.escalation_id
+
+    reassure_msg = "Humne aapka mamla Shahzad Haider Bhai ke notice mein la diya hai. Wo isko personally review kar rahe hain aur aapse foran rabta karenge."
+    return {
+        "status": "success",
+        "emergency_type": emergency_type,
+        "escalation_id": esc.escalation_id,
+        "owner_alert": owner_alert,
+        "reassure_customer": reassure_msg,
+        "message": reassure_msg,
+    }
+
+
+async def _tool_escalate_bulk_lead(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 1 §A.21: High-value / B2B bulk buyer escalation."""
+    cust_name = (args.get("customer_name") or "").strip()
+    contact_sim = (args.get("contact_sim") or context.get("sender_phone") or "").strip()
+    product = (args.get("product_name") or "").strip()
+    qty = (args.get("quantity") or "").strip()
+    city = (args.get("destination_city") or "").strip()
+    notes = (args.get("notes") or "").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        t_uuid = uuid.uuid4()
+
+    lead_details = f"Bulk order: {qty} of {product}. City: {city}. Notes: {notes}"
+    esc = escalation_service.create_escalation(
+        tenant_id=t_uuid,
+        customer_phone=contact_sim,
+        customer_jid=context.get("sender_phone") or contact_sim,
+        customer_name=cust_name,
+        customer_city=city,
+        question=lead_details,
+        product_context=product,
+    )
+
+    from app.brain.prompts_owner import build_owner_inquiry_alert
+    owner_alert = build_owner_inquiry_alert(
+        customer_name=cust_name,
+        customer_phone=contact_sim,
+        product=product,
+        city=city,
+        question=f"Quantity: {qty} | Notes: {notes}",
+        inquiry_type="bulk_lead",
+    )
+
+    if isinstance(context, dict):
+        state_updates = context.setdefault("state_updates", {})
+        state_updates["owner_alert"] = owner_alert
+        state_updates["escalation_id"] = esc.escalation_id
+
+    return {
+        "status": "success",
+        "escalation_id": esc.escalation_id,
+        "owner_alert": owner_alert,
+        "message": f"Bulk inquiry of {qty} {product} escalated to Shahzad Haider Bhai for dealer rate quotation.",
+    }
+
+
+async def _tool_query_owner_for_missing_info(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 1 §A.29: Query owner for unverified specs, unpriced stock, or custom inquiries."""
+    cust_name = (args.get("customer_name") or "").strip()
+    contact_sim = (args.get("contact_sim") or context.get("sender_phone") or "").strip()
+    product = (args.get("product_name") or "").strip()
+    q_details = (args.get("question_details") or "").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        t_uuid = uuid.uuid4()
+
+    esc = escalation_service.create_escalation(
+        tenant_id=t_uuid,
+        customer_phone=contact_sim,
+        customer_jid=context.get("sender_phone") or contact_sim,
+        customer_name=cust_name or "Customer",
+        question=q_details,
+        product_context=product,
+    )
+
+    from app.brain.prompts_owner import build_owner_inquiry_alert
+    owner_alert = build_owner_inquiry_alert(
+        customer_name=cust_name,
+        customer_phone=contact_sim,
+        product=product,
+        question=q_details,
+        inquiry_type="inquiry",
+    )
+
+    if isinstance(context, dict):
+        state_updates = context.setdefault("state_updates", {})
+        state_updates["owner_alert"] = owner_alert
+        state_updates["escalation_id"] = esc.escalation_id
+
+    return {
+        "status": "success",
+        "escalation_id": esc.escalation_id,
+        "owner_alert": owner_alert,
+        "message": f"Shahzad Haider Bhai has been notified on WhatsApp for details on {product}. Inform customer politely that you are checking with the workshop/stock.",
+    }
+
+
+async def _tool_set_owner_preference(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 2 §5: Save owner business sales preference (margin/push products/categories)."""
+    pref_type = args.get("preference_type", "push_product")
+    target = args.get("target", "").strip()
+    notes = args.get("notes", "").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid tenant ID"}
+
+    async with AsyncSessionLocal() as session:
+        stmt = select(Tenant).where(Tenant.id == t_uuid)
+        res = await session.execute(stmt)
+        tenant = res.scalar_one_or_none()
+        if not tenant:
+            return {"status": "error", "message": "Tenant not found"}
+
+        prof = dict(tenant.business_profile or {})
+        prefs = prof.get("sales_preferences") or []
+        new_pref = {
+            "type": pref_type,
+            "target": target,
+            "notes": notes,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        prefs = [p for p in prefs if p.get("target", "").lower() != target.lower()]
+        prefs.append(new_pref)
+        prof["sales_preferences"] = prefs
+        tenant.business_profile = prof
+        await session.commit()
+
+    return {
+        "status": "success",
+        "preference_type": pref_type,
+        "target": target,
+        "message": f"Preference saved boss! Rabta sales AI will prioritize {target} ({notes or pref_type}) when it fits the customer's request.",
+    }
+
+
+async def _tool_onboard_product_from_image(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 2 §7, 8, 10: Onboard new firearm product from owner photo with extracted specs."""
+    name = args.get("name", "").strip()
+    price = float(args.get("price", 0))
+    category = args.get("category", "Pistols")
+    origin = args.get("origin", "Imported")
+    caliber = args.get("caliber", "9mm")
+    capacity = args.get("capacity", "")
+    image_url = args.get("image_url") or context.get("pending_image_url") or context.get("image_url")
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid tenant ID"}
+
+    images = [image_url] if image_url else []
+
+    async with AsyncSessionLocal() as session:
+        stmt = select(CatalogItem).where(
+            CatalogItem.tenant_id == t_uuid,
+            CatalogItem.name.ilike(f"%{name}%"),
+        ).limit(1)
+        res = await session.execute(stmt)
+        existing = res.scalar_one_or_none()
+
+        if existing:
+            existing.price = price
+            if images:
+                existing.images = images
+            if caliber:
+                existing.metadata_json = {**(existing.metadata_json or {}), "caliber": caliber, "origin": origin, "capacity": capacity}
+            await session.commit()
+            item_id = str(existing.id)
+            action_done = "updated"
+        else:
+            item = CatalogItem(
+                tenant_id=t_uuid,
+                name=name,
+                price=price,
+                category=category,
+                description=f"{name} ({origin}). Caliber: {caliber}. Capacity: {capacity}.",
+                images=images,
+                metadata_json={"origin": origin, "caliber": caliber, "capacity": capacity},
+                in_stock=True,
+            )
+            session.add(item)
+            await session.commit()
+            await session.refresh(item)
+            item_id = str(item.id)
+            action_done = "added"
+
+        try:
+            from app.api.gateway_bridge import invalidate_catalog_cache
+            invalidate_catalog_cache(tenant_id)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "action": action_done,
+        "product_id": item_id,
+        "name": name,
+        "price": price,
+        "has_photo": len(images) > 0,
+        "message": f"Done boss! '{name}' Rs. {price:,.0f} ({origin}, {caliber}) {action_done} to catalog with verified photo.",
+    }
+
 

@@ -54,52 +54,6 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
             "owner_alert": None,
         }
 
-    # 2. Intelligent Fast-Path for Pending Customer Inquiries
-    # If owner sends a bare number (e.g. "3500"), price, delivery answer, or "customer ko batao..."
-    pending_list = escalation_service.get_pending_for_tenant(t_uuid)
-    lower_msg = raw_message.lower()
-
-    is_bare_number = bool(re.match(r'^(?:rs\.?|pkr)?\s*(\d+[\d,.]*)\s*(?:pkr|rs|hazar|k)?$', lower_msg.strip()))
-    is_relay_command = any(kw in lower_msg for kw in [
-        "ko bolo", "ko batao", "ko batado", "ko kaho", "ko keh do", "ko bhej do",
-        "wale customer", "wali delivery", "customer ko", "delivery charges"
-    ])
-    is_payment_approval = any(kw in lower_msg for kw in [
-        "account number bhej do", "account details share", "bank details bhej do", "share kardo", "share kar do"
-    ])
-
-    if pending_list and (is_bare_number or is_relay_command or is_payment_approval):
-        esc, clean_ans = escalation_service.find_target_escalation(t_uuid, raw_message)
-        if esc:
-            cust_name = esc.customer_name or "Customer"
-            name_prefix = f"Jee {cust_name} bhai! " if esc.customer_name else "Jee bhai! "
-            
-            # Format customer response text
-            num_match = re.search(r'(\d+[\d,.]*)', raw_message)
-            if "delivery" in esc.customer_question.lower() or "charges" in esc.customer_question.lower() or "delivery" in lower_msg:
-                amount_str = num_match.group(1) if num_match else clean_ans
-                cust_reply = f"{name_prefix}Shop owner se confirm kar liya hai. {esc.customer_city or 'Delivery'} ke liye delivery charges Rs. {amount_str} hain."
-            elif is_payment_approval:
-                cust_reply = f"{name_prefix}Shop owner ne approval de di hai. Humari payment details share ki ja rahi hain."
-            else:
-                cust_reply = f"{name_prefix}Shop owner se confirm kar liya hai: {clean_ans}"
-
-            escalation_service.resolve_escalation(esc.escalation_id, cust_reply)
-            target_dest = esc.customer_jid or esc.customer_phone
-
-            owner_confirm = f"Jee Haider bhai, {cust_name} ({esc.customer_city or 'inquiry'}) ko message deliver kar diya hai: '{cust_reply}'"
-            return {
-                **state,
-                "reply_text": owner_confirm,
-                "reply_chunks": [owner_confirm],
-                "forward_to_customer": target_dest,
-                "forward_message": cust_reply,
-                "escalation_resolved_id": esc.escalation_id,
-                "media_url": None,
-                "media_urls": None,
-                "owner_alert": None,
-            }
-
     # Decode image bytes if owner sent an image
     image_bytes = None
     if image_b64:
