@@ -224,3 +224,71 @@ async def test_owner_query_flag_never_leaks_to_customer(monkeypatch):
     assert "0314-6446144" in res["owner_alert"]
     assert "Tariq" in res["owner_alert"]
 
+
+@pytest.mark.asyncio
+async def test_delivery_inquiry_identity_gating_flow(monkeypatch):
+    """
+    Test that when a customer on an LID with no verified name (pushName='*')
+    asks for delivery charges, the bot gates the escalation, asks for Name & SIM,
+    and ONLY alerts Haider bhai once verified Name and SIM are provided.
+    """
+    from app.brain.flags import parse_rabta_flag
+    from app.graph.nodes.customer import customer_sales_chat, collect_customer_info
+    import app.graph.nodes.customer as cust_node
+
+    flag_raw = "OWNER_QUERY: customer — delivery to Hyderabad for Glock 19 — what are the delivery charges?"
+    parsed = parse_rabta_flag(flag_raw)
+
+    async def mock_handle(*args, **kwargs):
+        return {
+            "reply_text": flag_raw,
+            "reply_chunks": [flag_raw],
+            "media_urls": [],
+            "flag": parsed,
+            "needs_escalation": True,
+        }
+
+    monkeypatch.setattr(cust_node._store_agent, "handle_customer_interaction", mock_handle)
+
+    # TURN 1: Customer messages from 15-digit LID, pushName is "*", asks delivery charges
+    state_turn1 = {
+        "tenant_id": str(uuid.uuid4()),
+        "sender_phone": "216049773469898",  # WhatsApp privacy LID
+        "push_name": "*",                   # bailey pushName is a star/punctuation
+        "raw_message": "Hyderabad ke delivery charges kitne hain?",
+        "customer_state": "BROWSING",
+        "customer_product": "Glock 19 Gen 5",
+        "customer_name": None,
+        "customer_city": None,
+        "customer_sim_phone": None,
+    }
+
+    res_turn1 = await customer_sales_chat(state_turn1)
+
+    # Must NOT escalate to owner yet! Must NOT say "Naam: Customer" or "WhatsApp SIM pending"
+    assert res_turn1["owner_alert"] is None
+    assert res_turn1["customer_state"] == "COLLECTING_INFO"
+    assert res_turn1["info_collection_step"] == "inquiry_details"
+    assert "Naam" in res_turn1["reply_text"]
+    assert "contact number" in res_turn1["reply_text"].lower() or "sim" in res_turn1["reply_text"].lower()
+
+    # TURN 2: Customer provides Name and Pakistani SIM
+    state_turn2 = {
+        **res_turn1,
+        "raw_message": "Mera naam Asad hai aur number 0300-1234567 hai",
+    }
+
+    res_turn2 = await collect_customer_info(state_turn2)
+
+    # Now details are verified, owner is alerted with verified Name and formatted SIM!
+    assert res_turn2["customer_state"] == "ESCALATED"
+    assert res_turn2["customer_name"] == "Asad"
+    assert res_turn2["customer_sim_phone"] == "923001234567"
+    assert res_turn2["owner_alert"] is not None
+    assert "• Naam: Asad" in res_turn2["owner_alert"]
+    assert "• WhatsApp SIM: 0300-1234567" in res_turn2["owner_alert"]
+    assert "Customer" not in res_turn2["owner_alert"]
+    assert "(WhatsApp SIM pending)" not in res_turn2["owner_alert"]
+    assert "216049773469898" not in res_turn2["owner_alert"]
+
+

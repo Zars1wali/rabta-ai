@@ -27,6 +27,35 @@ _esc_service = EscalationService()
 _copilot = OwnerCopilotService()
 
 
+def is_valid_human_name(n: Optional[str]) -> bool:
+    """Checks if string is an actual human name (not empty, single punctuation, or generic label)."""
+    if not n:
+        return False
+    clean = re.sub(r'[^A-Za-z\s]', '', str(n)).strip()
+    if len(clean) < 3:
+        return False
+    if clean.lower() in ("customer", "user", "guest", "none", "unknown", "whatsapp", "haider arms", "owner"):
+        return False
+    return True
+
+
+def is_valid_pakistani_sim(p: Optional[str]) -> bool:
+    """Checks if string is a real Pakistani mobile SIM phone number."""
+    if not p:
+        return False
+    digits = re.sub(r'[^\d]', '', str(p))
+    if len(digits) >= 13:
+        # 13+ digits is a WhatsApp internal LID
+        return False
+    if len(digits) == 12 and digits.startswith("923"):
+        return True
+    if len(digits) == 11 and digits.startswith("03"):
+        return True
+    if len(digits) == 10 and digits.startswith("3"):
+        return True
+    return False
+
+
 def extract_customer_entities(
     text: str,
     current_name: Optional[str] = None,
@@ -35,24 +64,25 @@ def extract_customer_entities(
     push_name: Optional[str] = None,
 ) -> tuple[Optional[str], Optional[str], Optional[str]]:
     """Extracts customer Name, Pakistani City, and real SIM phone number from text."""
-    name = current_name
+    name = current_name if is_valid_human_name(current_name) else None
     city = current_city
-    sim = current_sim
+    sim = current_sim if is_valid_pakistani_sim(current_sim) else None
 
     if not name:
         name_match = re.search(r'(?:mera\s+naam|naam\s+hai|naam)\s+([A-Za-z\s]+?)(?:\s+(?:hai|he|hun|hoon|hy|,|\.|$))', text, re.IGNORECASE)
         if name_match:
-            name = name_match.group(1).strip().title()
+            cand = name_match.group(1).strip().title()
+            if is_valid_human_name(cand):
+                name = cand
         else:
             name_match2 = re.search(r'(?:mera\s+naam|naam)\s+([A-Za-z\s]+)', text, re.IGNORECASE)
             if name_match2:
                 n = name_match2.group(1).strip()
                 n = re.sub(r'\b(hai|he|hun|hoon|hy|aur|se|bhai)\b.*$', '', n, flags=re.IGNORECASE).strip()
-                if n:
+                if is_valid_human_name(n):
                     name = n.title()
-        if not name and push_name and len(push_name.split()) <= 3 and not any(w in push_name.lower() for w in ["whatsapp", "user", "guest"]):
+        if not name and push_name and is_valid_human_name(push_name) and len(push_name.split()) <= 3:
             name = push_name.strip().title()
-
 
     if not city:
         city_match = re.search(r'\b(lahore|karachi|islamabad|rawalpindi|peshawar|quetta|multan|faisalabad|sialkot|gujranwala|abbottabad|mardan|kohat|pindi|hyderabad|sukkur|bahawalpur|sargodha|dera ismail khan|swat)\b', text, re.IGNORECASE)
@@ -65,7 +95,8 @@ def extract_customer_entities(
             raw_digits = re.sub(r'[^\d]', '', sim_match.group(0))
             if raw_digits.startswith("0") and len(raw_digits) == 11:
                 raw_digits = "92" + raw_digits[1:]
-            sim = raw_digits
+            if is_valid_pakistani_sim(raw_digits):
+                sim = raw_digits
 
     return name, city, sim
 
@@ -302,9 +333,83 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 "owner_alert": owner_alert,
             }
 
+    # ── WORKFLOW C: General Inquiry / Delivery Charges Identity Collection ────
+    if step == "inquiry_details":
+        clean_sender_digits = re.sub(r'[^\d]', '', phone)
+        has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
+        has_name = is_valid_human_name(name)
+
+        if not has_name:
+            reply = "Jee bilkul bhai, kindly apna Naam share kar dein taake shop se confirm kar sakein."
+            return {
+                **state,
+                "customer_state": "COLLECTING_INFO",
+                "info_collection_step": "inquiry_details",
+                "customer_name": None,
+                "reply_text": reply,
+                "reply_chunks": [reply],
+                "owner_alert": None,
+            }
+
+        if not has_sim:
+            reply = f"Jee {name} bhai, apna WhatsApp SIM contact number share kar dein taake shop record verify ho sake."
+            return {
+                **state,
+                "customer_state": "COLLECTING_INFO",
+                "info_collection_step": "inquiry_details",
+                "customer_name": name,
+                "customer_sim_phone": None,
+                "reply_text": reply,
+                "reply_chunks": [reply],
+                "owner_alert": None,
+            }
+
+        # Both Name and SIM are now present!
+        q_text = state.get("pending_owner_query") or state.get("raw_message") or "Customer inquiry"
+        inq_type = esc_type or "inquiry"
+        t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
+        esc = _esc_service.create_escalation(
+            tenant_id=t_uuid,
+            customer_phone=effective_sim,
+            customer_name=name,
+            question=q_text,
+            product_context=product,
+            conversation_snippet=(state.get("conversation_history") or [])[-6:],
+        )
+        owner_alert = build_owner_inquiry_alert(
+            customer_name=name,
+            customer_phone=effective_sim,
+            product=product,
+            city=city,
+            address=address,
+            question=q_text,
+            inquiry_type=inq_type,
+        )
+        reply = f"Jee {name} bhai! Main shop owner se confirm karke aapko abhi batata hoon, thoda sa wait karein."
+        return {
+            **state,
+            "customer_state": "ESCALATED",
+            "info_collection_step": None,
+            "escalation_type": None,
+            "customer_name": name,
+            "customer_city": city,
+            "customer_sim_phone": effective_sim,
+            "escalation_id": esc.escalation_id,
+            "reply_text": reply,
+            "reply_chunks": [reply],
+            "owner_alert": owner_alert,
+        }
+
     # ── WORKFLOW B: Delivery Address Collection ───────────────────────────────
-    if not name:
-        reply = "Delivery bilkul ho sakti hai. Aapka naam kya hai?"
+    clean_sender_digits = re.sub(r'[^\d]', '', phone)
+    has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
+    has_name = is_valid_human_name(name)
+
+    if not has_name:
+        if not has_sim:
+            reply = "Delivery bilkul ho sakti hai. Kindly apna Naam aur WhatsApp SIM contact number share kar dein taake shop record ban sake."
+        else:
+            reply = "Delivery bilkul ho sakti hai. Aapka shubh naam kya hai?"
         return {
             **state,
             "customer_state": "COLLECTING_INFO",
@@ -325,6 +430,21 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             "escalation_type": "delivery",
             "customer_name": name,
             "customer_city": None,
+            "reply_text": reply,
+            "reply_chunks": [reply],
+            "owner_alert": None,
+        }
+
+    if not has_sim:
+        reply = f"Jee {name} bhai, apna WhatsApp SIM contact number share kar dein taake delivery verification aur booking confirm ho sake."
+        return {
+            **state,
+            "customer_state": "COLLECTING_INFO",
+            "info_collection_step": "sim",
+            "escalation_type": "delivery",
+            "customer_name": name,
+            "customer_city": city,
+            "customer_sim_phone": None,
             "reply_text": reply,
             "reply_chunks": [reply],
             "owner_alert": None,
@@ -368,7 +488,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
         inquiry_type="delivery",
     )
 
-    reply = f"Theek hai bhai, main shop se {city} ke liye {product} ke delivery charges confirm karke aapko foran batata hoon."
+    reply = f"Theek hai {name} bhai, main shop se {city} ke liye {product} ke delivery charges confirm karke aapko foran batata hoon."
     return {
         **state,
         "customer_state": "ESCALATED",
@@ -617,6 +737,36 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             inquiry_type = "inquiry"
             wait_reply = "Jee bilkul bhai, main shop se confirm karke aapko abhi update karta hoon, thoda sa wait karein."
 
+        # Strict Identity Check: Do NOT escalate anonymously to Haider bhai!
+        # If customer Name or real SIM is not yet collected, gate and collect them first!
+        clean_sender_digits = re.sub(r'[^\d]', '', sender_phone)
+        has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
+        has_name = is_valid_human_name(name)
+
+        if not has_name or not has_sim:
+            topic_str = "delivery charges" if (inquiry_type == "delivery" or "delivery" in q_lower) else "maloomat"
+            if not has_name and not has_sim:
+                prompt_reply = f"Jee bilkul bhai! {topic_str.title()} shop se confirm kar dete hain. Kindly apna Naam aur WhatsApp contact number share kar dein taake shop record verify ho sake."
+            elif not has_name:
+                prompt_reply = f"Jee bilkul bhai! {topic_str.title()} shop se confirm kar dete hain. Kindly apna Naam share kar dein."
+            else:
+                prompt_reply = f"Jee {name} bhai! Apna WhatsApp SIM contact number share kar dein taake {topic_str} confirm ho sake."
+
+            return {
+                **state,
+                "customer_state": "COLLECTING_INFO",
+                "info_collection_step": "inquiry_details",
+                "escalation_type": inquiry_type,
+                "customer_name": name if has_name else None,
+                "customer_city": city,
+                "customer_sim_phone": sim if has_sim else None,
+                "customer_product": product,
+                "pending_owner_query": query_payload,
+                "reply_text": prompt_reply,
+                "reply_chunks": [prompt_reply],
+                "owner_alert": None,
+            }
+
         reply_text = wait_reply
         reply_chunks = [reply_text]
 
@@ -689,6 +839,35 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                     break
 
         inq_type = "delivery" if (asked_delivery or "delivery" in reply_lower) else "inquiry"
+
+        clean_sender_digits = re.sub(r'[^\d]', '', sender_phone)
+        has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
+        has_name = is_valid_human_name(name)
+
+        if not has_name or not has_sim:
+            topic_str = "delivery charges" if (inq_type == "delivery" or "delivery" in raw_lower) else "maloomat"
+            if not has_name and not has_sim:
+                prompt_reply = f"Jee bilkul bhai! {topic_str.title()} shop se confirm kar dete hain. Kindly apna Naam aur WhatsApp contact number share kar dein taake shop record verify ho sake."
+            elif not has_name:
+                prompt_reply = f"Jee bilkul bhai! {topic_str.title()} shop se confirm kar dete hain. Kindly apna Naam share kar dein."
+            else:
+                prompt_reply = f"Jee {name} bhai! Apna WhatsApp SIM contact number share kar dein taake {topic_str} confirm ho sake."
+
+            return {
+                **state,
+                "customer_state": "COLLECTING_INFO",
+                "info_collection_step": "inquiry_details",
+                "escalation_type": inq_type,
+                "customer_name": name if has_name else None,
+                "customer_city": city,
+                "customer_sim_phone": sim if has_sim else None,
+                "customer_product": product,
+                "pending_owner_query": raw_message,
+                "reply_text": prompt_reply,
+                "reply_chunks": [prompt_reply],
+                "owner_alert": None,
+            }
+
         try:
             t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
             esc = _esc_service.create_escalation(
