@@ -6,6 +6,7 @@ Provides strict JSON schema tool declarations and deterministic Python
 execution handlers for both Customer Sales Intelligence and Owner Copilot.
 """
 from __future__ import annotations
+import re
 import logging
 import uuid
 from typing import Optional, List, Dict, Any
@@ -646,13 +647,15 @@ async def _tool_get_pending_escalations(tenant_id: str, args: Dict[str, Any]) ->
     except (ValueError, TypeError):
         t_uuid = uuid.uuid4()
 
-    pending = escalation_service.get_pending_escalations(t_uuid)
+    pending = escalation_service.get_pending_for_tenant(t_uuid)
     limit = int(args.get("limit", 5))
     formatted = []
     for r in pending[:limit]:
         formatted.append({
             "id": r.escalation_id,
+            "customer_name": r.customer_name,
             "customer_phone": r.customer_phone,
+            "city": r.customer_city,
             "question": r.customer_question,
             "product": r.product_context,
         })
@@ -665,36 +668,83 @@ async def _tool_get_pending_escalations(tenant_id: str, args: Dict[str, Any]) ->
 
 async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     reply_msg = args.get("reply_message", "").strip()
-    escalation_id = args.get("escalation_id", "latest").strip()
+    escalation_id = (args.get("escalation_id") or "latest").strip()
 
     try:
         t_uuid = uuid.UUID(tenant_id)
     except (ValueError, TypeError):
         t_uuid = uuid.uuid4()
 
-    if escalation_id == "latest":
-        pending = escalation_service.get_pending_escalations(t_uuid)
-        esc = pending[0] if pending else None
-    else:
+    esc = None
+    if escalation_id and escalation_id.lower() != "latest":
         esc = escalation_service.get_escalation(escalation_id)
 
+    # Fallback to intelligent context matching if specific ID not found
     if not esc:
-        return {"status": "not_found", "message": "Koi pending customer escalation nahi mili."}
+        esc, _ = escalation_service.find_target_escalation(t_uuid, reply_msg)
 
-    escalation_service.resolve_escalation(esc.escalation_id, reply_msg)
+    if not esc:
+        pending = escalation_service.get_pending_for_tenant(t_uuid)
+        esc = pending[0] if pending else None
 
-    # Deliver via WhatsApp
-    target_phone = esc.customer_phone
+    if not esc:
+        return {
+            "status": "not_found",
+            "message": "Abhi koi pending customer inquiry nahi mili jise reply convey karna ho.",
+        }
+
+    # Format a warm, polite customer reply in Roman Urdu
+    cust_name = esc.customer_name or "Customer"
+    name_prefix = f"Jee {cust_name} bhai! " if esc.customer_name else "Jee bhai! "
+    
+    # If the reply is just a raw number or brief phrase like "3500" or "charges 3500"
+    clean_text = reply_msg
+    if re.match(r'^\d+[\d,.]*$', clean_text.strip()):
+        clean_text = f"Delivery charges Rs. {clean_text.strip()} hain."
+    elif not clean_text.lower().startswith("jee") and not clean_text.lower().startswith("walaikum"):
+        clean_text = f"Shop owner se confirm kar liya hai: {clean_text}"
+
+    formatted_customer_reply = f"{name_prefix}{clean_text}" if not clean_text.lower().startswith("jee") else clean_text
+
+    # Resolve escalation in service
+    escalation_service.resolve_escalation(esc.escalation_id, formatted_customer_reply)
+
+    # Destination JID or phone
+    target_dest = esc.customer_jid or esc.customer_phone
+
+    # Inject into context state_updates so gateway_bridge and server.js relay it
+    if isinstance(context, dict):
+        state_updates = context.setdefault("state_updates", {})
+        state_updates["forward_to_customer"] = target_dest
+        state_updates["forward_message"] = formatted_customer_reply
+        state_updates["escalation_resolved_id"] = esc.escalation_id
+
+    # Also try sending directly via gateway HTTP endpoint if available
     try:
-        from app.services.whatsapp import whatsapp_service
-        await whatsapp_service.send_text_message(to_phone=target_phone, message=reply_msg)
+        import httpx
+        for gw_url in ["http://rabta_gateway:3001/api/send-message", "http://localhost:3001/api/send-message", "http://127.0.0.1:3001/api/send-message"]:
+            try:
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    resp = await client.post(gw_url, json={
+                        "to": target_dest,
+                        "message": formatted_customer_reply,
+                    })
+                    if resp.status_code == 200:
+                        logger.info("[Relay] Direct gateway delivery OK to %s via %s", target_dest, gw_url)
+                        break
+            except Exception:
+                pass
     except Exception as e:
-        logger.warning("[Relay] Direct WhatsApp delivery failed: %s", e)
+        logger.debug("[Relay] Gateway direct HTTP attempt note: %s", e)
 
+    owner_confirm = f"Jee boss, {cust_name} ({esc.customer_city or 'customer'}) ko message deliver kar diya hai: '{formatted_customer_reply}'"
     return {
         "status": "success",
-        "customer_phone": target_phone,
-        "message": f"Customer ({target_phone}) ko jawab deliver hogaya hai: '{reply_msg}'",
+        "escalation_id": esc.escalation_id,
+        "customer_phone": esc.customer_phone,
+        "customer_jid": target_dest,
+        "formatted_reply": formatted_customer_reply,
+        "message": owner_confirm,
     }
 
 

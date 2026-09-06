@@ -428,26 +428,34 @@ app.post('/request-pairing-code', async (req, res) => {
 });
 
 app.post('/api/send-message', async (req, res) => {
-    const { phone, message } = req.body;
-    if (!phone || !message) return res.status(400).json({ error: 'phone and message are required' });
+    const target = req.body.phone || req.body.to;
+    const message = req.body.message;
+    if (!target || !message) return res.status(400).json({ error: 'phone/to and message are required' });
     if (connectionStatus !== 'CONNECTED') return res.status(503).json({ error: 'WhatsApp not connected' });
 
     try {
         let jid;
-        if (typeof phone === 'string' && (phone.endsWith('@lid') || phone.endsWith('@s.whatsapp.net'))) {
-            jid = phone;
+        if (typeof target === 'string' && (target.endsWith('@lid') || target.endsWith('@s.whatsapp.net'))) {
+            jid = target;
         } else {
-            const cleanPhone = cleanPhoneNumber(phone);
+            const cleanPhone = cleanPhoneNumber(target);
             const OWNER_LID = process.env.OWNER_LID || '61379545444551';
-            if (cleanPhone === OWNER_LID || phone.includes(OWNER_LID)) {
+            if (cleanPhone === OWNER_LID || target.includes(OWNER_LID)) {
                 jid = global._lastKnownOwnerJid || `${OWNER_LID}@lid`;
+            } else if (global._customerJidMap && global._customerJidMap.get(cleanPhone)) {
+                jid = global._customerJidMap.get(cleanPhone);
+            } else if (global._customerJidMap && global._customerJidMap.get(target)) {
+                jid = global._customerJidMap.get(target);
             } else {
                 jid = `${cleanPhone}@s.whatsapp.net`;
             }
         }
-        await sock.sendMessage(jid, { text: message });
+        const sent = await sock.sendMessage(jid, { text: message });
+        if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+        console.log(`📤 [/api/send-message] Dispatched message to [${jid}]: "${message.substring(0, 60)}..."`);
         res.json({ success: true, jid });
     } catch (err) {
+        console.error(`❌ [/api/send-message] Error sending to ${target}:`, err.message);
         res.status(500).json({ error: err.message });
     }
 });

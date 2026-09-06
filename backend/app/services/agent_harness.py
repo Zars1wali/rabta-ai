@@ -110,11 +110,12 @@ class ReActAgentHarness:
 
         contents.append(types.Content(role="user", parts=current_parts))
 
-        tool_calls_executed: List[str] = []
-        gathered_media: List[Dict[str, Any]] = []
+        gathered_media = []
+        tool_calls_executed = []
+        last_tool_message = None
 
         # Run ReAct loop
-        for iteration in range(max_iterations):
+        for iteration in range(self.max_iterations):
             try:
                 config = types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -160,13 +161,18 @@ class ReActAgentHarness:
                     try:
                         final_text = response.text or ""
                     except Exception:
-                        final_text = "Maaf kijiye, main is query par baat nahi kar sakta."
+                        final_text = last_tool_message or "Maaf kijiye, main is query par baat nahi kar sakta."
                     chunks = [c.strip() for c in final_text.split("\n\n") if c.strip()]
+                    state_updates = context.get("state_updates") or {} if isinstance(context, dict) else {}
                     return {
                         "reply_text": final_text.strip(),
                         "reply_chunks": chunks if chunks else [final_text.strip()],
                         "media_urls": gathered_media,
                         "tool_calls_executed": tool_calls_executed,
+                        "state_updates": state_updates,
+                        "forward_to_customer": state_updates.get("forward_to_customer"),
+                        "forward_message": state_updates.get("forward_message"),
+                        "escalation_resolved_id": state_updates.get("escalation_resolved_id"),
                     }
 
                 # Execute each tool call deterministically
@@ -178,6 +184,8 @@ class ReActAgentHarness:
                     logger.info("[ReActHarness] Tool invocation: %s(args=%s)", fn_name, fn_args)
 
                     tool_result = await execute_tool(fn_name, fn_args, context)
+                    if tool_result.get("message"):
+                        last_tool_message = tool_result.get("message")
 
                     # Extract any media URLs returned by tools (e.g. photos)
                     if fn_name == "get_product_photos" and tool_result.get("photos"):
@@ -195,24 +203,32 @@ class ReActAgentHarness:
                         )
                     )
 
-                # Feed tool results back to the model
-                contents.append(types.Content(role="user", parts=function_response_parts))
+                # Feed tool results back to the model with correct role="tool"
+                contents.append(types.Content(role="tool", parts=function_response_parts))
 
             except Exception as e:
                 logger.error("[ReActHarness] Error in ReAct turn iteration %d: %s", iteration, e, exc_info=True)
                 break
 
-        # If loop exited after max iterations or error, generate safe natural fallback or return what we have
+        # If loop exited after max iterations or error, generate safe natural fallback or return tool output
         fallback = (
-            "Jee bilkul, main details check kar raha hoon. Mazeed koi specific model dekhna chahein toh batayein."
-            if role == "customer"
-            else "G boss, action complete kar diya hai. Koi mazeed tabdeeli karni ho toh batayein."
+            last_tool_message
+            or (
+                "Jee bilkul, main details check kar raha hoon. Mazeed koi specific model dekhna chahein toh batayein."
+                if role == "customer"
+                else "G boss, action complete kar diya hai. Koi mazeed tabdeeli karni ho toh batayein."
+            )
         )
+        state_updates = context.get("state_updates") or {} if isinstance(context, dict) else {}
         return {
             "reply_text": fallback,
             "reply_chunks": [fallback],
             "media_urls": gathered_media,
             "tool_calls_executed": tool_calls_executed,
+            "state_updates": state_updates,
+            "forward_to_customer": state_updates.get("forward_to_customer"),
+            "forward_message": state_updates.get("forward_message"),
+            "escalation_resolved_id": state_updates.get("escalation_resolved_id"),
         }
 
 

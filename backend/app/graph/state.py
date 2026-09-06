@@ -17,6 +17,7 @@ class RabtaGraphState(TypedDict, total=False):
     tenant_id: str
     is_boss: bool
     sender_phone: str          # normalized phone of whoever sent the message
+    sender_jid: Optional[str]  # WhatsApp JID of sender (e.g. 2160...@lid or 923...@s.whatsapp.net)
     owner_phone: str           # normalized phone of the business owner
     business_phone: str
     business_name: str

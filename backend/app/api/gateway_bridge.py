@@ -176,6 +176,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 "conversation_history": history,
                 "customer_sim_phone": detected_sim,
                 "push_name": payload.push_name,
+                "sender_jid": payload.sender_jid,
                 # Reset turn-specific outputs explicitly so nothing bleeds from prior turns in checkpointer
                 "reply_text": "",
                 "reply_chunks": [],

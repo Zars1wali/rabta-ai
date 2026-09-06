@@ -368,9 +368,12 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
         q_text = state.get("pending_owner_query") or state.get("raw_message") or "Customer inquiry"
         inq_type = esc_type or "inquiry"
         t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
+        cust_jid = state.get("sender_jid") or phone
         esc = _esc_service.create_escalation(
             tenant_id=t_uuid,
             customer_phone=effective_sim,
+            customer_jid=cust_jid,
+            customer_city=city,
             customer_name=name,
             question=q_text,
             product_context=product,
@@ -470,9 +473,12 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
     except (ValueError, AttributeError):
         tenant_id = uuid.uuid4()
 
+    cust_jid = state.get("sender_jid") or phone
     esc_record = _esc_service.create_escalation(
         tenant_id=tenant_id,
         customer_phone=effective_sim,
+        customer_jid=cust_jid,
+        customer_city=city,
         question=f"Delivery to {city} ({address}) for {product}",
         product_context=product,
         customer_name=name,
@@ -772,9 +778,12 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
 
         try:
             t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
+            cust_jid = state.get("sender_jid") or sender_phone
             esc = _esc_service.create_escalation(
                 tenant_id=t_uuid,
                 customer_phone=effective_sim,
+                customer_jid=cust_jid,
+                customer_city=city,
                 customer_name=name,
                 question=query_payload,
                 product_context=product,
@@ -798,9 +807,12 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         customer_state = "ESCALATED"
         try:
             t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
+            cust_jid = state.get("sender_jid") or sender_phone
             esc = _esc_service.create_escalation(
                 tenant_id=t_uuid,
                 customer_phone=effective_sim,
+                customer_jid=cust_jid,
+                customer_city=city,
                 customer_name=name,
                 question=f"BULK LEAD: {flag.payload}",
                 product_context=flag.product,
@@ -870,9 +882,12 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
 
         try:
             t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
+            cust_jid = state.get("sender_jid") or sender_phone
             esc = _esc_service.create_escalation(
                 tenant_id=t_uuid,
                 customer_phone=effective_sim,
+                customer_jid=cust_jid,
+                customer_city=city,
                 customer_name=name,
                 question=raw_message,
                 product_context=product,
