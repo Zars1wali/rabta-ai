@@ -33,7 +33,7 @@ class ReActAgentHarness:
     """Executes ReAct conversational turns with Native Gemini Tool Calling."""
 
     def __init__(self, max_iterations: int = 3):
-        self.model = settings.GEMINI_MODEL  # defaults to gemini-3.5-flash-lite
+        self.model = "gemini-3.6-flash"
         self.api_key = settings.GEMINI_API_KEY
         self.max_iterations = max_iterations
         self._client: Optional[genai.Client] = None
