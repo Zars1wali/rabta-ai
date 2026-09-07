@@ -900,6 +900,24 @@ async def _tool_get_product_photos(tenant_id: str, args: Dict[str, Any]) -> Dict
     }
 
 
+def clean_product_query(raw_query: str) -> str:
+    """Strip common conversational verbs, fillers, and photo keywords to leave clean firearm name."""
+    if not raw_query:
+        return ""
+    stop_words = {
+        "share", "send", "show", "give", "bhejo", "bheinjo", "dikhao", "dikhayein",
+        "pic", "pics", "picture", "pictures", "photo", "photos", "tasveer", "tasveerein", "tasweer",
+        "ki", "ka", "ke", "ko", "please", "plz", "bhai", "bro", "sir", "janab",
+        "chahiye", "available", "hai", "hain", "in", "catalog", "mujhe", "hamein",
+        "check", "karein", "dekhna", "detail", "details", "rate", "price"
+    }
+    text = re.sub(r'[^\w\s\.]', ' ', raw_query.lower())
+    words = text.split()
+    filtered = [w for w in words if w not in stop_words and (len(w) >= 2 or any(c.isdigit() for c in w))]
+    cleaned = " ".join(filtered)
+    return cleaned if cleaned else raw_query.strip()
+
+
 async def get_product_photos(
     tenant_id: str,
     product_name: str,
@@ -914,14 +932,17 @@ async def get_product_photos(
     except (ValueError, TypeError):
         return []
 
-    req_clean = product_name.lower().strip()
+    cleaned_name = clean_product_query(product_name)
+    req_clean = (cleaned_name or product_name).lower().strip()
     tokens = [t for t in req_clean.split() if len(t) >= 2]
+    if not tokens:
+        tokens = [t for t in product_name.lower().split() if len(t) >= 2]
     if not tokens:
         return []
 
     async with AsyncSessionLocal() as session:
         token_conds = [CatalogItem.name.ilike(f"%{tok}%") for tok in tokens]
-        stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, or_(*token_conds)).limit(15)
+        stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, or_(*token_conds)).limit(20)
         res = await session.execute(stmt)
         candidates = res.scalars().all()
 
@@ -933,22 +954,22 @@ async def get_product_photos(
             score = 0.0
             # 1. Exact phrase match
             if req_clean in name_lower:
-                score += 10.0
+                score += 15.0
             # 2. Token matches
             for tok in tokens:
                 if tok in name_lower:
-                    score += 2.0
+                    score += 3.0
             # 3. Model number match (e.g. 'g3' must match 'g3', not 'g2c')
             for tok in tokens:
                 if any(char.isdigit() for char in tok):
                     words = name_lower.replace("-", " ").replace("_", " ").split()
                     if tok in words:
-                        score += 5.0
+                        score += 8.0
                     elif any(w.startswith(tok) for w in words):
-                        score += 2.0
-            # Photo presence bonus
+                        score += 3.0
+            # Photo presence bonus: prioritize products that actually have photos
             if it.images and len(it.images) > 0:
-                score += 1.0
+                score += 10.0
             return score
 
         scored = sorted(candidates, key=_calculate_photo_score, reverse=True)

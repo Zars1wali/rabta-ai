@@ -18,7 +18,7 @@ from app.brain.prompts_owner import build_owner_inquiry_alert
 from app.services.store_agent import WhatsAppStoreAgent
 from app.services.escalation_service import EscalationService
 from app.services.owner_copilot import OwnerCopilotService
-from app.services.catalog_tools import get_product_photos
+from app.services.catalog_tools import get_product_photos, clean_product_query
 from app.brain.flags import RabtaFlag, strip_rabta_flags, parse_rabta_flag
 
 logger = logging.getLogger(__name__)
@@ -676,7 +676,8 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
 
     # 1. Handle Native Media or Legacy IMAGE_REQUEST Flag
     if not media_urls and flag and flag.flag_type == "IMAGE_REQUEST":
-        target_product = flag.product or reply_data.get("image_product") or product or "firearm"
+        raw_target = flag.product or reply_data.get("image_product") or product or raw_message or "firearm"
+        target_product = clean_product_query(raw_target)
         try:
             photos = await get_product_photos(
                 tenant_id=tenant_id_str,
@@ -685,11 +686,13 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             )
             if photos:
                 media_url = photos[0]["url"]
-                media_urls = [{"name": target_product, "url": media_url, "caption": photos[0].get("caption", "")}]
-                reply_text = f"Yeh hai piece. Genuine import."
+                prod_name = photos[0].get("product_name") or target_product.title()
+                media_urls = [{"name": prod_name, "url": media_url, "caption": photos[0].get("caption", f"Jee yeh rahi {prod_name} ki picture.")}]
+                reply_text = f"Yeh rahi {prod_name} ki picture bhai. Genuine import piece."
                 reply_chunks = [reply_text]
             else:
-                reply_text = f"Bhai {target_product} ki photo abhi catalog mein load nahi hui — aap features ya specs pooch sakte hain."
+                display_name = target_product.title() if target_product else "is firearm"
+                reply_text = f"Bhai {display_name} ki photo abhi catalog mein load nahi hui — aap features ya specs pooch sakte hain."
                 reply_chunks = [reply_text]
         except Exception as e:
             logger.warning("[Node:customer_sales_chat] Image fetch error: %s", e)

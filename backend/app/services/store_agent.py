@@ -25,7 +25,7 @@ from app.core.config import settings
 from app.brain.prompts_customer import build_customer_sales_prompt
 from app.brain.flags import parse_rabta_flag, strip_rabta_flags, RabtaFlag
 from app.services.agent_harness import react_agent_harness
-from app.services.catalog_tools import get_product_photos
+from app.services.catalog_tools import get_product_photos, clean_product_query
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +264,8 @@ class WhatsAppStoreAgent:
             # Backward-compatibility flag mapping if tools were called
             if not flag:
                 if "get_product_photos" in tool_calls and not media_urls:
-                    flag = RabtaFlag(flag_type="IMAGE_REQUEST", product=customer_message)
+                    clean_prod = clean_product_query(customer_message)
+                    flag = RabtaFlag(flag_type="IMAGE_REQUEST", product=clean_prod)
                 elif any(t in tool_calls for t in escalation_tools):
                     flag = RabtaFlag(flag_type="ESCALATE", payload=customer_message)
 
