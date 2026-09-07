@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 CUSTOMER_TOOLS_DECLARATIONS = [
     {
         "name": "search_catalog",
-        "description": "Search store inventory for firearms, ammunition, specs, or prices. Always call this when a customer asks what is available, asks for prices, asks for recommendations, or asks for technical specifications.",
+        "description": "Search store inventory for firearms, ammunition, specs, or prices. Call this when you need detailed inventory verification, caliber filters, or specific model specifications beyond Part B.",
         "parameters": {
             "type": "object",
             "properties": {

@@ -218,7 +218,7 @@ class WhatsAppStoreAgent:
 
         # Build comprehensive system instructions with fresh Part B live data
         system_instruction = build_customer_sales_prompt(
-            business_details=f"Store Name: {business_name}\nIndustry: {industry}\nCatalog:\n{catalog_context}",
+            business_details=f"Store Name: {business_name}\nIndustry: {industry}\nLocation: GT Road, Peshawar, KPK",
             products_and_prices=catalog_context,
             prices_confirmed_today=prices_confirmed_today,
             image_index="",

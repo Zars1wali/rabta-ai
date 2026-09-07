@@ -13,6 +13,7 @@ Features:
 from __future__ import annotations
 import logging
 import asyncio
+import time
 from typing import List, Dict, Any, Optional, Tuple
 from google import genai
 from google.genai import types
@@ -27,6 +28,10 @@ from app.services.catalog_tools import (
 from unittest.mock import Mock, MagicMock
 
 logger = logging.getLogger(__name__)
+
+# Resilient Circuit Breaker state across conversational turns
+_MODEL_COOLDOWNS: Dict[str, float] = {}
+_ACTIVE_HEALTHY_MODEL: Optional[str] = None
 
 
 class ReActAgentHarness:
@@ -139,12 +144,25 @@ class ReActAgentHarness:
                 )
 
                 response = None
-                model_pool = [self.model, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"]
-                # Deduplicate while preserving order
+                global _ACTIVE_HEALTHY_MODEL, _MODEL_COOLDOWNS
+                now = time.time()
+
+                # Fast selection: if an active healthy model is known and not in cooldown, prioritize it
+                preferred = []
+                if _ACTIVE_HEALTHY_MODEL and _MODEL_COOLDOWNS.get(_ACTIVE_HEALTHY_MODEL, 0) < now:
+                    preferred.append(_ACTIVE_HEALTHY_MODEL)
+                preferred.extend([self.model, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"])
+
+                # Filter out models currently in cooldown to avoid wasting seconds on known 429 quota exhaustion
+                valid_pool = [m for m in preferred if m and _MODEL_COOLDOWNS.get(m, 0) < now]
+                if not valid_pool:
+                    _MODEL_COOLDOWNS.clear()
+                    valid_pool = [m for m in preferred if m]
+
                 seen_models = set()
                 dedup_pool = []
-                for m in model_pool:
-                    if m and m not in seen_models:
+                for m in valid_pool:
+                    if m not in seen_models:
                         seen_models.add(m)
                         dedup_pool.append(m)
 
@@ -164,12 +182,18 @@ class ReActAgentHarness:
                                 contents=contents,
                                 config=config,
                             )
+                            _ACTIVE_HEALTHY_MODEL = attempt_model
                             if attempt_model != self.model:
-                                logger.info("[ReActHarness] Succeeded with failover model %s", attempt_model)
+                                logger.info("[ReActHarness] Succeeded with healthy model %s", attempt_model)
                             break
                         except Exception as m_err:
                             last_exc = m_err
-                            logger.warning("[ReActHarness] Model %s failed (%s), trying next in pool", attempt_model, m_err)
+                            err_str = str(m_err)
+                            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                                _MODEL_COOLDOWNS[attempt_model] = time.time() + 180.0
+                                logger.warning("[ReActHarness] Model %s quota exhausted (429), cooling down for 180s", attempt_model)
+                            else:
+                                logger.warning("[ReActHarness] Model %s failed (%s), trying next in pool", attempt_model, m_err)
                     
                     if response is None:
                         raise last_exc or RuntimeError("All models in pool failed")

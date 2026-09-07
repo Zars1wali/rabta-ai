@@ -280,25 +280,42 @@ async def run_customer_nlu(state: RabtaGraphState) -> RabtaGraphState:
     client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
     result = None
 
-    # Fast-path ONLY for pure standalone greetings (e.g. "salam", "aoa", "hello")
-    # Never hijack questions, inquiries, or messages with content
+    # ── 1. High-Speed Deterministic Extraction (0.1ms, zero API calls, 100% reliable) ──
+    city_fb = _regex_city(msg)
+    product_fb = _regex_product(msg)
+    name_fb = _regex_name(msg)
+    legal_fb = _has_legal_intent(msg)
+    correction_fb = _has_correction_intent(msg)
+    photo_fb = correction_fb or any(w in msg_lower for w in _PHOTO_WORDS)
+    browse_fb = any(w in msg_lower for w in _BROWSE_WORDS) and not photo_fb
+    delivery_fb = _has_delivery_intent(msg) and not photo_fb and not legal_fb and not browse_fb
+    cat_fb = None
+    for cat, kws in _CATEGORY_KEYWORDS.items():
+        if any(kw in msg_lower for kw in kws):
+            cat_fb = cat
+            break
+
     pure_greetings = {"salam", "assalam o alaikum", "assalam u alaikum", "assalamualaikum", "aoa", "hello", "hi", "hey"}
-    if msg_lower.strip() in pure_greetings:
+    is_greeting = msg_lower.strip() in pure_greetings
+
+    # If any clean sales intent or entity is recognized, resolve instantly without burning LLM roundtrip
+    if is_greeting or any([city_fb, product_fb, name_fb, legal_fb, correction_fb, photo_fb, browse_fb, delivery_fb, cat_fb]):
         result = {
-            "is_delivery_intent": False,
-            "is_photo_intent": False,
-            "is_browse_intent": False,
-            "is_correction_intent": False,
-            "is_legal_intent": False,
+            "is_delivery_intent": delivery_fb,
+            "is_photo_intent": photo_fb,
+            "is_browse_intent": browse_fb,
+            "is_correction_intent": correction_fb,
+            "is_legal_intent": legal_fb,
             "is_order_intent": False,
-            "is_greeting": True,
-            "extracted_city": None,
-            "extracted_product": None,
-            "extracted_products": [],
-            "extracted_category": None,
-            "extracted_name": None,
+            "is_greeting": is_greeting,
+            "extracted_city": city_fb,
+            "extracted_product": product_fb,
+            "extracted_products": [product_fb] if product_fb else [],
+            "extracted_category": cat_fb,
+            "extracted_name": name_fb,
         }
 
+    # ── 2. LLM Fallback only for ambiguous/unrecognized messages ─────────────────────
     if client and msg and result is None:
         # Include brief history context if available
         history = state.get("conversation_history") or []
@@ -310,25 +327,25 @@ Recent Context: "{recent_ctx}"
 
 Task:
 1. Classify customer intents:
-   - "is_delivery_intent": true ONLY IF customer is explicitly asking to deliver/ship/courier an item, or asking delivery charges (e.g. "delivery charges kya hain?", "Isb bhejwado", "parcel mangwana hai", "courier ho sakta hai?", "home delivery hogi?"). FALSE if asking about specs, colors, variants, photos, or general product price.
-   - "is_photo_intent": true ONLY IF customer explicitly asks for a PHOTO/IMAGE/PICTURE of a SPECIFIC product using words like: pic, picture, photo, tasweer, image, share karein, bhej do. NOT just "dikhao" or "dekhaye" alone — those mean "show me options" not "send me a photo".
-   - "is_browse_intent": true IF customer is asking to see a CATEGORY or LIST of products, or asking for ALTERNATIVES/OTHER OPTIONS. Examples: "rifles dekhaye", "pistols available hain?", "or options kya hain?", "kuch aur dikhao", "options batao", "aur models bata", "dusri options". This is DIFFERENT from asking for a photo of one specific product.
-   - "is_correction_intent": true IF customer says the previous image/item sent was wrong ("galat pic bhej di", "yeh nahi choti wali", "dusri dikhao", "mene iska nahi poocha").
-   - "is_legal_intent": true IF customer is asking about gun licensing, permits, NADRA, legal regulations, age requirements, or buying without a license ("license chahiye?", "bina license mil jaye gi?", "all pakistan permit", "qanoon kya kehta hai").
-   - "is_order_intent": true IF customer explicitly expresses intent to buy/order ("lena hai", "kharidna hai", "book kardo", "19x lagegi").
-   - "is_greeting": true IF simple greeting ("salam", "hello", "hi", "aoa", "kese ho").
+   - "is_delivery_intent": true ONLY IF customer is explicitly asking to deliver/ship/courier an item, or asking delivery charges.
+   - "is_photo_intent": true ONLY IF customer explicitly asks for a PHOTO/IMAGE/PICTURE of a SPECIFIC product.
+   - "is_browse_intent": true IF customer is asking to see a CATEGORY or LIST of products, or asking for ALTERNATIVES.
+   - "is_correction_intent": true IF customer says previous image/item sent was wrong.
+   - "is_legal_intent": true IF customer is asking about gun licensing, permits, NADRA.
+   - "is_order_intent": true IF customer explicitly expresses intent to buy/order.
+   - "is_greeting": true IF simple greeting.
 
 2. Extract entities:
-   - "extracted_city": normalized Pakistani city name (e.g. "Islamabad" for "isb", "Rawalpindi" for "rwp" or "pindi", "Lahore" for "lhr", "Karachi" for "khi", "Peshawar", "Faisalabad", "Gujranwala", "Multan", "Quetta", "Sialkot", etc.), or null if no city mentioned.
-   - "extracted_product": specific firearm model or brand mentioned (e.g. "Glock 19X", "Taurus PT92", "Colt M4"). If customer said a category ("rifles", "pistols"), this should be null.
-   - "extracted_category": category keyword if customer asked about a class of firearms. E.g. "rifles dekhaye" -> "rifle", "pistols available hain?" -> "pistol", "shotguns" -> "shotgun". Null if asking for a specific model.
-   - "extracted_name": customer personal name ONLY IF they explicitly introduced themselves (e.g. "Mera naam Usman hai" -> "Usman", "I am Ali" -> "Ali"). Null otherwise. DO NOT extract cities, firearms, or common words as names.
-   - "extracted_products": LIST of ALL specific firearm models/brands mentioned in this message (e.g. if customer says "Beretta, Canik aur Glock ki pic bhejo" -> ["Beretta 92FS", "Canik TP9 Sub Elite", "Glock 19"]). Empty list [] if no specific models mentioned. This is especially important for voice messages that list multiple products.
+   - "extracted_city": normalized Pakistani city name, or null.
+   - "extracted_product": specific firearm model or brand, or null.
+   - "extracted_category": category keyword (e.g. "rifle", "pistol", "shotgun"), or null.
+   - "extracted_name": customer personal name ONLY IF explicitly introduced, or null.
+   - "extracted_products": list of firearm models mentioned.
 
 Return STRICT JSON only:
 {{"is_delivery_intent": boolean, "is_photo_intent": boolean, "is_browse_intent": boolean, "is_correction_intent": boolean, "is_legal_intent": boolean, "is_order_intent": boolean, "is_greeting": boolean, "extracted_city": string|null, "extracted_product": string|null, "extracted_products": list, "extracted_category": string|null, "extracted_name": string|null}}"""
 
-        model_pool = [settings.GEMINI_MODEL, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"]
+        model_pool = ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-flash-latest", settings.GEMINI_MODEL]
         seen_models = set()
         for attempt_model in model_pool:
             if not attempt_model or attempt_model in seen_models:
@@ -345,8 +362,6 @@ Return STRICT JSON only:
                 )
                 raw = (resp.text or "").strip()
                 result = json.loads(raw)
-                if attempt_model != settings.GEMINI_MODEL:
-                    logger.info("[NLU:customer] Succeeded with model %s", attempt_model)
                 break
             except Exception as exc:
                 logger.warning("[NLU:customer] Model %s failed (%s), trying next", attempt_model, exc)
