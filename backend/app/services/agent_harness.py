@@ -33,7 +33,7 @@ class ReActAgentHarness:
     """Executes ReAct conversational turns with Native Gemini Tool Calling."""
 
     def __init__(self, max_iterations: int = 3):
-        self.model = "gemini-3.6-flash"
+        self.model = "gemini-3.7-flash"
         self.api_key = settings.GEMINI_API_KEY
         self.max_iterations = max_iterations
         self._client: Optional[genai.Client] = None
@@ -138,6 +138,16 @@ class ReActAgentHarness:
                     tools=tools,
                 )
 
+                response = None
+                model_pool = [self.model, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"]
+                # Deduplicate while preserving order
+                seen_models = set()
+                dedup_pool = []
+                for m in model_pool:
+                    if m and m not in seen_models:
+                        seen_models.add(m)
+                        dedup_pool.append(m)
+
                 from unittest.mock import Mock, MagicMock
                 if isinstance(getattr(self.client.models, "generate_content", None), (Mock, MagicMock)):
                     response = self.client.models.generate_content(
@@ -146,20 +156,23 @@ class ReActAgentHarness:
                         config=config,
                     )
                 else:
-                    try:
-                        response = await self.client.aio.models.generate_content(
-                            model=self.model,
-                            contents=contents,
-                            config=config,
-                        )
-                    except Exception as primary_err:
-                        alt_model = "gemini-3.5-flash-lite" if "3.6" in self.model else "gemini-3.6-flash"
-                        logger.warning("[ReActHarness] Primary model %s failed (%s), failing over to %s", self.model, primary_err, alt_model)
-                        response = await self.client.aio.models.generate_content(
-                            model=alt_model,
-                            contents=contents,
-                            config=config,
-                        )
+                    last_exc = None
+                    for attempt_model in dedup_pool:
+                        try:
+                            response = await self.client.aio.models.generate_content(
+                                model=attempt_model,
+                                contents=contents,
+                                config=config,
+                            )
+                            if attempt_model != self.model:
+                                logger.info("[ReActHarness] Succeeded with failover model %s", attempt_model)
+                            break
+                        except Exception as m_err:
+                            last_exc = m_err
+                            logger.warning("[ReActHarness] Model %s failed (%s), trying next in pool", attempt_model, m_err)
+                    
+                    if response is None:
+                        raise last_exc or RuntimeError("All models in pool failed")
 
                 if not response.candidates:
                     logger.warning("[ReActHarness] No candidates returned on turn %d", iteration)
@@ -253,12 +266,12 @@ class ReActAgentHarness:
 
             if cat_match:
                 try:
-                    from app.services.catalog_tools import search_catalog
                     t_id = context.get("tenant_id") if isinstance(context, dict) else None
                     if t_id:
-                        cat_res = await search_catalog(tenant_id=str(t_id), category=cat_match, limit=5)
-                        if cat_res:
-                            items_str = "\n".join([f"- **{it['name']}**: PKR {it['price']:,.0f}" for it in cat_res if it.get('price')])
+                        cat_res = await execute_tool("search_catalog", {"query": cat_match, "category": cat_match}, {"tenant_id": str(t_id)})
+                        items_list = cat_res.get("items") or []
+                        if items_list:
+                            items_str = "\n".join([f"- **{it['name']}**: PKR {it['price']:,.0f}" for it in items_list[:5] if it.get('price')])
                             fallback = f"Hamare paas {cat_match}s mein yeh top options available hain:\n\n{items_str}\n\nAapko kis model ki details ya tasveer chahiye?"
                 except Exception as cat_err:
                     logger.warning("[ReActHarness] Fallback category search failed: %s", cat_err)

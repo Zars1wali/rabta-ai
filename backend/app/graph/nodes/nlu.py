@@ -328,23 +328,15 @@ Task:
 Return STRICT JSON only:
 {{"is_delivery_intent": boolean, "is_photo_intent": boolean, "is_browse_intent": boolean, "is_correction_intent": boolean, "is_legal_intent": boolean, "is_order_intent": boolean, "is_greeting": boolean, "extracted_city": string|null, "extracted_product": string|null, "extracted_products": list, "extracted_category": string|null, "extracted_name": string|null}}"""
 
-        try:
-            resp = await client.aio.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.0,
-                    response_mime_type="application/json",
-                ),
-            )
-            raw = (resp.text or "").strip()
-            result = json.loads(raw)
-        except Exception as exc:
-            logger.warning("[NLU:customer] Primary Gemini call failed (%s), trying failover...", exc)
+        model_pool = [settings.GEMINI_MODEL, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"]
+        seen_models = set()
+        for attempt_model in model_pool:
+            if not attempt_model or attempt_model in seen_models:
+                continue
+            seen_models.add(attempt_model)
             try:
-                alt_model = "gemini-3.5-flash-lite" if "3.6" in settings.GEMINI_MODEL else "gemini-3.6-flash"
                 resp = await client.aio.models.generate_content(
-                    model=alt_model,
+                    model=attempt_model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         temperature=0.0,
@@ -353,8 +345,11 @@ Return STRICT JSON only:
                 )
                 raw = (resp.text or "").strip()
                 result = json.loads(raw)
-            except Exception as exc2:
-                logger.warning("[NLU:customer] Gemini failover failed, using regex fallback: %s", exc2)
+                if attempt_model != settings.GEMINI_MODEL:
+                    logger.info("[NLU:customer] Succeeded with model %s", attempt_model)
+                break
+            except Exception as exc:
+                logger.warning("[NLU:customer] Model %s failed (%s), trying next", attempt_model, exc)
 
     # ── Fallback deterministic extraction if LLM unavailable ─────────────────
     if result is None:
@@ -570,24 +565,15 @@ Extract:
 Return STRICT JSON only:
 {{"intent": string, "product_name": string|null, "category": string|null, "origin": string|null, "caliber": string|null, "capacity": string|null, "action": string|null, "new_price": number|null, "description": string|null, "relay_text": string|null}}"""
 
-        try:
-            resp = await client.aio.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.0,
-                    response_mime_type="application/json",
-                ),
-            )
-            raw = (resp.text or "").strip()
-            data = json.loads(raw)
-            result = data
-        except Exception as exc:
-            logger.warning("[NLU:owner] Primary Gemini call failed (%s), trying failover...", exc)
+        model_pool = [settings.GEMINI_MODEL, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"]
+        seen_models = set()
+        for attempt_model in model_pool:
+            if not attempt_model or attempt_model in seen_models:
+                continue
+            seen_models.add(attempt_model)
             try:
-                alt_model = "gemini-3.5-flash-lite" if "3.6" in settings.GEMINI_MODEL else "gemini-3.6-flash"
                 resp = await client.aio.models.generate_content(
-                    model=alt_model,
+                    model=attempt_model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         temperature=0.0,
@@ -595,9 +581,13 @@ Return STRICT JSON only:
                     ),
                 )
                 raw = (resp.text or "").strip()
-                result = json.loads(raw)
-            except Exception as exc2:
-                logger.warning("[NLU:owner] Gemini failover failed, using regex fallback: %s", exc2)
+                data = json.loads(raw)
+                result = data
+                if attempt_model != settings.GEMINI_MODEL:
+                    logger.info("[NLU:owner] Succeeded with model %s", attempt_model)
+                break
+            except Exception as exc:
+                logger.warning("[NLU:owner] Model %s failed (%s), trying next", attempt_model, exc)
 
     if result is None:
         add_match = re.search(r'\b(?:add\s+(?:product|item|rifle|pistol|gun)|naya\s+(?:product|item))\b', msg_lower)
