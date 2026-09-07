@@ -86,7 +86,13 @@ class KnowledgeBaseService:
             conditions = [CatalogItem.tenant_id == t_uuid, CatalogItem.in_stock == True]
 
             if category:
-                conditions.append(CatalogItem.category.ilike(f"%{category}%"))
+                cat_root = category.strip().rstrip("sS")
+                conditions.append(
+                    or_(
+                        CatalogItem.category.ilike(f"%{category.strip()}%"),
+                        CatalogItem.category.ilike(f"%{cat_root}%"),
+                    )
+                )
 
             # Build broad candidate retrieval query
             token_conditions = []
