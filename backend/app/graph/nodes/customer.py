@@ -623,6 +623,36 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             "owner_alert": None,
         }
 
+    # Direct high-accuracy photo lookup fast-path:
+    # If customer explicitly requests a photo of a firearm, query catalog photos directly
+    is_photo_req = any(w in raw_l for w in ["pic", "pics", "picture", "pictures", "photo", "photos", "tasveer", "tasveerein", "tasweer"])
+    if is_photo_req:
+        cand_product = clean_product_query(raw_message) or state.get("customer_product")
+        if cand_product and len(cand_product) >= 2:
+            try:
+                photos = await get_product_photos(
+                    tenant_id=tenant_id_str,
+                    product_name=cand_product,
+                    allow_multiple=False,
+                )
+                if photos:
+                    media_url = photos[0]["url"]
+                    prod_name = photos[0].get("product_name") or cand_product.title()
+                    media_urls = [{"name": prod_name, "url": media_url, "caption": photos[0].get("caption", f"Jee yeh rahi {prod_name} ki picture.")}]
+                    reply = f"Yeh rahi {prod_name} ki picture bhai. Genuine import piece."
+                    return {
+                        **state,
+                        "customer_state": "BROWSING",
+                        "customer_product": prod_name,
+                        "media_url": media_url,
+                        "media_urls": media_urls,
+                        "reply_text": reply,
+                        "reply_chunks": [reply],
+                        "owner_alert": None,
+                    }
+            except Exception as pe:
+                logger.warning("[customer_sales_chat] Photo fast-path error: %s", pe)
+
     # Call the Sales Intelligence Agent
     reply_data = await _store_agent.handle_customer_interaction(
         customer_message=raw_message,
