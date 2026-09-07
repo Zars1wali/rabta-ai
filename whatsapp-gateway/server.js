@@ -260,11 +260,10 @@ async function handleIncomingMessage(msg) {
                     });
                     if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
                 } catch (mediaErr) {
-                    console.error(`Failed to send image ${item.url}, falling back to text: ${mediaErr.message}`);
-                    if (item.caption) {
-                        const sent = await sock.sendMessage(sender, { text: item.caption });
-                        if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
-                    }
+                    console.error(`❌ Failed to send image ${item.url}: ${mediaErr.message}`);
+                    const fallbackNotice = "Bhai is model ki picture verify ho rahi hai — main confirm karke fresh tasveer bhejta hoon.";
+                    const sent = await sock.sendMessage(sender, { text: fallbackNotice });
+                    if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
                 }
             }
         } else if (replyChunks && replyChunks.length > 0) {
@@ -295,15 +294,25 @@ async function handleIncomingMessage(msg) {
             }
         }
 
-        // 4. Send clean notification to the Boss
+        // 4. Send clean notification to the Boss (both phone JID and LID for 100% delivery)
         if (ownerAlert && ownerPhone) {
-            const targetOwnerJid = global._lastKnownOwnerJid || `${cleanPhoneNumber(ownerPhone)}@s.whatsapp.net`;
-            if (isDuplicateOutgoing(targetOwnerJid, ownerAlert)) {
-                console.log(`🛡️ [DEDUP] Suppressed duplicate alert to Boss on [${targetOwnerJid}]`);
-            } else {
-                console.log(`🚨 [ALERT] Notifying Boss on [${targetOwnerJid}]`);
-                const sent = await sock.sendMessage(targetOwnerJid, { text: ownerAlert });
-                if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+            const phoneJid = `${cleanPhoneNumber(ownerPhone)}@s.whatsapp.net`;
+            const destinations = [phoneJid];
+            if (global._lastKnownOwnerJid && global._lastKnownOwnerJid !== phoneJid) {
+                destinations.push(global._lastKnownOwnerJid);
+            }
+            for (const targetOwnerJid of destinations) {
+                if (isDuplicateOutgoing(targetOwnerJid, ownerAlert)) {
+                    console.log(`🛡️ [DEDUP] Suppressed duplicate alert to Boss on [${targetOwnerJid}]`);
+                } else {
+                    console.log(`🚨 [ALERT] Notifying Boss on [${targetOwnerJid}]`);
+                    try {
+                        const sent = await sock.sendMessage(targetOwnerJid, { text: ownerAlert });
+                        if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+                    } catch (alertErr) {
+                        console.error(`Failed to send alert to ${targetOwnerJid}: ${alertErr.message}`);
+                    }
+                }
             }
         }
     } catch (error) {
