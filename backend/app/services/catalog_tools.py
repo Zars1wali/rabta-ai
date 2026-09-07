@@ -99,17 +99,13 @@ CUSTOMER_TOOLS_DECLARATIONS = [
     },
     {
         "name": "escalate_delivery_quote",
-        "description": "Escalate to the store owner to calculate and quote exact delivery charges. Call this ONLY after you have collected the customer's full Name, Pakistani WhatsApp contact SIM number, destination City, and delivery Area/Address.",
+        "description": "Escalate to the store owner to calculate and quote exact delivery charges. Call this ONLY after you have collected the customer's full Name, destination City, and delivery Area/Address. NOTE: Customer WhatsApp number is auto-detected automatically from the session; NEVER ask the customer for their WhatsApp SIM or phone number.",
         "parameters": {
             "type": "object",
             "properties": {
                 "customer_name": {
                     "type": "string",
                     "description": "Customer's real human name (e.g. 'Ahmed', 'Tariq Mehmood')",
-                },
-                "contact_sim": {
-                    "type": "string",
-                    "description": "Customer's Pakistani mobile SIM phone number (e.g. '03075659224' or '03001234567')",
                 },
                 "destination_city": {
                     "type": "string",
@@ -123,13 +119,17 @@ CUSTOMER_TOOLS_DECLARATIONS = [
                     "type": "string",
                     "description": "Product or firearm being delivered (e.g. 'CZ P-10C', 'Taurus G3', 'AR-15')",
                 },
+                "contact_sim": {
+                    "type": "string",
+                    "description": "Optional customer phone override (auto-detected by default)",
+                },
             },
-            "required": ["customer_name", "contact_sim", "destination_city", "delivery_address"],
+            "required": ["customer_name", "destination_city", "delivery_address"],
         },
     },
     {
         "name": "get_payment_bank_details",
-        "description": "Retrieve official verified bank account / JazzCash / EasyPaisa details to provide to the customer for advance payment. Call this ONLY after customer has provided their Name and City.",
+        "description": "Retrieve official verified bank account / JazzCash / EasyPaisa details to provide to the customer for advance payment. Call this ONLY after customer has provided their Name and City. Customer WhatsApp number is auto-detected automatically; do not ask for SIM.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -141,13 +141,13 @@ CUSTOMER_TOOLS_DECLARATIONS = [
                     "type": "string",
                     "description": "Customer's city",
                 },
-                "contact_sim": {
-                    "type": "string",
-                    "description": "Customer's Pakistani WhatsApp SIM contact number if available",
-                },
                 "product_name": {
                     "type": "string",
                     "description": "Product being purchased",
+                },
+                "contact_sim": {
+                    "type": "string",
+                    "description": "Optional phone override (auto-detected by default)",
                 },
             },
             "required": ["customer_name", "customer_city"],
@@ -155,17 +155,13 @@ CUSTOMER_TOOLS_DECLARATIONS = [
     },
     {
         "name": "escalate_custom_inquiry",
-        "description": "Escalate custom pricing, out-of-stock items, dealer bulk rates, or special owner requests to the store owner. Call this ONLY after collecting customer Name and contact SIM.",
+        "description": "Escalate custom pricing, dealer bulk rates, or genuine special owner requests to the store owner. Call this ONLY after collecting customer Name and exact question. Customer WhatsApp phone number is auto-detected automatically; do not ask for SIM.",
         "parameters": {
             "type": "object",
             "properties": {
                 "customer_name": {
                     "type": "string",
                     "description": "Customer's name",
-                },
-                "contact_sim": {
-                    "type": "string",
-                    "description": "Customer's WhatsApp contact SIM",
                 },
                 "question": {
                     "type": "string",
@@ -179,8 +175,12 @@ CUSTOMER_TOOLS_DECLARATIONS = [
                     "type": "string",
                     "description": "Product involved in inquiry",
                 },
+                "contact_sim": {
+                    "type": "string",
+                    "description": "Optional phone override (auto-detected by default)",
+                },
             },
-            "required": ["customer_name", "contact_sim", "question"],
+            "required": ["customer_name", "question"],
         },
     },
     {
@@ -271,33 +271,7 @@ CUSTOMER_TOOLS_DECLARATIONS = [
                     "description": "Any special requirements or company background",
                 },
             },
-            "required": ["customer_name", "contact_sim", "product_name", "quantity"],
-        },
-    },
-    {
-        "name": "query_owner_for_missing_info",
-        "description": "Ask the store owner for specific technical specifications, custom barrel/finish options, or unpriced stock items that are not documented in the catalog.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "customer_name": {
-                    "type": "string",
-                    "description": "Customer name",
-                },
-                "product_name": {
-                    "type": "string",
-                    "description": "Product name",
-                },
-                "question_details": {
-                    "type": "string",
-                    "description": "The exact question or spec customer requested",
-                },
-                "contact_sim": {
-                    "type": "string",
-                    "description": "Customer contact SIM",
-                },
-            },
-            "required": ["product_name", "question_details"],
+            "required": ["customer_name", "product_name", "quantity"],
         },
     },
     {
@@ -1041,21 +1015,27 @@ async def _tool_escalate_delivery_quote(tenant_id: str, args: Dict[str, Any], co
     from app.db.repositories.tenant_repo import format_pakistani_phone_display
 
     cust_name = (args.get("customer_name") or "").strip()
-    contact_sim = (args.get("contact_sim") or "").strip()
     city = (args.get("destination_city") or "").strip()
     address = (args.get("delivery_address") or "").strip()
     product = (args.get("product_name") or "firearm").strip()
+
+    # Auto-detect genuine WhatsApp phone & JID from session context
+    cust_phone = (
+        (args.get("contact_sim") or "").strip()
+        or (context.get("sender_phone") or "").strip()
+        or (context.get("sender_jid") or "").strip()
+        or (context.get("customer_phone") or "").strip()
+    )
+    cust_jid = context.get("sender_jid") or context.get("sender_phone") or cust_phone
 
     try:
         t_uuid = uuid.UUID(tenant_id)
     except (ValueError, TypeError):
         t_uuid = uuid.uuid4()
 
-    cust_jid = context.get("sender_phone") or contact_sim
-
     esc = escalation_service.create_escalation(
         tenant_id=t_uuid,
-        customer_phone=contact_sim,
+        customer_phone=cust_phone,
         customer_jid=cust_jid,
         customer_city=city,
         customer_name=cust_name,
@@ -1065,7 +1045,7 @@ async def _tool_escalate_delivery_quote(tenant_id: str, args: Dict[str, Any], co
 
     owner_alert = build_owner_inquiry_alert(
         customer_name=cust_name,
-        customer_phone=contact_sim,
+        customer_phone=cust_phone,
         product=product,
         city=city,
         address=address,
@@ -1077,7 +1057,7 @@ async def _tool_escalate_delivery_quote(tenant_id: str, args: Dict[str, Any], co
         state_updates["owner_alert"] = owner_alert
         state_updates["customer_profile"] = {
             "name": cust_name,
-            "sim": contact_sim,
+            "sim": cust_phone,
             "city": city,
             "address": address,
         }
@@ -1104,8 +1084,16 @@ async def _tool_get_payment_bank_details(tenant_id: str, args: Dict[str, Any], c
 
     cust_name = (args.get("customer_name") or "").strip()
     city = (args.get("customer_city") or "").strip()
-    contact_sim = (args.get("contact_sim") or context.get("sender_phone") or "").strip()
     product = (args.get("product_name") or "firearm").strip()
+
+    # Auto-detect genuine WhatsApp phone & JID from session context
+    cust_phone = (
+        (args.get("contact_sim") or "").strip()
+        or (context.get("sender_phone") or "").strip()
+        or (context.get("sender_jid") or "").strip()
+        or (context.get("customer_phone") or "").strip()
+    )
+    cust_jid = context.get("sender_jid") or context.get("sender_phone") or cust_phone
 
     try:
         t_uuid = uuid.UUID(tenant_id)
@@ -1136,10 +1124,9 @@ async def _tool_get_payment_bank_details(tenant_id: str, args: Dict[str, Any], c
             "message": f"Official verified payment details retrieved. Share these exact payment details with {cust_name} (and the official QR code will be sent automatically):\n\n{pay_text}",
         }
     else:
-        cust_jid = context.get("sender_phone") or contact_sim
         esc = escalation_service.create_escalation(
             tenant_id=t_uuid,
-            customer_phone=contact_sim,
+            customer_phone=cust_phone,
             customer_jid=cust_jid,
             customer_city=city,
             customer_name=cust_name,
@@ -1148,7 +1135,7 @@ async def _tool_get_payment_bank_details(tenant_id: str, args: Dict[str, Any], c
         )
         owner_alert = build_owner_inquiry_alert(
             customer_name=cust_name,
-            customer_phone=contact_sim,
+            customer_phone=cust_phone,
             product=product,
             city=city,
             question="Customer requested official bank account details — please provide bank account",
@@ -1172,20 +1159,27 @@ async def _tool_escalate_custom_inquiry(tenant_id: str, args: Dict[str, Any], co
     from app.brain.prompts_owner import build_owner_inquiry_alert
 
     cust_name = (args.get("customer_name") or "").strip()
-    contact_sim = (args.get("contact_sim") or context.get("sender_phone") or "").strip()
     question = (args.get("question") or "").strip()
     inq_type = (args.get("inquiry_type") or "inquiry").strip()
     product = (args.get("product_name") or "").strip()
+
+    # Auto-detect genuine WhatsApp phone & JID from session context
+    cust_phone = (
+        (args.get("contact_sim") or "").strip()
+        or (context.get("sender_phone") or "").strip()
+        or (context.get("sender_jid") or "").strip()
+        or (context.get("customer_phone") or "").strip()
+    )
+    cust_jid = context.get("sender_jid") or context.get("sender_phone") or cust_phone
 
     try:
         t_uuid = uuid.UUID(tenant_id)
     except (ValueError, TypeError):
         t_uuid = uuid.uuid4()
 
-    cust_jid = context.get("sender_phone") or contact_sim
     esc = escalation_service.create_escalation(
         tenant_id=t_uuid,
-        customer_phone=contact_sim,
+        customer_phone=cust_phone,
         customer_jid=cust_jid,
         customer_name=cust_name,
         question=question,
@@ -1193,7 +1187,7 @@ async def _tool_escalate_custom_inquiry(tenant_id: str, args: Dict[str, Any], co
     )
     owner_alert = build_owner_inquiry_alert(
         customer_name=cust_name,
-        customer_phone=contact_sim,
+        customer_phone=cust_phone,
         product=product,
         question=question,
         inquiry_type=inq_type,
@@ -1395,15 +1389,32 @@ async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context:
     if not esc:
         esc, _ = escalation_service.find_target_escalation(t_uuid, reply_msg)
 
+    # If still unresolved, inspect pending list
     if not esc:
         pending = escalation_service.get_pending_for_tenant(t_uuid)
-        esc = pending[0] if pending else None
-
-    if not esc:
-        return {
-            "status": "not_found",
-            "message": "Abhi koi pending customer inquiry nahi mili jise reply convey karna ho.",
-        }
+        if not pending:
+            return {
+                "status": "not_found",
+                "message": "Abhi koi pending customer inquiry nahi mili jise reply convey karna ho.",
+            }
+        if len(pending) > 1:
+            # Multiple inquiries are pending and owner's answer was ambiguous!
+            # Do NOT guess or send to a random customer.
+            lines = [
+                "Haider bhai, aap ka yeh jawab kis customer ke liye hai? Abhi ek se zyada inquiries pending hain:"
+            ]
+            for idx, p in enumerate(pending, 1):
+                name_str = p.customer_name or "Customer"
+                city_str = f" ({p.customer_city})" if p.customer_city else ""
+                prod_str = f" — {p.product_context}" if p.product_context else f" — \"{p.customer_question[:40]}\""
+                lines.append(f"{idx}. {name_str}{city_str}{prod_str} [ID: {p.escalation_id}]")
+            lines.append("Customer ka naam, shehar ya ID batayein taake sahi bande ko deliver ho.")
+            return {
+                "status": "ambiguous",
+                "message": "\n".join(lines),
+            }
+        else:
+            esc = pending[0]
 
     # Format a warm, polite customer reply in Roman Urdu
     cust_name = esc.customer_name or "Customer"

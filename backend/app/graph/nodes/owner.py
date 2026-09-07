@@ -74,7 +74,7 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
     if pending_list:
         esc, clean_ans = escalation_service.find_target_escalation(t_uuid, raw_message)
         has_num = bool(re.search(r'\d+', raw_message))
-        is_reply = has_num or any(kw in raw_message.lower() for kw in ["batao", "bolo", "kaho", "bhej do", "share", "charges", "rate"])
+        is_reply = has_num or any(kw in raw_message.lower() for kw in ["batao", "bolo", "kaho", "bhej do", "share", "charges", "rate", "available", "yes", "haan", "nahi", "no", "ok", "theek"])
         if esc and is_reply:
             from app.services.catalog_tools import _tool_relay_to_customer
             relay_res = await _tool_relay_to_customer(str(t_uuid), {"escalation_id": esc.escalation_id, "reply_message": raw_message}, execution_context)
@@ -87,6 +87,21 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
                     "forward_to_customer": relay_res.get("customer_jid") or relay_res.get("customer_phone"),
                     "forward_message": relay_res.get("formatted_reply"),
                     "escalation_resolved_id": esc.escalation_id,
+                    "media_url": None,
+                    "media_urls": None,
+                    "owner_alert": None,
+                }
+        elif not esc and len(pending_list) > 1 and is_reply:
+            from app.services.catalog_tools import _tool_relay_to_customer
+            relay_res = await _tool_relay_to_customer(str(t_uuid), {"reply_message": raw_message}, execution_context)
+            if relay_res.get("status") == "ambiguous":
+                clarify_msg = relay_res.get("message")
+                return {
+                    **state,
+                    "reply_text": clarify_msg,
+                    "reply_chunks": [clarify_msg],
+                    "forward_to_customer": None,
+                    "forward_message": None,
                     "media_url": None,
                     "media_urls": None,
                     "owner_alert": None,

@@ -77,7 +77,7 @@ class EscalationService:
         self,
         reminder1_secs: float = 3600.0,
         reminder2_secs: float = 7200.0,
-        timeout_secs: float = 10800.0,
+        timeout_secs: float = 86400.0,  # 24 hours auto-expiration
     ):
         self.reminder1_secs = reminder1_secs
         self.reminder2_secs = reminder2_secs
@@ -136,10 +136,21 @@ class EscalationService:
 
     def get_pending_for_tenant(self, tenant_id: uuid.UUID) -> List[EscalationRecord]:
         _load_persisted_escalations()
-        return [
-            esc for esc in _global_escalations.values()
-            if esc.tenant_id == str(tenant_id) and esc.status == "PENDING"
-        ]
+        now = time.time()
+        active = []
+        changed = False
+        for esc in _global_escalations.values():
+            if esc.tenant_id == str(tenant_id) and esc.status == "PENDING":
+                # Stale check: auto-expire records older than 24 hours
+                if (now - esc.created_at) > self.timeout_secs:
+                    esc.status = "EXPIRED"
+                    changed = True
+                    logger.info("[EscalationService] Expired stale escalation %s (>24h old)", esc.escalation_id)
+                else:
+                    active.append(esc)
+        if changed:
+            _save_persisted_escalations()
+        return active
 
     def get_pending_escalations(self, tenant_id: uuid.UUID) -> List[EscalationRecord]:
         """Convenience alias for get_pending_for_tenant."""
@@ -154,13 +165,13 @@ class EscalationService:
         from app.db.repositories.tenant_repo import format_pakistani_phone_display
         lines = ["=== ACTIVE PENDING CUSTOMER INQUIRIES AWAITING YOUR DECISION ==="]
         for esc in pending:
-            phone_disp = format_pakistani_phone_display(esc.customer_phone)
+            phone_disp = format_pakistani_phone_display(esc.customer_phone) if esc.customer_phone else "Unknown"
             name_part = esc.customer_name or "Customer"
             city_part = f", City: {esc.customer_city}" if esc.customer_city else ""
             prod_part = f", Product: {esc.product_context}" if esc.product_context else ""
             lines.append(f"• [ID: {esc.escalation_id}] {name_part} ({phone_disp}{city_part}{prod_part})")
             lines.append(f"  Question: \"{esc.customer_question}\"")
-        lines.append("Instruction: If the owner gives an answer (e.g. '3500', '3500 delivery hogi', or 'unko bolo...'), call relay_to_customer with this escalation_id and the owner's answer!")
+        lines.append("Instruction: If you provide an answer for a customer, identify the customer by Name, City, or ID!")
         return "\n".join(lines)
 
     def find_target_escalation(
@@ -168,7 +179,9 @@ class EscalationService:
     ) -> Tuple[Optional[EscalationRecord], str]:
         """
         Intelligently resolves which pending customer inquiry the owner is addressing.
-        Matches by phone, city, customer name, product, or defaults to the latest active inquiry.
+        Matches by ID, phone, customer name, city, or product keyword.
+        Zero Blind Relays: If multiple inquiries are pending and NO target attribute matches,
+        returns (None, 'AMBIGUOUS') to prevent misrouting messages.
         """
         pending = self.get_pending_for_tenant(tenant_id)
         if not pending:
@@ -188,52 +201,52 @@ class EscalationService:
         else:
             m2 = re.search(r'^(.*?)(?:ko|k)\s+(?:delivery\s+charges\s+)?(?:bolo|batao|batado|kaho|keh do|bhej do)\s*$', raw, re.IGNORECASE)
             if m2:
-                # E.g. "hyderabad wale customer ko deliver charges 3500 batao" -> extract 3500 or key phrase
                 num_match = re.search(r'(\d+[\d,.]*)', raw)
                 if num_match:
                     clean_ans = f"Delivery charges Rs. {num_match.group(1)}"
 
-        # 1. Match by explicit Escalation ID if mentioned (e.g. "ESC-A1")
+        # 1. Match by explicit Escalation ID if mentioned (e.g. "ESC-A1" or "ESC-3F")
         for esc in pending:
             if esc.escalation_id.lower() in lower_raw:
                 return esc, clean_ans or raw
 
         # 2. Match by phone digits
         for esc in pending:
-            clean_digits = re.sub(r'[^\d]', '', esc.customer_phone)
+            clean_digits = re.sub(r'[^\d]', '', esc.customer_phone or "")
             short_phone = clean_digits[-7:] if len(clean_digits) >= 7 else clean_digits
-            if short_phone and short_phone in raw:
+            if short_phone and len(short_phone) >= 4 and short_phone in raw:
                 return esc, clean_ans or raw
 
-        # 3. Match by Customer Name if mentioned (e.g. "Asad", "Tariq")
+        # 3. Match by Customer Name if mentioned (e.g. "Ali", "Asad", "Tariq")
         for esc in pending:
             if esc.customer_name and len(esc.customer_name) >= 3:
                 for token in esc.customer_name.lower().split():
                     if len(token) >= 3 and token in lower_raw:
                         return esc, clean_ans or raw
 
-        # 4. Match by City if mentioned (e.g. "hyderabad", "karachi", "lahore")
+        # 4. Match by City if mentioned (e.g. "hyderabad", "karachi", "lahore", "quetta")
         for esc in pending:
             if esc.customer_city and len(esc.customer_city) >= 3 and esc.customer_city.lower() in lower_raw:
                 return esc, clean_ans or raw
-            # Also check question text for city name
             for word in ["hyderabad", "karachi", "lahore", "islamabad", "rawalpindi", "peshawar", "quetta", "multan", "faisalabad", "sialkot", "gujranwala"]:
                 if word in lower_raw and (word in esc.customer_question.lower() or (esc.customer_city and word in esc.customer_city.lower())):
                     return esc, clean_ans or raw
 
-        # 5. Match by Product name keywords (e.g. "glock", "beretta", "taurus")
+        # 5. Match by Product name keywords (e.g. "glock", "beretta", "taurus", "sig", "colt")
         for esc in pending:
             if esc.product_context:
                 for token in esc.product_context.lower().split():
                     if len(token) >= 4 and token in lower_raw:
                         return esc, clean_ans or raw
 
-        # 6. If only 1 pending escalation, match automatically to it!
+        # 6. If only 1 pending escalation exists, it safely matches that single inquiry
         if len(pending) == 1:
             return pending[0], clean_ans or raw.strip()
 
-        # 7. Otherwise return the latest pending inquiry
-        return pending[-1], clean_ans or raw.strip()
+        # 7. MULTIPLE INQUIRIES PENDING AND NO ATTRIBUTE MATCHED:
+        # Prevent blind fallback to pending[0] or pending[-1]!
+        # Return None, "AMBIGUOUS" to trigger owner clarification
+        return None, "AMBIGUOUS"
 
     def resolve_escalation(
         self, escalation_id: str, owner_answer: str

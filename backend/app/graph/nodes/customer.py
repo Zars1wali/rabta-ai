@@ -257,9 +257,8 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             address = msg
 
     clean_sender_digits = re.sub(r'[^\d]', '', phone)
-    has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
     effective_sim = sim if is_valid_pakistani_sim(sim) else (clean_sender_digits if is_valid_pakistani_sim(clean_sender_digits) else phone)
-    saved_sim = sim if is_valid_pakistani_sim(sim) else (clean_sender_digits if is_valid_pakistani_sim(clean_sender_digits) else None)
+    saved_sim = effective_sim
     has_name = is_valid_human_name(name)
 
     # ── WORKFLOW A: Payment & Bank Details Collection ─────────────────────────
@@ -291,22 +290,6 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 "customer_city": None,
                 "customer_address": address,
                 "customer_sim_phone": saved_sim,
-                "reply_text": reply,
-                "reply_chunks": [reply],
-                "owner_alert": None,
-            }
-
-        if not has_sim:
-            reply = f"Jee {name}, apna WhatsApp SIM contact number share kar dein taake official order slip aur payment verification book ho sake."
-            return {
-                **state,
-                "customer_state": "COLLECTING_INFO",
-                "info_collection_step": "payment_details",
-                "escalation_type": "payment",
-                "customer_name": name,
-                "customer_city": city,
-                "customer_address": address,
-                "customer_sim_phone": None,
                 "reply_text": reply,
                 "reply_chunks": [reply],
                 "owner_alert": None,
@@ -394,23 +377,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 "owner_alert": None,
             }
 
-        if not has_sim:
-            reply = f"Jee {name} bhai, apna WhatsApp SIM contact number share kar dein taake shop record verify ho sake."
-            return {
-                **state,
-                "customer_state": "COLLECTING_INFO",
-                "info_collection_step": "inquiry_details",
-                "escalation_type": esc_type or "inquiry",
-                "customer_name": name,
-                "customer_city": city,
-                "customer_address": address,
-                "customer_sim_phone": None,
-                "reply_text": reply,
-                "reply_chunks": [reply],
-                "owner_alert": None,
-            }
-
-        # Both Name and SIM are now present!
+        # Name is present; WhatsApp phone is auto-detected!
         q_text = state.get("pending_owner_query") or state.get("raw_message") or "Customer inquiry"
         inq_type = esc_type or "inquiry"
         t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
@@ -452,10 +419,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
 
     # ── WORKFLOW B: Delivery Address Collection ───────────────────────────────
     if not has_name:
-        if not has_sim:
-            reply = "Delivery bilkul ho sakti hai. Kindly apna Naam aur WhatsApp SIM contact number share kar dein taake shop record ban sake."
-        else:
-            reply = "Delivery bilkul ho sakti hai. Aapka shubh naam kya hai?"
+        reply = "Delivery bilkul ho sakti hai. Aapka naam kya hai?"
         return {
             **state,
             "customer_state": "COLLECTING_INFO",
@@ -481,22 +445,6 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             "customer_city": None,
             "customer_address": address,
             "customer_sim_phone": saved_sim,
-            "reply_text": reply,
-            "reply_chunks": [reply],
-            "owner_alert": None,
-        }
-
-    if not has_sim:
-        reply = f"Jee {name} bhai, apna WhatsApp SIM contact number share kar dein taake delivery verification aur booking confirm ho sake."
-        return {
-            **state,
-            "customer_state": "COLLECTING_INFO",
-            "info_collection_step": "sim",
-            "escalation_type": "delivery",
-            "customer_name": name,
-            "customer_city": city,
-            "customer_address": address,
-            "customer_sim_phone": None,
             "reply_text": reply,
             "reply_chunks": [reply],
             "owner_alert": None,

@@ -25,7 +25,6 @@ def test_customer_tools_declarations_registered():
         "escalate_custom_inquiry",
         "escalate_silent_emergency",
         "escalate_bulk_lead",
-        "query_owner_for_missing_info",
     }
     assert expected.issubset(customer_names), f"Missing tools: {expected - customer_names}"
 
