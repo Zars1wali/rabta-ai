@@ -74,14 +74,17 @@ def export_excel_to_csv() -> List[Dict[str, Any]]:
         })
 
     # Also save as CSV for fast reference and syncing
-    with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            "name", "category", "brand", "origin", "caliber", "capacity", "action", "price", "description"
-        ])
-        writer.writeheader()
-        writer.writerows(products)
+    try:
+        with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "name", "category", "brand", "origin", "caliber", "capacity", "action", "price", "description"
+            ])
+            writer.writeheader()
+            writer.writerows(products)
+        print(f"Exported {len(products)} firearms to {CSV_PATH}")
+    except Exception as e:
+        print(f"Notice: Could not write CSV to {CSV_PATH} ({e}), continuing with DB sync...")
 
-    print(f"Exported {len(products)} firearms to {CSV_PATH}")
     return products
 
 
