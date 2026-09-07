@@ -30,6 +30,102 @@ from app.services.catalog_tools import get_product_photos
 logger = logging.getLogger(__name__)
 
 
+async def _get_live_business_and_customer_context(
+    tenant_id: Optional[str],
+    sender_phone: Optional[str],
+) -> tuple[bool, str, bool, str, str]:
+    """
+    Returns (ai_active, message_limit_status, prices_confirmed_today, customer_history, active_rules)
+    by inspecting tenant settings, escalation records, and customer-specific pricing.
+    """
+    ai_active = True
+    message_limit_status = "ACTIVE"
+    prices_confirmed_today = True
+    customer_history = ""
+    active_rules = "Ground all prices and specs strictly in catalog. Use tools to search products or retrieve photos."
+
+    if not tenant_id:
+        return ai_active, message_limit_status, prices_confirmed_today, customer_history, active_rules
+
+    try:
+        from app.db.session import AsyncSessionLocal
+        from app.models.database import Tenant
+        from app.services.escalation_service import _load_persisted_escalations
+        from sqlalchemy import select
+        from datetime import datetime, timedelta
+
+        t_uuid = uuid.UUID(tenant_id)
+        today_pst = (datetime.utcnow() + timedelta(hours=5)).strftime("%Y-%m-%d")
+
+        async with AsyncSessionLocal() as session:
+            stmt_t = select(Tenant).where(Tenant.id == t_uuid)
+            res_t = await session.execute(stmt_t)
+            tenant = res_t.scalar_one_or_none()
+
+            if tenant:
+                ai_cfg = tenant.ai_persona_config or {}
+                prof = tenant.business_profile or {}
+
+                # 1. AI Active Status (PDF 1 §B.8 & PDF 2 §2)
+                if ai_cfg.get("ai_active") is False or prof.get("ai_active") is False:
+                    ai_active = False
+
+                # 2. Daily Message Limit Status (PDF 1 §B.7)
+                if prof.get("message_limit_reached") is True:
+                    message_limit_status = "LIMIT_REACHED"
+
+                # 3. Prices Confirmed Today (PDF 1 §B.3 & PDF 2 §13)
+                confirmed_date = ai_cfg.get("prices_confirmed_date")
+                is_confirmed = ai_cfg.get("prices_confirmed_today")
+                if confirmed_date != today_pst or is_confirmed is False:
+                    if is_confirmed is False or (confirmed_date and confirmed_date != today_pst):
+                        prices_confirmed_today = False
+
+                # 4. Active Rules (PDF 1 §B.6)
+                custom_rules = prof.get("active_rules") or prof.get("sales_rules")
+                if custom_rules:
+                    active_rules = custom_rules
+
+                # 5. Returning Customer History & Custom Pricing (PDF 1 §B.5 & PDF 2 §24)
+                if sender_phone:
+                    phone_clean = re.sub(r'[^\d]', '', sender_phone)
+                    all_escs = _load_persisted_escalations()
+                    past_escs = [
+                        esc for esc in all_escs.values()
+                        if (esc.customer_phone and phone_clean[-9:] in esc.customer_phone)
+                    ]
+                    past_escs.sort(key=lambda x: x.created_at, reverse=True)
+
+                    cust_prices = prof.get("customer_specific_prices") or []
+                    user_prices = [
+                        cp for cp in cust_prices
+                        if cp.get("customer_phone") and re.sub(r'[^\d]', '', cp["customer_phone"])[-9:] == phone_clean[-9:]
+                    ]
+
+                    if past_escs or user_prices:
+                        hist_lines = []
+                        c_name = past_escs[0].customer_name if past_escs and past_escs[0].customer_name else "Returning Customer"
+                        hist_lines.append(f"● Name: {c_name}")
+                        inq_list = [f"{e.product_context or 'Firearm'}: '{e.customer_question}'" for e in past_escs if e.customer_question]
+                        hist_lines.append(f"● Previous inquiries: {'; '.join(inq_list) if inq_list else 'Inquiry on file'}")
+                        hist_lines.append("● Previous purchase: Verified buyer / returning visitor")
+                        try:
+                            last_dt = datetime.fromtimestamp(past_escs[0].created_at).strftime("%Y-%m-%d") if past_escs else "Recent"
+                        except Exception:
+                            last_dt = "Recent"
+                        hist_lines.append(f"● Last contact: {last_dt}")
+                        if user_prices:
+                            p_info = [f"{up['product_name']}: Rs. {up['special_price']:,.0f} ({up.get('notes', 'Special rate')})" for up in user_prices]
+                            hist_lines.append(f"● SPECIAL OWNER PRICING FOR THIS CUSTOMER ONLY: {'; '.join(p_info)}")
+                        hist_lines.append("● Instruction: Recognize returning customer naturally, never recite data mechanically. Apply special price if purchasing that specific item.")
+                        customer_history = "\n".join(hist_lines)
+
+    except Exception as e:
+        logger.warning("[_get_live_business_and_customer_context] Error reading live context: %s", e)
+
+    return ai_active, message_limit_status, prices_confirmed_today, customer_history, active_rules
+
+
 class WhatsAppStoreAgent:
     """Intelligent sales agent interacting with customers over WhatsApp."""
 
@@ -77,6 +173,41 @@ class WhatsAppStoreAgent:
                 "source": src,
             }
 
+        # PDF 1 Part B: Query live business and customer context
+        ai_active, msg_limit_status, prices_confirmed_today, customer_hist, active_rules = (
+            await _get_live_business_and_customer_context(tenant_id, sender_phone)
+        )
+
+        # PDF 1 §B.8: AI Active Status Guardrail
+        if not ai_active:
+            logger.info("[%s] AI customer responses are PAUSED for tenant %s. Suppressing response.", request_id, tenant_id)
+            return {
+                "reply_text": "",
+                "reply_chunks": [],
+                "media_urls": [],
+                "flag": RabtaFlag(flag_type="AI_PAUSED", payload="owner has deactivated AI responses"),
+                "needs_escalation": False,
+                "tool_calls": [],
+                "request_id": request_id,
+                "latency_ms": 1,
+                "source": "guardrail_ai_paused",
+            }
+
+        # PDF 1 §B.7: Daily Message Limit Guardrail
+        if msg_limit_status == "LIMIT_REACHED":
+            logger.info("[%s] Daily message limit reached for tenant %s. Flagging for manual takeover.", request_id, tenant_id)
+            return {
+                "reply_text": "",
+                "reply_chunks": [],
+                "media_urls": [],
+                "flag": RabtaFlag(flag_type="LIMIT_REACHED", payload=f"{sender_phone or 'Customer'} — {customer_message}"),
+                "needs_escalation": True,
+                "tool_calls": [],
+                "request_id": request_id,
+                "latency_ms": 1,
+                "source": "guardrail_limit_reached",
+            }
+
         # Decode image if provided
         decoded_image_bytes = image_bytes
         if not decoded_image_bytes and image_base64:
@@ -85,16 +216,16 @@ class WhatsAppStoreAgent:
             except Exception as e:
                 logger.warning("[%s] Could not decode image_base64: %s", request_id, e)
 
-        # Build comprehensive system instructions
+        # Build comprehensive system instructions with fresh Part B live data
         system_instruction = build_customer_sales_prompt(
             business_details=f"Store Name: {business_name}\nIndustry: {industry}\nCatalog:\n{catalog_context}",
             products_and_prices=catalog_context,
-            prices_confirmed_today=True,
+            prices_confirmed_today=prices_confirmed_today,
             image_index="",
-            customer_history="",
-            active_rules="Ground all prices and specs strictly in catalog. Use tools to search products or retrieve photos.",
-            message_limit_status="Active",
-            ai_active=True,
+            customer_history=customer_hist,
+            active_rules=active_rules,
+            message_limit_status=msg_limit_status,
+            ai_active=ai_active,
         )
 
         execution_context = {

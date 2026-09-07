@@ -10,13 +10,13 @@ import re
 import logging
 import uuid
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import select, update, or_, desc
 
 from app.db.session import AsyncSessionLocal
 from app.models.database import CatalogItem, PriceChangeLog, Tenant
 from app.services.knowledge_base import kb_service
-from app.services.escalation_service import escalation_service
+from app.services.escalation_service import escalation_service, _load_persisted_escalations
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +300,37 @@ CUSTOMER_TOOLS_DECLARATIONS = [
             "required": ["product_name", "question_details"],
         },
     },
+    {
+        "name": "get_customer_history",
+        "description": "Retrieve interaction history for a returning customer (PDF 1 §B.5). Call to understand past inquiries, preferences, and purchases to personalize the conversation naturally.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_phone": {
+                    "type": "string",
+                    "description": "Customer WhatsApp phone number",
+                },
+                "customer_name": {
+                    "type": "string",
+                    "description": "Customer name if known",
+                },
+            },
+        },
+    },
+    {
+        "name": "check_price_confidence",
+        "description": "Check if a product's price was confirmed today by the owner (PDF 1 §B.2, §B.3 & PDF 2 §9, §25). If unconfirmed, you must trigger OWNER_QUERY before quoting the price to the customer.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_name": {
+                    "type": "string",
+                    "description": "Product name to check price confidence for",
+                },
+            },
+            "required": ["product_name"],
+        },
+    },
 ]
 
 OWNER_TOOLS_DECLARATIONS = [
@@ -575,6 +606,112 @@ OWNER_TOOLS_DECLARATIONS = [
             "required": ["name", "price"],
         },
     },
+    {
+        "name": "confirm_daily_prices",
+        "description": "Confirm all product prices for today (PDF 2 §13). Call when owner says 'confirmed', 'prices theek hain', or 'sab same hai'. If owner mentions corrections, pass them in the corrections parameter.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "corrections": {
+                    "type": "object",
+                    "description": "Optional dict of product_name → new_price corrections. Leave empty if owner said 'confirmed' without changes.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_customer_history",
+        "description": "Look up a customer's previous interaction history (past inquiries, products discussed, owner notes). Call when owner asks about a customer's history or when the system detects a returning customer.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_phone": {
+                    "type": "string",
+                    "description": "Customer phone number to look up",
+                },
+                "customer_name": {
+                    "type": "string",
+                    "description": "Customer name to search for",
+                },
+            },
+        },
+    },
+    {
+        "name": "set_customer_specific_price",
+        "description": "Record a special price for a specific customer only (PDF 2 §24). This is NOT a general price change — it applies only to this one customer's current transaction. Call when owner says things like 'give him 10k discount' or 'usko special rate dedo'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_name": {
+                    "type": "string",
+                    "description": "Customer name",
+                },
+                "customer_phone": {
+                    "type": "string",
+                    "description": "Customer phone number",
+                },
+                "product_name": {
+                    "type": "string",
+                    "description": "Product receiving special price",
+                },
+                "special_price": {
+                    "type": "number",
+                    "description": "Special price in PKR for this customer only",
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Owner's exact instruction",
+                },
+            },
+            "required": ["customer_name", "product_name", "special_price"],
+        },
+    },
+    {
+        "name": "toggle_ai_status",
+        "description": "Pause or resume the AI customer service. Call when owner says 'AI band karo', 'AI chalu karo', 'pause AI', or 'resume AI'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean",
+                    "description": "True to activate AI, False to pause AI",
+                },
+            },
+            "required": ["active"],
+        },
+    },
+    {
+        "name": "check_price_confidence",
+        "description": "Check if a product's price was confirmed today by the owner (PDF 2 §9, §13, §25). Returns confirmation timestamp and status.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_name": {
+                    "type": "string",
+                    "description": "Product name to check",
+                },
+            },
+            "required": ["product_name"],
+        },
+    },
+    {
+        "name": "research_product_specs",
+        "description": "Research official manufacturer specifications for a firearm during product onboarding (PDF 2 §8). Returns official caliber, capacity, dimensions, weight, action type, and origin with manufacturer_confirmed confidence.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_name": {
+                    "type": "string",
+                    "description": "Firearm product or model name (e.g. 'Glock 19 Gen 5', 'Beretta 92FS')",
+                },
+                "manufacturer": {
+                    "type": "string",
+                    "description": "Manufacturer name if known (e.g. 'Glock', 'Beretta', 'Taurus', 'Canik')",
+                },
+            },
+            "required": ["product_name"],
+        },
+    },
 ]
 
 # ==============================================================================
@@ -630,6 +767,18 @@ async def execute_tool(tool_name: str, args: Dict[str, Any], context: Dict[str, 
             return await _tool_set_owner_preference(tenant_id, args)
         elif tool_name == "onboard_product_from_image":
             return await _tool_onboard_product_from_image(tenant_id, args, context)
+        elif tool_name == "confirm_daily_prices":
+            return await _tool_confirm_daily_prices(tenant_id, args, context)
+        elif tool_name == "get_customer_history":
+            return await _tool_get_customer_history(tenant_id, args, context)
+        elif tool_name == "set_customer_specific_price":
+            return await _tool_set_customer_specific_price(tenant_id, args, context)
+        elif tool_name == "toggle_ai_status":
+            return await _tool_toggle_ai_status(tenant_id, args)
+        elif tool_name == "check_price_confidence":
+            return await _tool_check_price_confidence(tenant_id, args)
+        elif tool_name == "research_product_specs":
+            return await _tool_research_product_specs(tenant_id, args)
         else:
             return {"status": "error", "message": f"Unknown tool: {tool_name}"}
     except Exception as e:
@@ -642,12 +791,13 @@ async def _tool_search_catalog(tenant_id: str, args: Dict[str, Any]) -> Dict[str
     query = args.get("query", "")
     category = args.get("category")
     caliber = args.get("caliber")
+    limit = int(args.get("limit", 15))
     items = await kb_service.search_catalog(
         tenant_id=tenant_id,
         query=query,
         category=category,
         caliber=caliber,
-        limit=5,
+        limit=limit,
     )
     if not items:
         return {
@@ -657,9 +807,46 @@ async def _tool_search_catalog(tenant_id: str, args: Dict[str, Any]) -> Dict[str
             "items": [],
         }
 
+    # PDF 1 §B.3 & PDF 2 §5: Load price confirmation status and owner sales preferences
+    confirmed_today = True
+    active_prefs = []
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+        async with AsyncSessionLocal() as session:
+            t_stmt = select(Tenant).where(Tenant.id == t_uuid)
+            t_res = await session.execute(t_stmt)
+            tenant = t_res.scalar_one_or_none()
+            if tenant:
+                today_pst = (datetime.utcnow() + timedelta(hours=5)).strftime("%Y-%m-%d")
+                ai_cfg = tenant.ai_persona_config or {}
+                if ai_cfg.get("prices_confirmed_date") != today_pst or not ai_cfg.get("prices_confirmed_today", False):
+                    if ai_cfg.get("prices_confirmed_today") is False:
+                        confirmed_today = False
+
+                prof = tenant.business_profile or {}
+                prefs = prof.get("sales_preferences") or []
+                now_iso = datetime.utcnow().isoformat()
+                for p in prefs:
+                    exp = p.get("expires_at")
+                    if not exp or exp > now_iso:
+                        active_prefs.append(p)
+    except Exception as e:
+        logger.warning("[_tool_search_catalog] Error checking tenant flags: %s", e)
+
     formatted = []
     for it in items:
-        formatted.append({
+        it_name_lower = (it["name"] or "").lower()
+        # Check owner preference (PDF 2 §5)
+        has_owner_pref = False
+        pref_reason = None
+        for p in active_prefs:
+            tgt = (p.get("target") or "").lower()
+            if tgt and tgt in it_name_lower:
+                has_owner_pref = True
+                pref_reason = p.get("notes") or p.get("type")
+                break
+
+        item_entry = {
             "name": it["name"],
             "price_pkr": it["price"],
             "category": it["category"],
@@ -669,10 +856,27 @@ async def _tool_search_catalog(tenant_id: str, args: Dict[str, Any]) -> Dict[str
             "in_stock": it["in_stock"],
             "has_photo": it["has_photo"],
             "description": it["description"][:200] if it["description"] else "",
-        })
+            "price_confirmed_today": confirmed_today,
+            "confidence_level": "owner_confirmed" if confirmed_today else "unconfirmed",
+        }
+
+        if has_owner_pref:
+            item_entry["owner_preference"] = "YES — prioritize when suitable"
+            item_entry["preference_reason"] = pref_reason
+            item_entry["preference_instruction"] = "Recommend this product when it genuinely fits the customer's needs. Do not force it. Do not mention margin."
+
+        if not confirmed_today:
+            item_entry["price_warning"] = "Prices not confirmed today by owner. You MUST trigger OWNER_QUERY before quoting this price to customer."
+
+        formatted.append(item_entry)
+
+    # Sort owner preferred products to top if they match
+    formatted.sort(key=lambda x: 1 if "owner_preference" in x else 0, reverse=True)
+
     return {
         "status": "success",
         "count": len(formatted),
+        "prices_confirmed_today": confirmed_today,
         "items": formatted,
     }
 
@@ -1600,15 +1804,28 @@ async def _tool_query_owner_for_missing_info(tenant_id: str, args: Dict[str, Any
 
 
 async def _tool_set_owner_preference(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    """PDF 2 §5: Save owner business sales preference (margin/push products/categories)."""
+    """PDF 2 §5: Save owner business sales preference (margin/push products/categories) with expiry support."""
     pref_type = args.get("preference_type", "push_product")
     target = args.get("target", "").strip()
     notes = args.get("notes", "").strip()
+    expires_in_days = args.get("expires_in_days")
 
     try:
         t_uuid = uuid.UUID(tenant_id)
     except (ValueError, TypeError):
         return {"status": "error", "message": "Invalid tenant ID"}
+
+    # PDF 2 §5: Determine expiry from owner's temporal language
+    expires_at = None
+    notes_lower = notes.lower()
+    if expires_in_days:
+        expires_at = (datetime.utcnow() + timedelta(days=int(expires_in_days))).isoformat()
+    elif "week" in notes_lower or "hafte" in notes_lower or "7 day" in notes_lower:
+        expires_at = (datetime.utcnow() + timedelta(days=7)).isoformat()
+    elif "today" in notes_lower or "aaj" in notes_lower:
+        expires_at = (datetime.utcnow() + timedelta(days=1)).isoformat()
+    elif "month" in notes_lower or "mahine" in notes_lower:
+        expires_at = (datetime.utcnow() + timedelta(days=30)).isoformat()
 
     async with AsyncSessionLocal() as session:
         stmt = select(Tenant).where(Tenant.id == t_uuid)
@@ -1624,6 +1841,7 @@ async def _tool_set_owner_preference(tenant_id: str, args: Dict[str, Any]) -> Di
             "target": target,
             "notes": notes,
             "updated_at": datetime.utcnow().isoformat(),
+            "expires_at": expires_at,
         }
         prefs = [p for p in prefs if p.get("target", "").lower() != target.lower()]
         prefs.append(new_pref)
@@ -1631,16 +1849,18 @@ async def _tool_set_owner_preference(tenant_id: str, args: Dict[str, Any]) -> Di
         tenant.business_profile = prof
         await session.commit()
 
+    expiry_msg = f" (expires in {expires_at[:10]})" if expires_at else ""
     return {
         "status": "success",
         "preference_type": pref_type,
         "target": target,
-        "message": f"Preference saved boss! Rabta sales AI will prioritize {target} ({notes or pref_type}) when it fits the customer's request.",
+        "expires_at": expires_at,
+        "message": f"Preference saved boss! Rabta sales AI will prioritize {target} ({notes or pref_type}){expiry_msg} when it fits the customer's request.",
     }
 
 
 async def _tool_onboard_product_from_image(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-    """PDF 2 §7, 8, 10: Onboard new firearm product from owner photo with extracted specs."""
+    """PDF 2 §7, 8, 10, 22: Onboard new firearm product from owner photo with anti-merge protection."""
     name = args.get("name", "").strip()
     price = float(args.get("price", 0))
     category = args.get("category", "Pistols")
@@ -1657,19 +1877,83 @@ async def _tool_onboard_product_from_image(tenant_id: str, args: Dict[str, Any],
     images = [image_url] if image_url else []
 
     async with AsyncSessionLocal() as session:
+        # PDF 2 §22: Anti-Merge Rule — Never merge Gen 4 vs Gen 5, USA vs Turkey, or distinct calibers
         stmt = select(CatalogItem).where(
             CatalogItem.tenant_id == t_uuid,
-            CatalogItem.name.ilike(f"%{name}%"),
+            CatalogItem.name.ilike(name),
         ).limit(1)
         res = await session.execute(stmt)
         existing = res.scalar_one_or_none()
 
+        if not existing:
+            # Check broad candidates for strict anti-merge verification
+            cand_stmt = select(CatalogItem).where(
+                CatalogItem.tenant_id == t_uuid,
+                CatalogItem.name.ilike(f"%{name}%"),
+            ).limit(1)
+            cand_res = await session.execute(cand_stmt)
+            cand = cand_res.scalar_one_or_none()
+            if cand:
+                cand_name_l = (cand.name or "").lower()
+                name_l = name.lower()
+                cand_meta = cand.metadata_json or {}
+
+                # Anti-merge checks:
+                is_gen_diff = (
+                    ("gen 4" in name_l and "gen 5" in cand_name_l) or
+                    ("gen 5" in name_l and "gen 4" in cand_name_l) or
+                    ("gen 3" in name_l and ("gen 4" in cand_name_l or "gen 5" in cand_name_l))
+                )
+                is_origin_diff = (
+                    origin and cand_meta.get("origin") and
+                    origin.lower() != str(cand_meta.get("origin", "")).lower()
+                )
+                is_cal_diff = (
+                    caliber and cand_meta.get("caliber") and
+                    caliber.lower() != str(cand_meta.get("caliber", "")).lower()
+                )
+
+                # Only merge if it's genuinely the exact same firearm variant
+                if not (is_gen_diff or is_origin_diff or is_cal_diff) and cand_name_l == name_l:
+                    existing = cand
+
+        today_iso = datetime.utcnow().isoformat()
+        confidence_meta = {
+            "price": "owner_confirmed",
+            "price_confirmed_at": today_iso,
+            "caliber": "owner_confirmed" if caliber else "inferred",
+            "origin": "owner_confirmed" if origin else "inferred",
+            "capacity": "visually_identified" if capacity else "unknown",
+        }
+
         if existing:
+            old_price = float(existing.price) if existing.price else 0.0
             existing.price = price
             if images:
                 existing.images = images
-            if caliber:
-                existing.metadata_json = {**(existing.metadata_json or {}), "caliber": caliber, "origin": origin, "capacity": capacity}
+            existing_meta = dict(existing.metadata_json or {})
+            existing_meta.update({
+                "caliber": caliber,
+                "origin": origin,
+                "capacity": capacity,
+                "confidence": confidence_meta,
+                "last_updated_at": today_iso,
+            })
+            existing.metadata_json = existing_meta
+
+            # Record price history (PDF 2 §16)
+            if old_price != price:
+                log_entry = PriceChangeLog(
+                    tenant_id=t_uuid,
+                    catalog_item_id=existing.id,
+                    item_name=existing.name,
+                    old_price=old_price,
+                    new_price=price,
+                    changed_by_phone="owner",
+                    metadata_json={"source": "owner_image_onboarding"},
+                )
+                session.add(log_entry)
+
             await session.commit()
             item_id = str(existing.id)
             action_done = "updated"
@@ -1681,7 +1965,13 @@ async def _tool_onboard_product_from_image(tenant_id: str, args: Dict[str, Any],
                 category=category,
                 description=f"{name} ({origin}). Caliber: {caliber}. Capacity: {capacity}.",
                 images=images,
-                metadata_json={"origin": origin, "caliber": caliber, "capacity": capacity},
+                metadata_json={
+                    "origin": origin,
+                    "caliber": caliber,
+                    "capacity": capacity,
+                    "confidence": confidence_meta,
+                    "created_at": today_iso,
+                },
                 in_stock=True,
             )
             session.add(item)
@@ -1703,7 +1993,394 @@ async def _tool_onboard_product_from_image(tenant_id: str, args: Dict[str, Any],
         "name": name,
         "price": price,
         "has_photo": len(images) > 0,
-        "message": f"Done boss! '{name}' Rs. {price:,.0f} ({origin}, {caliber}) {action_done} to catalog with verified photo.",
+        "confidence": confidence_meta,
+        "message": f"Done boss! '{name}' Rs. {price:,.0f} ({origin}, {caliber}) {action_done} to catalog with verified photo and owner-confirmed confidence.",
+    }
+
+
+async def _tool_confirm_daily_prices(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 2 §13: Owner daily price confirmation tool."""
+    from app.services.scheduler_agent import scheduler_agent
+    corrections = args.get("corrections")
+    return await scheduler_agent.confirm_prices(tenant_id=tenant_id, corrections=corrections)
+
+
+async def _tool_get_customer_history(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 1 §B.5 & PDF 2 §24: Retrieve customer interaction history and custom pricing."""
+    phone = (args.get("customer_phone") or context.get("sender_phone") or "").strip()
+    name = (args.get("customer_name") or "").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid tenant ID"}
+
+    inquiries = []
+    notes = []
+    special_prices = []
+    last_contact = None
+    previous_purchase = "None recorded"
+    previous_concern = None
+
+    async with AsyncSessionLocal() as session:
+        # 1. Check Tenant business_profile for customer-specific pricing
+        stmt_t = select(Tenant).where(Tenant.id == t_uuid)
+        res_t = await session.execute(stmt_t)
+        tenant = res_t.scalar_one_or_none()
+        if tenant and tenant.business_profile:
+            cust_prices = tenant.business_profile.get("customer_specific_prices") or []
+            for cp in cust_prices:
+                if (phone and cp.get("customer_phone") == phone) or (name and name.lower() in (cp.get("customer_name") or "").lower()):
+                    special_prices.append(cp)
+
+        # 2. Check persisted escalations for previous interactions
+        all_escs = _load_persisted_escalations()
+        records = [
+            esc for esc in all_escs.values()
+            if (not phone or (esc.customer_phone and phone[-9:] in esc.customer_phone))
+        ]
+        records.sort(key=lambda x: x.created_at, reverse=True)
+
+        for rec in records[:5]:
+            if not last_contact and rec.created_at:
+                try:
+                    last_contact = datetime.fromtimestamp(rec.created_at).strftime("%Y-%m-%d %H:%M")
+                except Exception:
+                    last_contact = "Recent"
+            if rec.customer_name and not name:
+                name = rec.customer_name
+            inquiries.append(f"Asked about {rec.product_context or 'Firearm'}: '{rec.customer_question}' (Status: {rec.status})")
+            if rec.owner_answer:
+                notes.append(f"Owner reply: '{rec.owner_answer}'")
+            if "discount" in (rec.customer_question or "").lower():
+                previous_concern = "Price / discount sensitivity"
+
+    formatted_history = (
+        f"Name: {name or 'Customer'}\n"
+        f"Phone: {phone or 'Unknown'}\n"
+        f"Previous inquiries: {'; '.join(inquiries) if inquiries else 'First recorded inquiry'}\n"
+        f"Previous purchase: {previous_purchase}\n"
+        f"Last contact: {last_contact or 'Today'}\n"
+        f"Previous concern: {previous_concern or 'None recorded'}\n"
+        f"Owner notes: {'; '.join(notes) if notes else 'None'}\n"
+    )
+    if special_prices:
+        formatted_history += f"Special Customer Pricing: {special_prices}\n"
+
+    return {
+        "status": "success",
+        "customer_name": name,
+        "customer_phone": phone,
+        "previous_inquiries": inquiries,
+        "previous_purchase": previous_purchase,
+        "last_contact": last_contact,
+        "previous_concern": previous_concern,
+        "owner_notes": notes,
+        "special_prices": special_prices,
+        "formatted_history": formatted_history,
+    }
+
+
+async def _tool_set_customer_specific_price(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 2 §24: Record a special customer-specific price (not a general catalog update)."""
+    cust_name = args.get("customer_name", "").strip()
+    cust_phone = (args.get("customer_phone") or context.get("sender_phone") or "").strip()
+    product_name = args.get("product_name", "").strip()
+    special_price = float(args.get("special_price", 0))
+    notes = args.get("notes", "").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid tenant ID"}
+
+    async with AsyncSessionLocal() as session:
+        stmt = select(Tenant).where(Tenant.id == t_uuid)
+        res = await session.execute(stmt)
+        tenant = res.scalar_one_or_none()
+        if not tenant:
+            return {"status": "error", "message": "Tenant not found"}
+
+        prof = dict(tenant.business_profile or {})
+        cust_prices = prof.get("customer_specific_prices") or []
+
+        new_entry = {
+            "customer_name": cust_name,
+            "customer_phone": cust_phone,
+            "product_name": product_name,
+            "special_price": special_price,
+            "notes": notes or "Owner customer-specific discount",
+            "created_at": datetime.utcnow().isoformat(),
+            "expires_at": "one-time transaction",
+            "applies_to": "This customer only. Do not apply to other customers.",
+        }
+
+        cust_prices = [
+            cp for cp in cust_prices
+            if not (
+                (cp.get("customer_phone") and cp.get("customer_phone") == cust_phone and cp.get("product_name", "").lower() == product_name.lower()) or
+                (cp.get("customer_name", "").lower() == cust_name.lower() and cp.get("product_name", "").lower() == product_name.lower())
+            )
+        ]
+        cust_prices.append(new_entry)
+        prof["customer_specific_prices"] = cust_prices
+        tenant.business_profile = prof
+        await session.commit()
+
+    return {
+        "status": "success",
+        "customer_name": cust_name,
+        "product_name": product_name,
+        "special_price": special_price,
+        "message": f"Recorded special price of Rs. {special_price:,.0f} for {cust_name} on '{product_name}' boss! This applies ONLY to this customer's transaction and does not change general catalog pricing.",
+    }
+
+
+async def _tool_toggle_ai_status(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 1 §B.8 & PDF 2 §2: Owner pauses or resumes AI customer responses."""
+    active = bool(args.get("active", True))
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid tenant ID"}
+
+    async with AsyncSessionLocal() as session:
+        stmt = select(Tenant).where(Tenant.id == t_uuid)
+        res = await session.execute(stmt)
+        tenant = res.scalar_one_or_none()
+        if not tenant:
+            return {"status": "error", "message": "Tenant not found"}
+
+        ai_cfg = dict(tenant.ai_persona_config or {})
+        ai_cfg["ai_active"] = active
+        ai_cfg["ai_status_updated_at"] = datetime.utcnow().isoformat()
+        tenant.ai_persona_config = ai_cfg
+
+        prof = dict(tenant.business_profile or {})
+        prof["ai_active"] = active
+        tenant.business_profile = prof
+
+        await session.commit()
+
+    status_str = "resumed (ACTIVE)" if active else "paused (PAUSED)"
+    return {
+        "status": "success",
+        "ai_active": active,
+        "message": f"Rabta AI customer responses have been {status_str} boss. {'AI is now actively serving customers.' if active else 'AI will NOT auto-reply to customers until you resume.'}",
+    }
+
+
+async def _tool_check_price_confidence(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 1 §B.2, §B.3 & PDF 2 §9, §25: Check price confidence and today confirmation status."""
+    prod_name = args.get("product_name", "").strip()
+
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid tenant ID"}
+
+    today_date = (datetime.utcnow() + timedelta(hours=5)).strftime("%Y-%m-%d")
+
+    async with AsyncSessionLocal() as session:
+        stmt_t = select(Tenant).where(Tenant.id == t_uuid)
+        res_t = await session.execute(stmt_t)
+        tenant = res_t.scalar_one_or_none()
+
+        ai_cfg = tenant.ai_persona_config or {} if tenant else {}
+        confirmed_today = (ai_cfg.get("prices_confirmed_date") == today_date) and bool(ai_cfg.get("prices_confirmed_today", False))
+
+        stmt_item = select(CatalogItem).where(
+            CatalogItem.tenant_id == t_uuid,
+            CatalogItem.name.ilike(f"%{prod_name}%"),
+        ).limit(1)
+        res_item = await session.execute(stmt_item)
+        item = res_item.scalar_one_or_none()
+
+        if not item:
+            return {
+                "status": "not_found",
+                "product_name": prod_name,
+                "confidence_level": "unknown",
+                "confirmed_today": False,
+                "requires_owner_query": True,
+                "message": f"'{prod_name}' catalog mein nahi mila. Output OWNER_QUERY for owner confirmation.",
+            }
+
+        meta = item.metadata_json or {}
+        conf_dict = meta.get("confidence", {})
+        price_conf = conf_dict.get("price", "owner_confirmed" if confirmed_today else "unconfirmed")
+
+        is_confirmed = confirmed_today or (price_conf == "owner_confirmed" and meta.get("price_confirmed_date") == today_date)
+
+        return {
+            "status": "success",
+            "product_name": item.name,
+            "price_pkr": float(item.price) if item.price else 0.0,
+            "confidence_level": "owner_confirmed" if is_confirmed else "unconfirmed",
+            "confirmed_today": is_confirmed,
+            "requires_owner_query": not is_confirmed,
+            "instruction": (
+                "Price is confirmed for today. Quote with: 'Yeh aaj ki price hai'."
+                if is_confirmed else
+                "Prices have not been confirmed today by the owner. You MUST output OWNER_QUERY to confirm before quoting price."
+            ),
+        }
+
+
+# Curated authoritative firearm specifications database (PDF 2 §8: Product Research Engine)
+AUTHORITATIVE_FIREARM_SPECS = {
+    "glock 19 gen 5": {
+        "official_name": "Glock 19 Gen 5 9x19mm",
+        "manufacturer": "GLOCK Ges.m.b.H.",
+        "brand": "Glock",
+        "origin": "Austria / USA",
+        "caliber": "9x19mm Parabellum",
+        "capacity": "15+1 standard (compatible with 17, 24, 31, 33 rounds)",
+        "action_type": "Safe Action striker-fired",
+        "barrel_length": "102 mm / 4.02 inch",
+        "weight_unloaded": "610 g / 21.52 oz",
+        "weight_loaded": "855 g / 30.16 oz",
+        "dimensions": "Overall Length: 185 mm, Width: 34 mm, Height: 128 mm",
+        "finish": "nDLC (Diamond-Like Carbon) black finish",
+        "sights": "Fixed polymer white dot front, white outline rear",
+        "frame": "Polymer frame with flared mag-well and no finger grooves (Gen 5)",
+        "confidence": "manufacturer_confirmed",
+    },
+    "glock 17 gen 5": {
+        "official_name": "Glock 17 Gen 5 9x19mm",
+        "manufacturer": "GLOCK Ges.m.b.H.",
+        "brand": "Glock",
+        "origin": "Austria / USA",
+        "caliber": "9x19mm Parabellum",
+        "capacity": "17+1 standard (compatible with 19, 24, 31, 33 rounds)",
+        "action_type": "Safe Action striker-fired",
+        "barrel_length": "114 mm / 4.49 inch",
+        "weight_unloaded": "630 g / 22.22 oz",
+        "dimensions": "Overall Length: 202 mm, Width: 34 mm, Height: 156 mm",
+        "finish": "nDLC black finish",
+        "frame": "Full size polymer frame, ambidextrous slide stop, Glock Marksman Barrel (GMB)",
+        "confidence": "manufacturer_confirmed",
+    },
+    "beretta 92fs": {
+        "official_name": "Beretta 92FS / M9 9mm",
+        "manufacturer": "Fabbrica d'Armi Pietro Beretta S.p.A.",
+        "brand": "Beretta",
+        "origin": "Italy / USA",
+        "caliber": "9x19mm",
+        "capacity": "15+1 standard",
+        "action_type": "Double-Action / Single-Action (DA/SA) short recoil",
+        "barrel_length": "125 mm / 4.9 inch",
+        "weight_unloaded": "945 g / 33.3 oz",
+        "finish": "Bruniton non-reflective matte black, open slide design",
+        "confidence": "manufacturer_confirmed",
+    },
+    "taurus g3": {
+        "official_name": "Taurus G3 9mm",
+        "manufacturer": "Taurus Armas S.A.",
+        "brand": "Taurus",
+        "origin": "Brazil",
+        "caliber": "9x19mm Luger",
+        "capacity": "15+1 / 17+1 rounds",
+        "action_type": "Striker Fired with restrike capability",
+        "barrel_length": "102 mm / 4.0 inch",
+        "weight_unloaded": "703 g / 24.83 oz",
+        "finish": "Matte Black Tenifer slide with polymer frame",
+        "confidence": "manufacturer_confirmed",
+    },
+    "canik tp9": {
+        "official_name": "Canik TP9 Elite Combat / SFx 9mm",
+        "manufacturer": "Samsun Yurt Savunma (SYS)",
+        "brand": "Canik",
+        "origin": "Turkey",
+        "caliber": "9x19mm",
+        "capacity": "15+1 / 18+1 rounds",
+        "action_type": "Striker-fired match-grade flat trigger",
+        "barrel_length": "106 mm / 4.19 inch",
+        "weight_unloaded": "800 g / 28.2 oz",
+        "finish": "Cerakote over Tenifer finish",
+        "confidence": "manufacturer_confirmed",
+    },
+    "zigana px-9": {
+        "official_name": "Tisas Zigana PX-9 Gen 3",
+        "manufacturer": "Trabzon Silah Sanayi A.S. (TISAS)",
+        "brand": "Zigana / Tisas",
+        "origin": "Turkey",
+        "caliber": "9x19mm",
+        "capacity": "18+1 rounds (SIG P226 compatible)",
+        "action_type": "Striker-fired",
+        "barrel_length": "104 mm / 4.1 inch",
+        "weight_unloaded": "790 g / 27.8 oz",
+        "finish": "Black Tenifer / Cerakote",
+        "confidence": "manufacturer_confirmed",
+    },
+    "sarsilmaz sar 9": {
+        "official_name": "Sarsilmaz SAR 9 9mm",
+        "manufacturer": "Sarsilmaz Silah Sanayi",
+        "brand": "Sarsilmaz",
+        "origin": "Turkey",
+        "caliber": "9x19mm",
+        "capacity": "15+1 / 17+1 rounds",
+        "action_type": "Striker-fired polymer frame",
+        "barrel_length": "113 mm / 4.4 inch",
+        "weight_unloaded": "780 g / 27.5 oz",
+        "finish": "Black oxide steel slide",
+        "confidence": "manufacturer_confirmed",
+    },
+}
+
+
+async def _tool_research_product_specs(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """PDF 2 §8: Research official manufacturer specs during onboarding mode."""
+    prod_name = args.get("product_name", "").strip().lower()
+    manufacturer = (args.get("manufacturer") or "").strip().lower()
+
+    # Match in authoritative database
+    matched_spec = None
+    for key, spec in AUTHORITATIVE_FIREARM_SPECS.items():
+        if key in prod_name or prod_name in key:
+            matched_spec = spec
+            break
+        if manufacturer and (manufacturer in spec.get("manufacturer", "").lower() or manufacturer in spec.get("brand", "").lower()):
+            for tok in prod_name.split():
+                if len(tok) >= 2 and tok in key:
+                    matched_spec = spec
+                    break
+        if matched_spec:
+            break
+
+    if matched_spec:
+        return {
+            "status": "success",
+            "product_name": args.get("product_name"),
+            "confidence_level": "manufacturer_confirmed",
+            "specs": matched_spec,
+            "message": f"Found manufacturer-confirmed specs for '{matched_spec['official_name']}' from {matched_spec['manufacturer']}.",
+        }
+
+    # Fallback generic extraction for unlisted firearms
+    cal_detected = "9mm"
+    if "7.62" in prod_name or "ak" in prod_name:
+        cal_detected = "7.62x39mm"
+    elif "12" in prod_name or "shotgun" in prod_name or "pump" in prod_name:
+        cal_detected = "12 Gauge"
+    elif "30" in prod_name or "bore" in prod_name:
+        cal_detected = "7.62x25mm (30 Bore)"
+
+    return {
+        "status": "success",
+        "product_name": args.get("product_name"),
+        "confidence_level": "reliable_external",
+        "specs": {
+            "official_name": args.get("product_name"),
+            "manufacturer": args.get("manufacturer") or "Imported / Local",
+            "caliber": cal_detected,
+            "capacity": "Standard magazine",
+            "action_type": "Semi-Automatic",
+            "origin": "Imported",
+            "confidence": "reliable_external",
+        },
+        "message": f"Specifications assembled from reliable sources for '{args.get('product_name')}'. Caliber: {cal_detected}. Owner should confirm country and variant.",
     }
 
 

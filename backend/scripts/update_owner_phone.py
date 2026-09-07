@@ -10,8 +10,8 @@ async def main():
         await session.commit()
         print("Schema verified: tenants.business_profile exists.")
 
-        # 2. Update owner_phone to +923169827188
-        new_phone = "+923169827188"
+        # 2. Update owner_phone to +923140922056
+        new_phone = "+923140922056"
         res = await session.execute(select(Tenant))
         tenants = res.scalars().all()
         if not tenants:

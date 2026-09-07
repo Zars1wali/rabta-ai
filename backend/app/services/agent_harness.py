@@ -24,6 +24,8 @@ from app.services.catalog_tools import (
     execute_tool,
 )
 
+from unittest.mock import Mock, MagicMock
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,11 +37,21 @@ class ReActAgentHarness:
         self.api_key = settings.GEMINI_API_KEY
         self.max_iterations = max_iterations
         self._client: Optional[genai.Client] = None
+        self._client_loop = None
 
     @property
     def client(self) -> Optional[genai.Client]:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if self._client and getattr(self, "_client_loop", None) is not current_loop:
+            self._client = None
+
         if not self._client and self.api_key:
             self._client = genai.Client(api_key=self.api_key)
+            self._client_loop = current_loop
         return self._client
 
     def _build_sdk_tools(self, tool_declarations: List[Dict[str, Any]]) -> List[types.Tool]:

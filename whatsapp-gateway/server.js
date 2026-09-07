@@ -149,10 +149,10 @@ async function handleIncomingMessage(msg) {
     }
 
     // Strict Single-Owner Enforcement: Only 1 active owner exists at any time
-    const OWNER_PHONE = process.env.OWNER_PHONE || '+923169827188';
+    const OWNER_PHONE = process.env.OWNER_PHONE || '+923140922056';
     const OWNER_LID = process.env.OWNER_LID || '61379545444551';
     const OWNER_MATCHERS = [
-        OWNER_PHONE.replace(/[^\d]/g, '').slice(-10), // e.g. '3169827188'
+        OWNER_PHONE.replace(/[^\d]/g, '').slice(-10), // e.g. '3140922056'
         OWNER_LID.replace(/[^\d]/g, ''),               // e.g. '61379545444551'
     ].filter(Boolean);
 

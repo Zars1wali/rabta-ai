@@ -117,11 +117,25 @@ async def lifespan(app: FastAPI):
     followup_task = asyncio.create_task(_polite_followup_loop())
     logger.info("[FollowUp] Polite conversation follow-up scheduler started.")
 
+    # Start autonomous background scheduler agent (PDF 2 §13, §15)
+    try:
+        from app.services.scheduler_agent import scheduler_agent
+        await scheduler_agent.start()
+        logger.info("[SchedulerAgent] Autonomous scheduler agent started.")
+    except Exception as exc:
+        logger.error("[SchedulerAgent] Failed to start scheduler agent: %s", exc, exc_info=True)
+
     yield
 
     try:
         from app.graph.checkpointer import close_checkpointer
         await close_checkpointer()
+    except Exception:
+        pass
+
+    try:
+        from app.services.scheduler_agent import scheduler_agent
+        await scheduler_agent.stop()
     except Exception:
         pass
 

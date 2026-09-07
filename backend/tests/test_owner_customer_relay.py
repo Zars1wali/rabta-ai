@@ -33,7 +33,7 @@ async def test_owner_fast_path_bare_number_relay():
 
     owner_state = {
         "tenant_id": str(t_id),
-        "sender_phone": "923169827188",
+        "sender_phone": "923140922056",
         "raw_message": "3500",
         "is_boss": True,
     }
@@ -79,7 +79,7 @@ async def test_owner_natural_language_relay():
 
     owner_state = {
         "tenant_id": str(t_id),
-        "sender_phone": "923169827188",
+        "sender_phone": "923140922056",
         "raw_message": "hyderabad wale customer ko deliver chathes 3500 batao",
         "is_boss": True,
     }

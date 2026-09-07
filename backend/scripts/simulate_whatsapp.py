@@ -27,7 +27,7 @@ async def send_simulated_message(sender_phone: str, message: str, business_phone
 
 async def run_feature_test(feature_name: str, sender_phone: str, message: str):
     print(f"\n{'='*70}")
-    is_owner = (sender_phone.replace("+", "") == "923169827188")
+    is_owner = (sender_phone.replace("+", "") == "923140922056")
     role = "OWNER (Shahzad Haider Bhai)" if is_owner else f"CUSTOMER ({sender_phone})"
     print(f"TESTING: {feature_name}")
     print(f"SENDER:  {role} [{sender_phone}]")
@@ -49,7 +49,7 @@ async def run_feature_test(feature_name: str, sender_phone: str, message: str):
 
 
 async def main():
-    owner_phone = "+923169827188"
+    owner_phone = "+923140922056"
     cust_phone = "+923005551234"
 
     print("\n" + "#"*70)

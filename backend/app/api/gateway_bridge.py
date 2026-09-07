@@ -104,7 +104,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             tenant_id = tenant.id
             biz_name = tenant.name
             industry = tenant.industry or "Retail"
-            owner_phone = tenant.owner_phone or "+923169827188"
+            owner_phone = tenant.owner_phone or "+923140922056"
             active_takeover = tenant.active_takeover_customer_phone
 
             # ---------------------------------------------------------------

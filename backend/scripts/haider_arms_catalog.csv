@@ -1,0 +1,115 @@
+name,category,brand,origin,caliber,capacity,action,price,description
+Glock 19 Gen 5,Pistol,Glock,USA,9mm,15 rds,Semi Auto,420000.0,Brand: Glock | Origin: USA | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Glock 19X,Pistol,Glock,USA,9mm,18 rds,Semi Auto,500000.0,Brand: Glock | Origin: USA | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Glock 26 Gen 5,Pistol,Glock,USA,9mm,10 rds,Semi Auto,490000.0,Brand: Glock | Origin: USA | Caliber: 9mm | Capacity: 10 rds | Action: Semi Auto
+Glock 45 Gen 5,Pistol,Glock,USA,9mm,17 rds,Semi Auto,480000.0,Brand: Glock | Origin: USA | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Glock 43X Gen 5,Pistol,Glock,USA,9mm,10 rds,Semi Auto,485000.0,Brand: Glock | Origin: USA | Caliber: 9mm | Capacity: 10 rds | Action: Semi Auto
+Glock 34 Gen 5,Pistol,Glock,USA,9mm,15 rds,Semi Auto,390000.0,Brand: Glock | Origin: USA | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Glock 17 Gen 5,Pistol,Glock,USA,9mm,17 rds,Semi Auto,390000.0,Brand: Glock | Origin: USA | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Glock 19 Gen 5,Pistol,Glock,Austria,9mm,15 rds,Semi Auto,500000.0,Brand: Glock | Origin: Austria | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Glock 19X,Pistol,Glock,Austria,9mm,18 rds,Semi Auto,550000.0,Brand: Glock | Origin: Austria | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Glock 17 Gen 5,Pistol,Glock,Austria,9mm,17 rds,Semi Auto,500000.0,Brand: Glock | Origin: Austria | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Glock 26 Gen 5,Pistol,Glock,Austria,9mm,10 rds,Semi Auto,520000.0,Brand: Glock | Origin: Austria | Caliber: 9mm | Capacity: 10 rds | Action: Semi Auto
+Glock 45 Gen 5,Pistol,Glock,Austria,9mm,17 rds,Semi Auto,550000.0,Brand: Glock | Origin: Austria | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Glock 43X Gen 5,Pistol,Glock,Austria,9mm,10 rds,Semi Auto,520000.0,Brand: Glock | Origin: Austria | Caliber: 9mm | Capacity: 10 rds | Action: Semi Auto
+Glock 34 Gen 5,Pistol,Glock,Austria,9mm,17 rds,Semi Auto,550000.0,Brand: Glock | Origin: Austria | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Ruger 5.7,Pistol,Ruger,USA,5.7x28mm,20 rds,Semi Auto,600000.0,Brand: Ruger | Origin: USA | Caliber: 5.7x28mm | Capacity: 20 rds | Action: Semi Auto
+Sig Sauer P320 M18,Pistol,SIG Sauer,USA,9mm,15 rds,Semi Auto,650000.0,Brand: SIG Sauer | Origin: USA | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Taurus G3,Pistol,Taurus,Brazil,9mm,18 rds,Semi Auto,180000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Taurus G3C,Pistol,Taurus,Brazil,9mm,12 rds,Semi Auto,175000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 12 rds | Action: Semi Auto
+Taurus G3 Tactical,Pistol,Taurus,Brazil,9mm,18 rds,Semi Auto,210000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Taurus GX4,Pistol,Taurus,Brazil,9mm,12 rds,Semi Auto,190000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 12 rds | Action: Semi Auto
+Taurus GX4 XL,Pistol,Taurus,Brazil,9mm,13 rds,Semi Auto,230000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 13 rds | Action: Semi Auto
+Taurus PT92 AFS Black,Pistol,Taurus,Brazil,9mm,17 rds,Semi Auto,250000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Taurus PT92 AFS Silver,Pistol,Taurus,Brazil,9mm,18 rds,Semi Auto,260000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Taurus PT92 AFS Special Edition,Pistol,Taurus,Brazil,9mm,18 rds,Semi Auto,265000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Taurus PT 1911,Pistol,Taurus,Brazil,9mm,10 rds,Semi Auto,275000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 10 rds | Action: Semi Auto
+Zigana PX9 Gen 3,Pistol,Zigana,Turkey,9mm,18 rds,Semi Auto,175000.0,Brand: Zigana | Origin: Turkey | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Agaoglu FXS 9,Pistol,Agaoglu,Turkey,9mm,18 rds,Semi Auto,155000.0,Brand: Agaoglu | Origin: Turkey | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Derya DY9,Pistol,Derya,Turkey,9mm,15 rds,Semi Auto,165000.0,Brand: Derya | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Zig 14,Pistol,Zigana,Turkey,9mm,15 rds,Semi Auto,240000.0,Brand: Zigana | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Zig P9,Pistol,Zigana,Turkey,30 Bore,10 rds,Semi Auto,145000.0,Brand: Zigana | Origin: Turkey | Caliber: 30 Bore | Capacity: 10 rds | Action: Semi Auto
+BRG9 Elite,Pistol,BRG,Turkey,9mm,15 rds,Semi Auto,180000.0,Brand: BRG | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Canik TP9 Sub Elite,Pistol,Canik,Turkey,9mm,15 rds,Semi Auto,250000.0,Brand: Canik | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Canik TP9 SFX,Pistol,Canik,Turkey,9mm,18 rds,Semi Auto,255000.0,Brand: Canik | Origin: Turkey | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Canik TP9 SFX Rival,Pistol,Canik,Turkey,9mm,18 rds,Semi Auto,450000.0,Brand: Canik | Origin: Turkey | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Canik TP9 Elite Combat,Pistol,Canik,Turkey,9mm,18 rds,Semi Auto,350000.0,Brand: Canik | Origin: Turkey | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Girsan Beretta MC9,Pistol,Girsan,Turkey,9mm,15 rds,Semi Auto,260000.0,Brand: Girsan | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Girsan MC 1911,Pistol,Girsan,Turkey,9mm,10 rds,Semi Auto,250000.0,Brand: Girsan | Origin: Turkey | Caliber: 9mm | Capacity: 10 rds | Action: Semi Auto
+Kral KR9,Pistol,Kral,Turkey,9mm,7 rds,Semi Auto,165000.0,Brand: Kral | Origin: Turkey | Caliber: 9mm | Capacity: 7 rds | Action: Semi Auto
+Kral KR19,Pistol,Kral,Turkey,9mm,15 rds,Semi Auto,170000.0,Brand: Kral | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Ermox Fire,Pistol,Ermox,Turkey,9mm,15 rds,Semi Auto,170000.0,Brand: Ermox | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Stoeger STR9,Pistol,Stoeger,Turkey,9mm,17 rds,Semi Auto,185000.0,Brand: Stoeger | Origin: Turkey | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Stoeger Cougar 8000,Pistol,Stoeger,Turkey,9mm,15 rds,Semi Auto,265000.0,Brand: Stoeger | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Baikal 446,Pistol,Baikal,Russia,9mm,18 rds,Semi Auto,220000.0,Brand: Baikal | Origin: Russia | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Baikal Makarov 442,Pistol,Baikal,Russia,9mm,13 rds,Semi Auto,170000.0,Brand: Baikal | Origin: Russia | Caliber: 9mm | Capacity: 13 rds | Action: Semi Auto
+Klashnikove PLK,Pistol,Klashnikove,Russia,9mm,14 rds,Semi Auto,400000.0,Brand: Klashnikove | Origin: Russia | Caliber: 9mm | Capacity: 14 rds | Action: Semi Auto
+Norinco CF98,Pistol,Norinco,China,9mm,15 rds,Semi Auto,145000.0,Brand: Norinco | Origin: China | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Norinco NP-7,Pistol,Norinco,China,9mm,17 rds,Semi Auto,150000.0,Brand: Norinco | Origin: China | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Norinco 30 Bore,Pistol,Norinco,China,30 Bore,7 rds,Semi Auto,100000.0,Brand: Norinco | Origin: China | Caliber: 30 Bore | Capacity: 7 rds | Action: Semi Auto
+Norinco PX3,Pistol,Norinco,China,30 Bore,17 rds,Semi Auto,140000.0,Brand: Norinco | Origin: China | Caliber: 30 Bore | Capacity: 17 rds | Action: Semi Auto
+HS9,Pistol,HS Produkt,Croatia,9mm,17 rds,Semi Auto,245000.0,Brand: HS Produkt | Origin: Croatia | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+HS9 Subcompact,Pistol,HS Produkt,Croatia,9mm,15 rds,Semi Auto,240000.0,Brand: HS Produkt | Origin: Croatia | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+HK SFP9,Pistol,Heckler & Koch,Germany,9mm,17 rds,Semi Auto,600000.0,Brand: Heckler & Koch | Origin: Germany | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+HK P30L,Pistol,Heckler & Koch,Germany,9mm,17 rds,Semi Auto,600000.0,Brand: Heckler & Koch | Origin: Germany | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+HK SFP9 Match,Pistol,Heckler & Koch,Germany,9mm,17 rds,Semi Auto,700000.0,Brand: Heckler & Koch | Origin: Germany | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Desert Eagle .44 Magnum,Pistol,Magnum Research,USA,.44 Magnum,8 rds,Semi Auto,1800000.0,Brand: Magnum Research | Origin: USA | Caliber: .44 Magnum | Capacity: 8 rds | Action: Semi Auto
+Desert Eagle Tiger Stripe .50 AE,Pistol,Magnum Research,USA,.50 AE,7 rds,Semi Auto,3000000.0,Brand: Magnum Research | Origin: USA | Caliber: .50 AE | Capacity: 7 rds | Action: Semi Auto
+CZ Shadow 2 Orange,Pistol,CZ,Czech Republic,9mm,17 rds,Semi Auto,1050000.0,Brand: CZ | Origin: Czech Republic | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+CZ Shadow TS 2 Bronze,Pistol,CZ,Czech Republic,9mm,17 rds,Semi Auto,1100000.0,Brand: CZ | Origin: Czech Republic | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Smith & Wesson 1911 Performance Center,Pistol,Smith & Wesson,USA,.45 ACP,10 rds,Semi Auto,1200000.0,Brand: Smith & Wesson | Origin: USA | Caliber: .45 ACP | Capacity: 10 rds | Action: Semi Auto
+Kimber Rapide 1911,Pistol,Kimber,USA,.45 ACP,10 rds,Semi Auto,1150000.0,Brand: Kimber | Origin: USA | Caliber: .45 ACP | Capacity: 10 rds | Action: Semi Auto
+Colt M4,Rifle,Colt,USA,5.56 NATO,30 rds,Semi Auto,770000.0,Brand: Colt | Origin: USA | Caliber: 5.56 NATO | Capacity: 30 rds | Action: Semi Auto
+Sig Sauer M400,Rifle,SIG Sauer,USA,5.56 NATO,30 rds,Semi Auto,1200000.0,Brand: SIG Sauer | Origin: USA | Caliber: 5.56 NATO | Capacity: 30 rds | Action: Semi Auto
+Keltec RDB Bullpup,Rifle,Kel-Tec,USA,5.56 NATO,30 rds,Semi Auto,975000.0,Brand: Kel-Tec | Origin: USA | Caliber: 5.56 NATO | Capacity: 30 rds | Action: Semi Auto
+Saiga MK,Rifle,Saiga,Russia,.223/.222 Rem,30 rds,Semi Auto,420000.0,Brand: Saiga | Origin: Russia | Caliber: .223/.222 Rem | Capacity: 30 rds | Action: Semi Auto
+Saiga A-308-1,Rifle,Saiga,Russia,.308 Win,30 rds,Semi Auto,390000.0,Brand: Saiga | Origin: Russia | Caliber: .308 Win | Capacity: 30 rds | Action: Semi Auto
+Vepr Molot Krenkove,Rifle,Molot,Russia,.223/.222 Rem,30 rds,Semi Auto,740000.0,Brand: Molot | Origin: Russia | Caliber: .223/.222 Rem | Capacity: 30 rds | Action: Semi Auto
+TR 3,Rifle,TR3,Russia,.223/.222 Rem,30 rds,Semi Auto,490000.0,Brand: TR3 | Origin: Russia | Caliber: .223/.222 Rem | Capacity: 30 rds | Action: Semi Auto
+Taurus T4,Rifle,Taurus,Brazil,5.56 NATO,30 rds,Semi Auto,500000.0,Brand: Taurus | Origin: Brazil | Caliber: 5.56 NATO | Capacity: 30 rds | Action: Semi Auto
+Utas Defense AR10,Rifle,UTAS,Turkey,.308 Win,20 rds,Semi Auto,400000.0,Brand: UTAS | Origin: Turkey | Caliber: .308 Win | Capacity: 20 rds | Action: Semi Auto
+G3 POF WAH,Rifle,POF,Pakistan,.308 Win,20 rds,Semi Auto,330000.0,Brand: POF | Origin: Pakistan | Caliber: .308 Win | Capacity: 20 rds | Action: Semi Auto
+Norinco CQ M4,Rifle,Norinco,China,5.56 NATO,30 rds,Semi Auto,390000.0,Brand: Norinco | Origin: China | Caliber: 5.56 NATO | Capacity: 30 rds | Action: Semi Auto
+Utas Defense 9mm,Rifle,UTAS,Turkey,9mm,30 rds,Semi Auto,260000.0,Brand: UTAS | Origin: Turkey | Caliber: 9mm | Capacity: 30 rds | Action: Semi Auto
+MP5 POF WAH,Rifle,POF,Pakistan,9mm,20 rds,Semi Auto,210000.0,Brand: POF | Origin: Pakistan | Caliber: 9mm | Capacity: 20 rds | Action: Semi Auto
+Sig Sauer MPX,Rifle,SIG Sauer,USA,9mm,20 rds,Semi Auto,1100000.0,Brand: SIG Sauer | Origin: USA | Caliber: 9mm | Capacity: 20 rds | Action: Semi Auto
+MKA,Rifle,MKA,Turkey,9mm,30 rds,Semi Auto,330000.0,Brand: MKA | Origin: Turkey | Caliber: 9mm | Capacity: 30 rds | Action: Semi Auto
+Sig Sauer PMPX,Rifle,SIG Sauer,USA,9mm,30 rds,Semi Auto,1100000.0,Brand: SIG Sauer | Origin: USA | Caliber: 9mm | Capacity: 30 rds | Action: Semi Auto
+Scar 17 .308,Rifle,FN Herstal,USA,.308 Win,20 rds,Semi Auto,2200000.0,Brand: FN Herstal | Origin: USA | Caliber: .308 Win | Capacity: 20 rds | Action: Semi Auto
+Anderson M4,Rifle,Anderson Manufacturing,USA,5.56 NATO,30 rds,Semi Auto,700000.0,Brand: Anderson Manufacturing | Origin: USA | Caliber: 5.56 NATO | Capacity: 30 rds | Action: Semi Auto
+Huglu Tactical Bolt Action,Rifle,Huglu,Turkey,.308 Win,5 rds,Bolt Action,750000.0,Brand: Huglu | Origin: Turkey | Caliber: .308 Win | Capacity: 5 rds | Action: Bolt Action
+Kral XPS,Shotgun,Kral,Turkey,12 Gauge,5 rds,Semi Auto,140000.0,Brand: Kral | Origin: Turkey | Caliber: 12 Gauge | Capacity: 5 rds | Action: Semi Auto
+Kral XPS Bullpup,Shotgun,Kral,Turkey,12 Gauge,5 rds,Semi Auto,140000.0,Brand: Kral | Origin: Turkey | Caliber: 12 Gauge | Capacity: 5 rds | Action: Semi Auto
+Saiga 12 Repeater,Shotgun,Saiga,Russia,12 Gauge,10 rds,Semi Auto,230000.0,Brand: Saiga | Origin: Russia | Caliber: 12 Gauge | Capacity: 10 rds | Action: Semi Auto
+Saiga 12C Repeater,Shotgun,Saiga,Russia,12 Gauge,10 rds,Semi Auto,320000.0,Brand: Saiga | Origin: Russia | Caliber: 12 Gauge | Capacity: 10 rds | Action: Semi Auto
+Bellini Magnum,Shotgun,Bellini,Turkey,12 Gauge,10 rds,Semi Auto,90000.0,Brand: Bellini | Origin: Turkey | Caliber: 12 Gauge | Capacity: 10 rds | Action: Semi Auto
+Kral A12 Repeater,Shotgun,Kral,Turkey,12 Gauge,5 rds,Semi Auto,95000.0,Brand: Kral | Origin: Turkey | Caliber: 12 Gauge | Capacity: 5 rds | Action: Semi Auto
+Kral Cara Cara Over/Under,Shotgun,Kral,Turkey,12 Gauge,2 rds,Break Action,145000.0,Brand: Kral | Origin: Turkey | Caliber: 12 Gauge | Capacity: 2 rds | Action: Break Action
+Baikal Over/Under,Shotgun,Baikal,Russia,12 Gauge,2 rds,Break Action,220000.0,Brand: Baikal | Origin: Russia | Caliber: 12 Gauge | Capacity: 2 rds | Action: Break Action
+Canik MC9 LS,Pistol,Canik,Turkey,9mm,15 rds,Semi Auto,220000.0,Brand: Canik | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Diamondback DB15,Rifle,Diamondback,USA,5.56 NATO,30 rds,Semi Auto,550000.0,Brand: Diamondback | Origin: USA | Caliber: 5.56 NATO | Capacity: 30 rds | Action: Semi Auto
+Beretta APX Compact,Pistol,Beretta,Italy,9mm,13 rds,Semi Auto,350000.0,Brand: Beretta | Origin: Italy | Caliber: 9mm | Capacity: 13 rds | Action: Semi Auto
+Saiga Krinkove 222,Rifle,Saiga,Russia,.223/.222 Rem,30 rds,Semi Auto,700000.0,Brand: Saiga | Origin: Russia | Caliber: .223/.222 Rem | Capacity: 30 rds | Action: Semi Auto
+Taurus G2C,Pistol,Taurus,Brazil,9mm,12 rds,Semi Auto,145000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 12 rds | Action: Semi Auto
+Canik MC9 FDE,Pistol,Canik,Turkey,9mm,15 rds,Semi Auto,210000.0,Brand: Canik | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+CZ Scorpion,Rifle,CZ,Czech Republic,9mm,20 rds,Semi Auto,300000.0,Brand: CZ | Origin: Czech Republic | Caliber: 9mm | Capacity: 20 rds | Action: Semi Auto
+Canik Mete SFX,Pistol,Canik,Turkey,9mm,18 rds,Semi Auto,160000.0,Brand: Canik | Origin: Turkey | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Taurus G3C Tactical,Pistol,Taurus,Brazil,9mm,12 rds,Semi Auto,210000.0,Brand: Taurus | Origin: Brazil | Caliber: 9mm | Capacity: 12 rds | Action: Semi Auto
+Saiga 223 Long Barrel,Rifle,Saiga,Russia,.223/.222 Rem,30 rds,Semi Auto,425000.0,Brand: Saiga | Origin: Russia | Caliber: .223/.222 Rem | Capacity: 30 rds | Action: Semi Auto
+Saiga 223 Short Barrel,Rifle,Saiga,Russia,.223/.222 Rem,30 rds,Semi Auto,390000.0,Brand: Saiga | Origin: Russia | Caliber: .223/.222 Rem | Capacity: 30 rds | Action: Semi Auto
+Canik Mete MC9,Pistol,Canik,Turkey,9mm,15 rds,Semi Auto,220000.0,Brand: Canik | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+M4 Design .22LR,Rifle,M4 Design,Turkey,.22 LR,10 rds,Semi Auto,220000.0,Brand: M4 Design | Origin: Turkey | Caliber: .22 LR | Capacity: 10 rds | Action: Semi Auto
+Zig 14 Sports Black,Pistol,Zigana,Turkey,9mm,15 rds,Semi Auto,220000.0,Brand: Zigana | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Akdas 223,Rifle,Akdas,Turkey,.223/.222 Rem,30 rds,Semi Auto,290000.0,Brand: Akdas | Origin: Turkey | Caliber: .223/.222 Rem | Capacity: 30 rds | Action: Semi Auto
+Beretta 92FS Italy Inox,Pistol,Beretta,Italy,9mm,15 rds,Semi Auto,625000.0,Brand: Beretta | Origin: Italy | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Beretta 92FS Italy Black,Pistol,Beretta,Italy,9mm,15 rds,Semi Auto,575000.0,Brand: Beretta | Origin: Italy | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+CZ P10C,Pistol,CZ,Czech Republic,9mm,15 rds,Semi Auto,260000.0,Brand: CZ | Origin: Czech Republic | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Akdas SA-9,Rifle,Akdas,Turkey,9mm,30 rds,Semi Auto,225000.0,Brand: Akdas | Origin: Turkey | Caliber: 9mm | Capacity: 30 rds | Action: Semi Auto
+Glock 17 Gen 6,Pistol,Glock,Austria,9mm,17 rds,Semi Auto,550000.0,Brand: Glock | Origin: Austria | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+CZ 600 .308,Rifle,CZ,Czech Republic,.308 Win,5 rds,Bolt Action,775000.0,Brand: CZ | Origin: Czech Republic | Caliber: .308 Win | Capacity: 5 rds | Action: Bolt Action
+ERMOX XP Pro Series,Pistol,Ermox,Turkey,9mm,15 rds,Semi Auto,125000.0,Brand: Ermox | Origin: Turkey | Caliber: 9mm | Capacity: 15 rds | Action: Semi Auto
+Glock 19X V MOS,Pistol,Glock,Austria,9mm,17 rds,Semi Auto,600000.0,Brand: Glock | Origin: Austria | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Canik TTI Combat,Pistol,Canik,Turkey,9mm,18 rds,Semi Auto,480000.0,Brand: Canik | Origin: Turkey | Caliber: 9mm | Capacity: 18 rds | Action: Semi Auto
+Zigana Sports Black,Pistol,Zigana,Turkey,9mm,17 rds,Semi Auto,185000.0,Brand: Zigana | Origin: Turkey | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+Beretta M9A4,Pistol,Beretta,Italy,9mm,17 rds,Semi Auto,850000.0,Brand: Beretta | Origin: Italy | Caliber: 9mm | Capacity: 17 rds | Action: Semi Auto
+SIG P365,Pistol,SIG Sauer,USA,9mm,10 rds,Semi Auto,700000.0,Brand: SIG Sauer | Origin: USA | Caliber: 9mm | Capacity: 10 rds | Action: Semi Auto

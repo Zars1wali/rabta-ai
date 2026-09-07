@@ -39,8 +39,8 @@ class CatalogItemSchema(BaseModel):
 
 class BusinessOnboardingRequest(BaseModel):
     business_name: str = Field(..., example="Al-Rehman Fabrics")
-    owner_whatsapp: str = Field(..., example="+923169827188")
-    business_phone: Optional[str] = Field(None, example="+923169827188")
+    owner_whatsapp: str = Field(..., example="+923140922056")
+    business_phone: Optional[str] = Field(None, example="+923140922056")
     industry: str = Field("Retail & Fashion", example="Textile & Fashion")
     social_links: Optional[dict] = Field(default_factory=dict)
     inventory_context: Optional[str] = Field("")

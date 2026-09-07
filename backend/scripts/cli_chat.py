@@ -12,7 +12,7 @@ from app.api.gateway_bridge import process_gateway_message, GatewayMessagePayloa
 
 
 async def main():
-    owner_phone = "+923169827188"
+    owner_phone = "+923140922056"
     cust_phone = "+923001234567"
     biz_phone = "+923040124445"
 
@@ -24,7 +24,7 @@ async def main():
     print(f"  Configured Customer Number: {cust_phone}")
     print("=" * 70)
     print("Commands:")
-    print("  /role owner     -> Switch to chatting as the Owner (+92 3169827188)")
+    print("  /role owner     -> Switch to chatting as the Owner (+92 3140922056)")
     print("  /role customer  -> Switch to chatting as a Customer (+92 300 1234567)")
     print("  exit or quit    -> Quit simulator")
     print("=" * 70)

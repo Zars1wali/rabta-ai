@@ -86,6 +86,44 @@ class OwnerCopilotService:
             "message": "Command process ho gaya hai.",
         }
 
+    async def _understand_owner_intent_agi(
+        self,
+        message_text: str,
+        open_inquiries: Optional[List[Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Fast intent understanding helper for owner messages.
+        Extracts intent (price_update, margin_preference, etc.) and entities.
+        """
+        msg_lower = message_text.lower()
+        if any(w in msg_lower for w in ["margin", "push", "promote", "recommend"]):
+            product_name = ""
+            for name in ["Canik TP9", "Canik", "Glock 19 Gen 5", "Glock 19", "Glock", "Beretta", "Taurus", "Zigana", "SAR 9"]:
+                if name.lower() in msg_lower:
+                    product_name = name
+                    break
+            return {
+                "intent": "margin_preference",
+                "product_name": product_name or message_text,
+                "preference_reason": "better margin",
+                "raw_text": message_text,
+            }
+        elif (re.search(r'\b(now|price|pkr|rs|hazar|lakh|\d+k)\b', msg_lower) or "is now" in msg_lower) and any(c.isdigit() for c in message_text):
+            product_name = ""
+            for name in ["Glock 19 Gen 5", "Glock 19", "Glock 17", "Beretta 92FS", "Taurus G3", "Canik TP9", "Zigana PX-9", "SAR 9"]:
+                if name.lower() in msg_lower:
+                    product_name = name
+                    break
+            return {
+                "intent": "price_update",
+                "product_name": product_name or message_text,
+                "raw_text": message_text,
+            }
+        return {
+            "intent": "general_message",
+            "raw_text": message_text,
+        }
+
     async def handle_natural_message(
         self,
         owner_message: str,

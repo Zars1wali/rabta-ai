@@ -490,7 +490,7 @@
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
                 <div class="k-field">
                     <label class="k-label"><span>Dedicated WhatsApp Number *</span></label>
-                    <input type="tel" class="k-input font-mono" id="inpPhone" placeholder="+923169827188" value="+923169827188">
+                    <input type="tel" class="k-input font-mono" id="inpPhone" placeholder="+923140922056" value="+923140922056">
                 </div>
                 <div class="k-field">
                     <label class="k-label"><span>Industry Category *</span></label>
@@ -620,7 +620,7 @@
                 </div>
                 <h2 style="font-size:1.8rem; font-weight:800; margin-bottom:8px;">Link Your Business WhatsApp</h2>
                 <p style="color:#94A3B8; max-width:540px; margin:0 auto; font-size:14px; line-height:1.5;">
-                    Your AI employee operates directly through your dedicated phone number (<strong id="waDisplayNumber" class="font-mono text-accent">+923169827188</strong>).
+                    Your AI employee operates directly through your dedicated phone number (<strong id="waDisplayNumber" class="font-mono text-accent">+923140922056</strong>).
                 </p>
 
                 <!-- Live QR Frame -->
@@ -776,7 +776,7 @@
         currentStage = stage;
 
         if (stage === 3) {
-            document.getElementById('waDisplayNumber').textContent = document.getElementById('inpPhone').value || '+923169827188';
+            document.getElementById('waDisplayNumber').textContent = document.getElementById('inpPhone').value || '+923140922056';
             fetchLiveQr();
         }
         if (stage === 4) {
@@ -885,7 +885,7 @@
                     qrState.innerHTML = `
                         <i class="fa-brands fa-whatsapp" style="font-size:48px; color:#10B981; margin-bottom:8px;"></i>
                         <div style="font-size:12px; color:#1E293B; font-weight:700;">Pairing Socket Active</div>
-                        <div style="font-size:11px; color:#64748B; margin-top:2px;">Phone: +923169827188</div>
+                        <div style="font-size:11px; color:#64748B; margin-top:2px;">Phone: +923140922056</div>
                     `;
                     qrState.style.display = 'flex';
                     qrImg.style.display = 'none';
@@ -924,7 +924,7 @@
 
         const payload = {
             business_name: document.getElementById('inpBizName').value.trim() || 'My Business',
-            owner_whatsapp: document.getElementById('inpPhone').value.trim() || '+923169827188',
+            owner_whatsapp: document.getElementById('inpPhone').value.trim() || '+923140922056',
             industry: document.getElementById('inpIndustry').value || 'Pakistani Retail',
             social_links: { [selectedPlatform]: document.getElementById('inpScanUrl').value.trim() },
             inventory_context: "Extracted via multi-channel digital ingestion.",
@@ -966,7 +966,7 @@
         input.value = '';
         chat.scrollTop = chat.scrollHeight;
 
-        const phone = document.getElementById('inpPhone').value.trim() || '923169827188';
+        const phone = document.getElementById('inpPhone').value.trim() || '923140922056';
 
         try {
             const res = await fetch('/api/gateway/process-message', {
