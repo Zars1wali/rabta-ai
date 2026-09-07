@@ -117,9 +117,10 @@ class KnowledgeBaseService:
             if not candidates:
                 return []
 
-            # Optional: generate query vector if not supplied and candidates have embeddings
+            # Avoid slow remote embedding call if we already have direct text matches or short keyword queries
+            has_strong_text_match = any(query_lower in (c.name or "").lower() for c in candidates)
             has_any_embedding = any(bool(c.embedding_data and "vector" in c.embedding_data) for c in candidates)
-            if has_any_embedding and not query_vector:
+            if has_any_embedding and not query_vector and not has_strong_text_match and len(tokens) > 2:
                 try:
                     query_vector = await embedding_service.embed_text(query)
                 except Exception as e:
