@@ -1,6 +1,6 @@
 """
 Interactive WhatsApp Terminal Simulator for Rabta AI.
-Allows switching seamlessly between Owner mode (+92 3169827188) and Customer mode.
+Allows switching seamlessly between Owner mode (+92 3140922056) and Customer mode.
 """
 import asyncio
 import sys

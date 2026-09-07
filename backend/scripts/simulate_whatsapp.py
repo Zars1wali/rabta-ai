@@ -1,6 +1,6 @@
 """
 Interactive Multi-Persona WhatsApp Testing Harness for Rabta AI.
-Allows testing both Owner Side (+92 3169827188) and Customer Side.
+Allows testing both Owner Side (+92 3140922056) and Customer Side.
 """
 import asyncio
 import sys
