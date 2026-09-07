@@ -340,7 +340,21 @@ Return STRICT JSON only:
             raw = (resp.text or "").strip()
             result = json.loads(raw)
         except Exception as exc:
-            logger.warning("[NLU:customer] Gemini call failed, using fallback: %s", exc)
+            logger.warning("[NLU:customer] Primary Gemini call failed (%s), trying failover...", exc)
+            try:
+                alt_model = "gemini-3.5-flash-lite" if "3.6" in settings.GEMINI_MODEL else "gemini-3.6-flash"
+                resp = await client.aio.models.generate_content(
+                    model=alt_model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.0,
+                        response_mime_type="application/json",
+                    ),
+                )
+                raw = (resp.text or "").strip()
+                result = json.loads(raw)
+            except Exception as exc2:
+                logger.warning("[NLU:customer] Gemini failover failed, using regex fallback: %s", exc2)
 
     # ── Fallback deterministic extraction if LLM unavailable ─────────────────
     if result is None:
@@ -569,7 +583,21 @@ Return STRICT JSON only:
             data = json.loads(raw)
             result = data
         except Exception as exc:
-            logger.warning("[NLU:owner] Gemini call failed, using regex fallback: %s", exc)
+            logger.warning("[NLU:owner] Primary Gemini call failed (%s), trying failover...", exc)
+            try:
+                alt_model = "gemini-3.5-flash-lite" if "3.6" in settings.GEMINI_MODEL else "gemini-3.6-flash"
+                resp = await client.aio.models.generate_content(
+                    model=alt_model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.0,
+                        response_mime_type="application/json",
+                    ),
+                )
+                raw = (resp.text or "").strip()
+                result = json.loads(raw)
+            except Exception as exc2:
+                logger.warning("[NLU:owner] Gemini failover failed, using regex fallback: %s", exc2)
 
     if result is None:
         add_match = re.search(r'\b(?:add\s+(?:product|item|rifle|pistol|gun)|naya\s+(?:product|item))\b', msg_lower)

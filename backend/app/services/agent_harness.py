@@ -146,11 +146,20 @@ class ReActAgentHarness:
                         config=config,
                     )
                 else:
-                    response = await self.client.aio.models.generate_content(
-                        model=self.model,
-                        contents=contents,
-                        config=config,
-                    )
+                    try:
+                        response = await self.client.aio.models.generate_content(
+                            model=self.model,
+                            contents=contents,
+                            config=config,
+                        )
+                    except Exception as primary_err:
+                        alt_model = "gemini-3.5-flash-lite" if "3.6" in self.model else "gemini-3.6-flash"
+                        logger.warning("[ReActHarness] Primary model %s failed (%s), failing over to %s", self.model, primary_err, alt_model)
+                        response = await self.client.aio.models.generate_content(
+                            model=alt_model,
+                            contents=contents,
+                            config=config,
+                        )
 
                 if not response.candidates:
                     logger.warning("[ReActHarness] No candidates returned on turn %d", iteration)
@@ -181,8 +190,8 @@ class ReActAgentHarness:
                     state_updates = context.get("state_updates") or {} if isinstance(context, dict) else {}
                     owner_alert = "\n\n".join(gathered_owner_alerts) if gathered_owner_alerts else state_updates.get("owner_alert")
                     return {
-                        "reply_text": final_text.strip(),
-                        "reply_chunks": chunks if chunks else [final_text.strip()],
+                        "reply_text": final_text,
+                        "reply_chunks": chunks or [final_text],
                         "media_urls": gathered_media,
                         "tool_calls_executed": tool_calls_executed,
                         "state_updates": state_updates,
@@ -231,14 +240,35 @@ class ReActAgentHarness:
                 break
 
         # If loop exited after max iterations or error, generate safe natural fallback or return tool output
-        fallback = (
-            last_tool_message
-            or (
+        fallback = last_tool_message
+        if not fallback and role == "customer":
+            u_low = (user_message or "").lower()
+            cat_match = None
+            if "rifle" in u_low:
+                cat_match = "Rifle"
+            elif "shotgun" in u_low:
+                cat_match = "Shotgun"
+            elif "pistol" in u_low:
+                cat_match = "Pistol"
+
+            if cat_match:
+                try:
+                    from app.services.catalog_tools import search_catalog
+                    t_id = context.get("tenant_id") if isinstance(context, dict) else None
+                    if t_id:
+                        cat_res = await search_catalog(tenant_id=str(t_id), category=cat_match, limit=5)
+                        if cat_res:
+                            items_str = "\n".join([f"- **{it['name']}**: PKR {it['price']:,.0f}" for it in cat_res if it.get('price')])
+                            fallback = f"Hamare paas {cat_match}s mein yeh top options available hain:\n\n{items_str}\n\nAapko kis model ki details ya tasveer chahiye?"
+                except Exception as cat_err:
+                    logger.warning("[ReActHarness] Fallback category search failed: %s", cat_err)
+
+        if not fallback:
+            fallback = (
                 "Jee bilkul, main details check kar raha hoon. Mazeed koi specific model dekhna chahein toh batayein."
                 if role == "customer"
                 else "G boss, action complete kar diya hai. Koi mazeed tabdeeli karni ho toh batayein."
             )
-        )
         state_updates = context.get("state_updates") or {} if isinstance(context, dict) else {}
         owner_alert = "\n\n".join(gathered_owner_alerts) if gathered_owner_alerts else state_updates.get("owner_alert")
         return {
