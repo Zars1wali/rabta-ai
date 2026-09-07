@@ -73,12 +73,45 @@ class OwnerCopilotService:
                 "message": f"AI paused for {target_phone}. Aap directly baat karein, finish hone par /resume likhein.",
             }
 
-        elif main_cmd == "/resume":
-            target_phone = cmd_parts[1] if len(cmd_parts) > 1 else active_customer
+        elif main_cmd in ["/setowner", "/set-owner"]:
+            if len(cmd_parts) < 2:
+                return {
+                    "action": "reply_owner",
+                    "message": "Bhai naya owner number batayein: /setowner 03140922056",
+                }
+            new_num = cmd_parts[1].strip()
+            digits = re.sub(r'\D', '', new_num)
+            if digits.startswith("0") and len(digits) == 11:
+                new_num = "+92" + digits[1:]
+            elif not new_num.startswith("+"):
+                new_num = "+" + digits
+
+            # Update tenant in DB if session available
+            if session and tenant_id:
+                from app.models.database import Tenant
+                stmt = select(Tenant).where(Tenant.id == tenant_id)
+                t_res = await session.execute(stmt)
+                t = t_res.scalar_one_or_none()
+                if t:
+                    t.owner_phone = new_num
+                    await session.commit()
+
+            # Notify WhatsApp gateway
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    for gw_url in ["http://gateway:3001", "http://localhost:3001"]:
+                        try:
+                            await client.post(f"{gw_url}/api/set-owner", json={"phone": new_num})
+                            break
+                        except Exception:
+                            continue
+            except Exception as e:
+                logger.warning("Failed to notify gateway of owner change: %s", e)
+
             return {
-                "action": "resume_ai",
-                "customer_phone": target_phone,
-                "message": "AI resumed successfully.",
+                "action": "reply_owner",
+                "message": f"Owner successfully changed to {new_num}. Purane owner ke tamam ikhtiyarat foran khatam kar diye gaye hain aur wo ab aam customer ban chuka hai.",
             }
 
         return {

@@ -31,6 +31,9 @@ let pairingCode = null;
 let connectedNumber = null;
 const processedMsgIds = new Set();
 
+let activeOwnerPhone = process.env.OWNER_PHONE || '+923140922056';
+let activeOwnerLid = process.env.OWNER_LID || '79938417877160';
+
 function cleanPhoneNumber(phone) {
     if (!phone) return '';
     let digits = phone.replace(/\D/g, '');
@@ -149,27 +152,27 @@ async function handleIncomingMessage(msg) {
     }
 
     // Strict Single-Owner Enforcement: Only 1 active owner exists at any time
-    const OWNER_PHONE = process.env.OWNER_PHONE || '+923140922056';
-    const OWNER_LID = process.env.OWNER_LID || '61379545444551';
+    const OWNER_PHONE = activeOwnerPhone;
+    const OWNER_LID = activeOwnerLid;
     const OWNER_MATCHERS = [
         OWNER_PHONE.replace(/[^\d]/g, '').slice(-10), // e.g. '3140922056'
-        OWNER_LID.replace(/[^\d]/g, ''),               // e.g. '61379545444551'
+        OWNER_LID ? OWNER_LID.replace(/[^\d]/g, '') : null, // e.g. '79938417877160'
     ].filter(Boolean);
 
     // Ensure stale/previous owner JID is never used
     if (global._lastKnownOwnerJid && !OWNER_MATCHERS.some(m => global._lastKnownOwnerJid.includes(m))) {
-        global._lastKnownOwnerJid = `${OWNER_LID}@lid`;
+        global._lastKnownOwnerJid = OWNER_LID ? `${OWNER_LID}@lid` : null;
     }
-    if (!global._lastKnownOwnerJid) {
+    if (!global._lastKnownOwnerJid && OWNER_LID) {
         global._lastKnownOwnerJid = `${OWNER_LID}@lid`;
     }
 
     const isOwnerMsg = OWNER_MATCHERS.some(matcher => senderPhone.includes(matcher) || sender.includes(matcher));
     if (isOwnerMsg) {
         global._lastKnownOwnerJid = sender;
-        console.log(`👑 [BOSS] Recognized Active Owner: ${sender}`);
+        console.log(`👑 [BOSS] Recognized Active Owner: ${sender} (Phone: ${senderPhone})`);
     } else {
-        console.log(`👤 [CUSTOMER] Inbound message from: ${senderPhone}`);
+        console.log(`👤 [CUSTOMER] Inbound message from regular customer: ${senderPhone} (JID: ${sender})`);
     }
     const effectiveSenderPhone = isOwnerMsg ? OWNER_PHONE : senderPhone;
 
@@ -467,8 +470,8 @@ app.post('/api/send-message', async (req, res) => {
             jid = target;
         } else {
             const cleanPhone = cleanPhoneNumber(target);
-            const OWNER_LID = process.env.OWNER_LID || '61379545444551';
-            if (cleanPhone === OWNER_LID || target.includes(OWNER_LID)) {
+            const OWNER_LID = activeOwnerLid;
+            if ((OWNER_LID && cleanPhone === OWNER_LID) || (OWNER_LID && target.includes(OWNER_LID))) {
                 jid = global._lastKnownOwnerJid || `${OWNER_LID}@lid`;
             } else if (global._customerJidMap && global._customerJidMap.get(cleanPhone)) {
                 jid = global._customerJidMap.get(cleanPhone);
@@ -490,6 +493,24 @@ app.post('/api/send-message', async (req, res) => {
         console.error(`❌ [/api/send-message] Error sending to ${target}:`, err.message);
         res.status(500).json({ error: err.message });
     }
+});
+
+// Dynamic Owner Switch API: Automatically changes sole owner and strips old owner
+app.post('/api/set-owner', (req, res) => {
+    const { phone, lid } = req.body;
+    if (!phone) return res.status(400).json({ error: 'phone is required' });
+    activeOwnerPhone = phone;
+    if (lid !== undefined) {
+        activeOwnerLid = lid;
+    } else if (phone.replace(/[^\d]/g, '').endsWith('3140922056')) {
+        activeOwnerLid = '79938417877160';
+    } else {
+        activeOwnerLid = null;
+    }
+    // Force reset last known owner JID so previous owner loses all access immediately
+    global._lastKnownOwnerJid = activeOwnerLid ? `${activeOwnerLid}@lid` : null;
+    console.log(`🔄 [OWNER SWITCH] Active owner changed to ${activeOwnerPhone} (LID: ${activeOwnerLid}). Previous owner completely demoted to regular customer.`);
+    res.json({ success: true, active_owner: activeOwnerPhone, active_lid: activeOwnerLid });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
