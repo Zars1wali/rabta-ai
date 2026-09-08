@@ -25,6 +25,7 @@ class RabtaGraphState(TypedDict, total=False):
     raw_message: str
     catalog_context: str       # formatted product list for AI context
     image_base64: Optional[str]
+    image_url: Optional[str]
 
     # ── Customer session state ────────────────────────────────────────────────
     customer_state: Literal["BROWSING", "DELIVERY_ASKED", "COLLECTING_INFO", "ESCALATED", "RESOLVED"]

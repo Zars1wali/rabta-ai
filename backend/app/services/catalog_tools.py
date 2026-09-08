@@ -7,6 +7,7 @@ execution handlers for both Customer Sales Intelligence and Owner Copilot.
 """
 from __future__ import annotations
 import re
+import base64
 import logging
 import uuid
 from typing import Optional, List, Dict, Any
@@ -411,6 +412,20 @@ OWNER_TOOLS_DECLARATIONS = [
         },
     },
     {
+        "name": "update_catalog_item_photo",
+        "description": "Attach or update the verified product photo for an existing firearm in the catalog using the photo sent by the store owner.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_name": {
+                    "type": "string",
+                    "description": "Name or model of existing firearm to attach photo to (e.g. 'Diamondback DB10', 'Ruger-57 Black')",
+                },
+            },
+            "required": ["product_name"],
+        },
+    },
+    {
         "name": "get_pending_escalations",
         "description": "Retrieve list of open customer questions awaiting owner reply.",
         "parameters": {
@@ -729,6 +744,8 @@ async def execute_tool(tool_name: str, args: Dict[str, Any], context: Dict[str, 
             return await _tool_update_stock_status(tenant_id, args)
         elif tool_name == "add_catalog_item":
             return await _tool_add_catalog_item(tenant_id, args, context)
+        elif tool_name == "update_catalog_item_photo":
+            return await _tool_update_catalog_item_photo(tenant_id, args, context)
         elif tool_name == "get_pending_escalations":
             return await _tool_get_pending_escalations(tenant_id, args)
         elif tool_name == "relay_to_customer":
@@ -879,15 +896,24 @@ def clean_product_query(raw_query: str) -> str:
     if not raw_query:
         return ""
     stop_words = {
-        "share", "send", "show", "give", "bhejo", "bheinjo", "dikhao", "dikhayein",
-        "pic", "pics", "picture", "pictures", "photo", "photos", "tasveer", "tasveerein", "tasweer",
-        "ki", "ka", "ke", "ko", "please", "plz", "bhai", "bro", "sir", "janab",
+        # English photo verbs & fillers
+        "share", "send", "show", "give", "pic", "pics", "picture", "pictures",
+        "photo", "photos", "image", "images", "tasveer", "tasveerein", "tasweer", "tasweere",
+        "please", "plz", "bhai", "bro", "sir", "janab", "boss",
         "chahiye", "available", "hai", "hain", "in", "catalog", "mujhe", "hamein",
-        "check", "karein", "dekhna", "detail", "details", "rate", "price"
+        "check", "karein", "dekhna", "detail", "details", "rate", "price", "prices",
+        "of", "for", "the", "a", "an", "is", "are", "and", "or", "to", "with", "from",
+        "by", "on", "at", "this", "that", "these", "those", "their", "thier", "all",
+        "model", "models", "gun", "weapon", "arms", "pucs", "picx", "fotu", "tasver",
+        # Urdu / Roman Urdu stop words
+        "bhejo", "bheinjo", "bhej", "dikhao", "dikhayein", "dikhana", "dekho", "dekhein",
+        "ki", "ka", "ke", "ko", "mein", "me", "se", "par", "pe", "bhi", "aur", "ya",
+        "kuch", "yeh", "ye", "woh", "wo", "karo", "kardo", "wali", "wala", "wale",
+        "apne", "paas", "hoga", "hogi", "batao", "batayein", "sunao", "kya", "gi", "jee", "haan"
     }
     text = re.sub(r'[^\w\s\.]', ' ', raw_query.lower())
     words = text.split()
-    filtered = [w for w in words if w not in stop_words and (len(w) >= 2 or any(c.isdigit() for c in w))]
+    filtered = [w for w in words if w not in stop_words]
     cleaned = " ".join(filtered)
     return cleaned if cleaned else raw_query.strip()
 
@@ -898,8 +924,8 @@ async def get_product_photos(
     allow_multiple: bool = False,
 ) -> List[Dict[str, str]]:
     """
-    Retrieve product image asset URLs with exact variant ranking.
-    Solves the Taurus G3 vs Taurus G2C ambiguity by prioritizing exact phrase matches.
+    Retrieve product image asset URLs with strict firearm identity validation.
+    Zero hallucination: Never returns an unrelated gun's image when a requested model has no photos.
     """
     try:
         t_uuid = uuid.UUID(tenant_id)
@@ -908,14 +934,30 @@ async def get_product_photos(
 
     cleaned_name = clean_product_query(product_name)
     req_clean = (cleaned_name or product_name).lower().strip()
-    tokens = [t for t in req_clean.split() if len(t) >= 2]
+
+    # Split into meaningful tokens: only len>=3 or tokens containing digits or recognized short codes
+    short_whitelist = {"ak", "ar", "fn", "cz", "hk", "kp", "fx", "m4", "g3"}
+    raw_tokens = [t.strip('.') for t in req_clean.split() if t.strip('.')]
+    tokens = [t for t in raw_tokens if len(t) >= 3 or any(c.isdigit() for c in t) or t in short_whitelist]
     if not tokens:
-        tokens = [t for t in product_name.lower().split() if len(t) >= 2]
+        tokens = [t.strip('.') for t in product_name.lower().split() if len(t) >= 3 or any(c.isdigit() for c in t) or t in short_whitelist]
     if not tokens:
         return []
 
     async with AsyncSessionLocal() as session:
-        token_conds = [CatalogItem.name.ilike(f"%{tok}%") for tok in tokens]
+        token_conds = []
+        for tok in tokens:
+            token_conds.append(CatalogItem.name.ilike(f"%{tok}%"))
+            # Expand DB10 / DB15 / Ruger-57 variations
+            if tok.startswith("db") and tok[2:].isdigit():
+                num = tok[2:]
+                token_conds.append(CatalogItem.name.ilike(f"%db {num}%"))
+                token_conds.append(CatalogItem.name.ilike(f"%db-{num}%"))
+            elif tok in ("57", "5.7"):
+                token_conds.append(CatalogItem.name.ilike("%5.7%"))
+                token_conds.append(CatalogItem.name.ilike("%57%"))
+                token_conds.append(CatalogItem.name.ilike("%5-7%"))
+
         stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, or_(*token_conds)).limit(20)
         res = await session.execute(stmt)
         candidates = res.scalars().all()
@@ -925,35 +967,57 @@ async def get_product_photos(
 
         def _calculate_photo_score(it: CatalogItem) -> float:
             name_lower = (it.name or "").lower()
+            name_words = set(re.findall(r'[a-z0-9]+', name_lower))
             score = 0.0
+
             # 1. Exact phrase match
             if req_clean in name_lower:
-                score += 15.0
-            # 2. Token matches
+                score += 25.0
+
+            # 2. Model number check (e.g. 'db10' vs 'db15', '19' vs '17', '57' vs 'pof')
+            query_model_nums = [t for t in tokens if any(c.isdigit() for c in t)]
+            if query_model_nums:
+                matched_model = False
+                for qm in query_model_nums:
+                    clean_qm = qm.replace(".", "").replace("-", "")
+                    if qm in name_words or clean_qm in name_words or any(clean_qm in w for w in name_words):
+                        score += 15.0
+                        matched_model = True
+                    else:
+                        # If candidate has a conflicting model number, heavily penalize
+                        cand_models = [w for w in name_words if any(c.isdigit() for c in w)]
+                        if cand_models and not any(clean_qm in cm for cm in cand_models):
+                            return -100.0  # Conflicting model, discard immediately
+
+                if not matched_model:
+                    return 0.0
+
+            # 3. Token matches
+            matched_count = 0
             for tok in tokens:
-                if tok in name_lower:
-                    score += 3.0
-            # 3. Model number match (e.g. 'g3' must match 'g3', not 'g2c')
-            for tok in tokens:
-                if any(char.isdigit() for char in tok):
-                    words = name_lower.replace("-", " ").replace("_", " ").split()
-                    if tok in words:
-                        score += 8.0
-                    elif any(w.startswith(tok) for w in words):
-                        score += 3.0
-            # Photo presence bonus: prioritize products that actually have photos
-            if it.images and len(it.images) > 0:
-                score += 10.0
+                clean_tok = tok.replace(".", "")
+                if tok in name_lower or clean_tok in name_words:
+                    score += 5.0
+                    matched_count += 1
+
+            if matched_count == 0:
+                return 0.0
+
             return score
 
         scored = sorted(candidates, key=_calculate_photo_score, reverse=True)
         winner = scored[0]
 
-        if _calculate_photo_score(winner) < 2.0:
+        if _calculate_photo_score(winner) < 5.0:
+            return []
+
+        # Zero Hallucination Rule: If the winning matching product has no photos, NEVER return another weapon's photo!
+        if not winner.images or len(winner.images) == 0:
+            logger.info("[get_product_photos] Matched '%s' but item has no images in catalog.", winner.name)
             return []
 
         photos = []
-        targets = scored[:3] if allow_multiple else [winner]
+        targets = [it for it in scored if _calculate_photo_score(it) >= 10.0 and it.images] if allow_multiple else [winner]
         for it in targets:
             if it.images and isinstance(it.images, list):
                 for img in it.images:
@@ -1294,6 +1358,49 @@ async def _tool_update_stock_status(tenant_id: str, args: Dict[str, Any]) -> Dic
         }
 
 
+def save_catalog_image_bytes(image_bytes: bytes, product_name: str) -> Optional[str]:
+    """
+    Saves raw image bytes into the static catalog_images directory and returns the absolute URL.
+    Works seamlessly in Docker container (/app/app/static/catalog_images) and host VPS environment.
+    """
+    if not image_bytes or len(image_bytes) < 100:
+        return None
+
+    import os
+    import re
+
+    slug = re.sub(r'[^a-z0-9]+', '_', product_name.lower()).strip('_')[:50]
+    filename = f"{slug}.jpg"
+
+    possible_dirs = [
+        "/app/app/static/catalog_images",
+        "/opt/rabta/backend/app/static/catalog_images",
+        os.path.join(os.path.dirname(__file__), "..", "static", "catalog_images"),
+    ]
+    target_dir = None
+    for d in possible_dirs:
+        try:
+            if os.path.exists(d):
+                target_dir = d
+                break
+        except Exception:
+            continue
+
+    if not target_dir:
+        target_dir = os.path.join(os.path.dirname(__file__), "..", "static", "catalog_images")
+        os.makedirs(target_dir, exist_ok=True)
+
+    filepath = os.path.join(target_dir, filename)
+    try:
+        with open(filepath, "wb") as f:
+            f.write(image_bytes)
+        logger.info("[save_catalog_image_bytes] Successfully saved %d bytes to %s", len(image_bytes), filepath)
+        return f"http://65.20.90.130/static/catalog_images/{filename}"
+    except Exception as e:
+        logger.error("[save_catalog_image_bytes] Failed to write image: %s", e)
+        return None
+
+
 async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     name = args.get("name", "").strip()
     price = float(args.get("price", 0))
@@ -1308,28 +1415,56 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
         return {"status": "error", "message": "Invalid tenant ID"}
 
     images = []
+    # 1. Check if owner uploaded image bytes or base64 in context
+    img_bytes = context.get("image_bytes")
+    if not img_bytes and context.get("image_base64"):
+        try:
+            img_bytes = base64.b64decode(context["image_base64"])
+        except Exception:
+            pass
+
+    if img_bytes:
+        saved_url = save_catalog_image_bytes(img_bytes, name)
+        if saved_url:
+            images.append(saved_url)
+
+    # 2. Check pending_image_url / image_url from context
     pending_img = context.get("pending_image_url") or context.get("image_url")
-    if pending_img:
+    if pending_img and pending_img not in images:
         images.append(pending_img)
 
     async with AsyncSessionLocal() as session:
-        item = CatalogItem(
-            tenant_id=t_uuid,
-            name=name,
-            price=price,
-            category=category,
-            description=f"{name} ({origin}). Caliber: {caliber}. Capacity: {capacity}.",
-            images=images,
-            metadata_json={
-                "origin": origin,
-                "caliber": caliber,
-                "capacity": capacity,
-            },
-            in_stock=True,
+        # Check if item with this name already exists in catalog
+        existing_res = await session.execute(
+            select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, CatalogItem.name.ilike(name)).limit(1)
         )
-        session.add(item)
-        await session.commit()
-        await session.refresh(item)
+        existing_item = existing_res.scalars().first()
+        if existing_item:
+            existing_item.price = price
+            if images:
+                existing_item.images = images
+            existing_item.in_stock = True
+            await session.commit()
+            await session.refresh(existing_item)
+            item = existing_item
+        else:
+            item = CatalogItem(
+                tenant_id=t_uuid,
+                name=name,
+                price=price,
+                category=category,
+                description=f"{name} ({origin}). Caliber: {caliber}. Capacity: {capacity}.",
+                images=images,
+                metadata_json={
+                    "origin": origin,
+                    "caliber": caliber,
+                    "capacity": capacity,
+                },
+                in_stock=True,
+            )
+            session.add(item)
+            await session.commit()
+            await session.refresh(item)
 
         try:
             from app.api.gateway_bridge import invalidate_catalog_cache
@@ -1343,7 +1478,67 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
             "name": name,
             "price": price,
             "has_photo": len(images) > 0,
-            "message": f"Naya item '{name}' Rs. {price:,.0f} mein catalog mein add hogaya hai.",
+            "images": images,
+            "message": f"Naya item '{name}' Rs. {price:,.0f} mein catalog mein save hogaya hai (Images: {len(images)}).",
+        }
+
+
+async def _tool_update_catalog_item_photo(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    product_name = args.get("product_name", "").strip()
+    try:
+        t_uuid = uuid.UUID(tenant_id)
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid tenant ID"}
+
+    img_bytes = context.get("image_bytes")
+    if not img_bytes and context.get("image_base64"):
+        try:
+            img_bytes = base64.b64decode(context["image_base64"])
+        except Exception:
+            pass
+
+    if not img_bytes:
+        pending_img = context.get("pending_image_url") or context.get("image_url")
+        if not pending_img:
+            return {
+                "status": "error",
+                "message": "Koi photo receive nahi hui. Please firearm ki photo WhatsApp par send karein.",
+            }
+        saved_url = pending_img
+    else:
+        saved_url = save_catalog_image_bytes(img_bytes, product_name)
+
+    if not saved_url:
+        return {"status": "error", "message": "Photo save karne mein issue aaya."}
+
+    async with AsyncSessionLocal() as session:
+        # Search item by name
+        res = await session.execute(
+            select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, CatalogItem.name.ilike(f"%{product_name}%")).limit(5)
+        )
+        items = res.scalars().all()
+        if not items:
+            return {"status": "not_found", "message": f"Catalog mein '{product_name}' nahi mila."}
+
+        target = items[0]
+        if img_bytes:
+            saved_url = save_catalog_image_bytes(img_bytes, target.name) or saved_url
+
+        target.images = [saved_url]
+        await session.commit()
+        await session.refresh(target)
+
+        try:
+            from app.api.gateway_bridge import invalidate_catalog_cache
+            invalidate_catalog_cache(tenant_id)
+        except Exception:
+            pass
+
+        return {
+            "status": "success",
+            "product_name": target.name,
+            "image_url": saved_url,
+            "message": f"Haider bhai, '{target.name}' ki photo successfully catalog mein save aur link kardi gayi hai: {saved_url}",
         }
 
 

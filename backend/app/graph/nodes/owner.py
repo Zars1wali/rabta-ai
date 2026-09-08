@@ -66,7 +66,10 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
         "tenant_id": str(t_uuid),
         "sender_phone": sender_phone,
         "is_boss": True,
-        "pending_image_url": state.get("media_url"),
+        "pending_image_url": state.get("image_url") or state.get("media_url"),
+        "image_url": state.get("image_url"),
+        "image_bytes": image_bytes,
+        "image_base64": image_b64,
     }
 
     # If owner is directly answering a pending customer escalation, execute _tool_relay_to_customer

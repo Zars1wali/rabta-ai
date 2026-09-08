@@ -140,14 +140,25 @@ async def process_gateway_message(payload: GatewayMessagePayload):
 
             # Preserve uploaded media across short follow-up messages (e.g. Turn 1: photo, Turn 2: "Add this" or "Price 700k")
             effective_image_b64 = payload.image_base64
+            saved_image_url = None
             if payload.image_base64:
-                _recent_media_cache[norm_from] = (time.time(), payload.image_base64)
+                try:
+                    from app.services.catalog_tools import save_catalog_image_bytes
+                    img_raw = base64.b64decode(payload.image_base64)
+                    saved_image_url = save_catalog_image_bytes(img_raw, f"inbound_{norm_from}")
+                except Exception as e:
+                    logger.warning("Failed to auto-save inbound image: %s", e)
+                _recent_media_cache[norm_from] = (time.time(), payload.image_base64, saved_image_url)
             elif norm_from in _recent_media_cache:
-                cached_ts, cached_b64 = _recent_media_cache[norm_from]
-                if (time.time() - cached_ts) < 300:  # 5 minutes TTL
+                cache_entry = _recent_media_cache[norm_from]
+                cached_ts = cache_entry[0]
+                cached_b64 = cache_entry[1]
+                cached_url = cache_entry[2] if len(cache_entry) > 2 else None
+                if (time.time() - cached_ts) < 600:  # 10 minutes TTL
                     msg_l = effective_message.lower()
-                    if any(kw in msg_l for kw in ["add", "photo", "image", "pic", "tasveer", "ye", "yeh", "isko", "is ko", "this", "kardo", "kar do", "rate", "price"]):
+                    if is_boss or any(kw in msg_l for kw in ["add", "photo", "image", "pic", "tasveer", "ye", "yeh", "isko", "is ko", "this", "kardo", "kar do", "rate", "price", "k"]) or any(c.isdigit() for c in msg_l):
                         effective_image_b64 = cached_b64
+                        saved_image_url = cached_url
 
             # ---------------------------------------------------------------
             # 4. LANGGRAPH INVOCATION
@@ -173,6 +184,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 "raw_message": effective_message,
                 "catalog_context": catalog_context,
                 "image_base64": effective_image_b64,
+                "image_url": saved_image_url,
                 "conversation_history": history,
                 "customer_sim_phone": detected_sim,
                 "push_name": payload.push_name,
