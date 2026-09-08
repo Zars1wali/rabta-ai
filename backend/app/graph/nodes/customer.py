@@ -586,8 +586,13 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                 if photos:
                     media_url = photos[0]["url"]
                     prod_name = photos[0].get("product_name") or cand_product.title()
-                    media_urls = [{"name": prod_name, "url": media_url, "caption": photos[0].get("caption", f"Jee yeh rahi {prod_name} ki picture.")}]
-                    reply = f"Yeh rahi {prod_name} ki picture bhai. Genuine import piece."
+                    caption_text = photos[0].get("caption")
+                    if not caption_text:
+                        p_val = photos[0].get("price")
+                        p_str = f" — {p_val:,.0f} PKR" if p_val else ""
+                        caption_text = f"Yeh hai piece{p_str}. Genuine import."
+                    media_urls = [{"name": prod_name, "url": media_url, "caption": caption_text}]
+                    reply = caption_text
                     return {
                         **state,
                         "customer_state": "BROWSING",

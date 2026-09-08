@@ -39,24 +39,28 @@ async def build_part_b_live_data(
     prof = (tenant.business_profile or {}) if tenant else {}
     ai_cfg = (tenant.ai_persona_config or {}) if tenant else {}
 
-    biz_name = (tenant.name if tenant else None) or prof.get("business_name") or "Haider Arms"
-    owner_name = prof.get("owner_name", "Shahzad Haider Bhai")
-    address = prof.get("address", "GT Road, Peshawar, KPK, Pakistan")
-    maps_url = prof.get("google_maps_url", "https://maps.app.goo.gl/8gvF8FdxbKd8S5ip7")
-    phone = (tenant.business_phone if tenant else None) or prof.get("phone", "+92 300 1234567")
-    hours = prof.get("opening_hours", "10:00 AM till 7:00 PM (Monday to Saturday)")
-    insta = prof.get("instagram_url", "https://www.instagram.com/haiderarmsofficial")
+    biz_name = (tenant.name if tenant else None) or prof.get("business_name") or "Haider Arms / Haider Khan & Sons Arms & Ammunition Dealer"
+    owner_name = prof.get("owner_name", "Shahzad Haider Khan")
+    address = prof.get("address", "Shop 4, Old Fruit Market, GT Rd, Sikander Town Sikandar Town, Peshawar")
+    maps_url = prof.get("google_maps_url", "https://www.google.com/maps/place/Haider+Arms/@34.0162786,71.5943887,17z/data=!3m1!4b1!4m6!3m5!1s0x38d93d4bd8ca0b29:0xf89b91b07be45815!8m2!3d34.0162786!4d71.5943887!16s%2Fg%2F11kq4xt0x4?entry=ttu&g_ep=EgoyMDI2MDkwMi4wIKXMDSoASAFQAw%3D%3D")
+    phone = (tenant.business_phone if tenant else None) or prof.get("phone", "+923040124445")
+    hours = prof.get("opening_hours", "9:00 am till 7:00pm")
+    fb = prof.get("facebook_url", "https://www.facebook.com/share/1FPQsjhe7k/?mibextid=wwXIfr")
+    insta = prof.get("instagram_url", "https://www.instagram.com/haiderarmsofficial?igsi=MWVma3I0aWFva2M2bw%3D%3D&utm_source=qr")
+    website = prof.get("website", "haiderarms.com")
     yt = prof.get("youtube_url", "https://www.youtube.com/@haiderarmofficial")
 
     business_details = (
-        f"Business Name: {biz_name}\n"
-        f"Owner Name: {owner_name}\n"
-        f"Official Address: {address}\n"
-        f"Google Maps: {maps_url}\n"
-        f"Operating Hours: Physical shop: {hours}. Online AI: 24/7\n"
-        f"Contact Phone: {phone}\n"
-        f"Instagram: {insta}\n"
-        f"YouTube: {yt}"
+        f"BUSINESS NAME: {biz_name}\n"
+        f"OWNER NAME: {owner_name}\n"
+        f"LOCATION: {address}\n"
+        f"GOOGLE MAPS: {maps_url}\n"
+        f"FACEBOOK: {fb}\n"
+        f"INSTAGRAM: {insta}\n"
+        f"WEBSITE: {website}\n"
+        f"YOUTUBE: {yt}\n"
+        f"AI ACTIVE: 24/7\n"
+        f"PHYSICAL SHOP HOURS: {hours}"
     )
 
     # 2. Check Daily Price Confirmation Status

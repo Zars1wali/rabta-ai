@@ -1025,10 +1025,12 @@ async def get_product_photos(
                         url = img.strip()
                         if url.startswith("/"):
                             url = f"http://65.20.90.130{url}"
+                        price_str = f" — {it.price:,.0f} PKR" if it.price else ""
                         photos.append({
                             "product_name": it.name,
                             "url": url,
-                            "caption": f"Jee yeh rahi {it.name} ki picture.",
+                            "price": float(it.price) if it.price else None,
+                            "caption": f"Yeh hai piece{price_str}. Genuine import.",
                         })
                         if not allow_multiple:
                             break

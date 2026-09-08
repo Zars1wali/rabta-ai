@@ -41,14 +41,13 @@ def test_parse_rabta_flags():
 
 
 def test_customer_prompt_structure():
-    # Verify Part A contents
-    assert "A.0 — VERIFIED BUSINESS IDENTITY" in PART_A_CORE_PROMPT
-    assert "A.1 — YOUR IDENTITY" in PART_A_CORE_PROMPT
-    assert "A.15 — SALES TOWARDS DELIVERY FIRST" in PART_A_CORE_PROMPT
-    assert "A.28 — ESCALATION — IMMEDIATE AND SILENT" in PART_A_CORE_PROMPT
-    assert "A.33 — THINGS YOU NEVER DO" in PART_A_CORE_PROMPT
+    # Verify Section headings
+    assert "# 0. VERIFIED BUSINESS IDENTITY" in PART_A_CORE_PROMPT
+    assert "# 19. SALES TOWARDS DELIVERY FIRST" in PART_A_CORE_PROMPT
+    assert "# 31. ESCALATION — IMMEDIATE AND SILENT" in PART_A_CORE_PROMPT
+    assert "# 36. THINGS YOU NEVER DO" in PART_A_CORE_PROMPT
 
-    # Verify Part B injection
+    # Verify Section 39 live data injection
     full_prompt = build_customer_sales_prompt(
         business_details="Haider Arms, GT Road Peshawar",
         products_and_prices="Glock 19 Gen 5 | 485,000 PKR | Imported Austria | Confirmed Today: Yes",
@@ -56,10 +55,11 @@ def test_customer_prompt_structure():
         image_index="Glock 19 Gen 5 | 9mm pistol | https://img.example.com/g19.jpg",
         active_rules="No discount on Glock this week.",
     )
-    assert "PART B — LIVE BUSINESS DATA" in full_prompt
-    assert "B.1 — BUSINESS DETAILS" in full_prompt
+    assert "# 39. LIVE DATA — INJECTED BEFORE EVERY CONVERSATION" in full_prompt
+    assert "BUSINESS_DETAILS: Haider Arms, GT Road Peshawar" in full_prompt
     assert "485,000 PKR" in full_prompt
     assert "No discount on Glock this week." in full_prompt
+    assert "PRICES_CONFIRMED_TODAY: YES" in full_prompt
 
 
 def test_owner_alert_formatting():

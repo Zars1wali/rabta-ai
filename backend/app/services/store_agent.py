@@ -33,19 +33,40 @@ logger = logging.getLogger(__name__)
 async def _get_live_business_and_customer_context(
     tenant_id: Optional[str],
     sender_phone: Optional[str],
-) -> tuple[bool, str, bool, str, str]:
+    business_name: Optional[str] = None,
+    industry: Optional[str] = None,
+) -> tuple[bool, str, bool, str, str, str, str]:
     """
-    Returns (ai_active, message_limit_status, prices_confirmed_today, customer_history, active_rules)
-    by inspecting tenant settings, escalation records, and customer-specific pricing.
+    Live context gathering before every conversation turn:
+    - AI Active status
+    - Daily message limits
+    - Prices confirmed status
+    - Customer history
+    - Active business rules
+    - Business details (Section 0 verified identity)
+    - Owner preferences
     """
     ai_active = True
     message_limit_status = "ACTIVE"
     prices_confirmed_today = True
     customer_history = ""
     active_rules = "Ground all prices and specs strictly in catalog. Use tools to search products or retrieve photos."
+    owner_preferences = "Products marked OWNER_PREFERENCE: YES should be prioritized when they genuinely fit the customer's needs. Never force them. Never mention margin to the customer."
+    business_details = (
+        "BUSINESS NAME: Haider Arms / Haider Khan & Sons Arms & Ammunition Dealer\n"
+        "OWNER NAME: Shahzad Haider Khan\n"
+        "LOCATION: Shop 4, Old Fruit Market, GT Rd, Sikander Town Sikandar Town, Peshawar\n"
+        "GOOGLE MAPS: https://www.google.com/maps/place/Haider+Arms/@34.0162786,71.5943887,17z/data=!3m1!4b1!4m6!3m5!1s0x38d93d4bd8ca0b29:0xf89b91b07be45815!8m2!3d34.0162786!4d71.5943887!16s%2Fg%2F11kq4xt0x4?entry=ttu&g_ep=EgoyMDI2MDkwMi4wIKXMDSoASAFQAw%3D%3D\n"
+        "FACEBOOK: https://www.facebook.com/share/1FPQsjhe7k/?mibextid=wwXIfr\n"
+        "INSTAGRAM: https://www.instagram.com/haiderarmsofficial?igsi=MWVma3I0aWFva2M2bw%3D%3D&utm_source=qr\n"
+        "WEBSITE: haiderarms.com\n"
+        "YOUTUBE: https://www.youtube.com/@haiderarmofficial\n"
+        "AI ACTIVE: 24/7\n"
+        "PHYSICAL SHOP HOURS: 9:00 am till 7:00pm"
+    )
 
     if not tenant_id:
-        return ai_active, message_limit_status, prices_confirmed_today, customer_history, active_rules
+        return ai_active, message_limit_status, prices_confirmed_today, customer_history, active_rules, business_details, owner_preferences
 
     try:
         from app.db.session import AsyncSessionLocal
@@ -66,27 +87,56 @@ async def _get_live_business_and_customer_context(
                 ai_cfg = tenant.ai_persona_config or {}
                 prof = tenant.business_profile or {}
 
-                # 1. AI Active Status (PDF 1 §B.8 & PDF 2 §2)
+                # 1. AI Active Status (Section 39)
                 if ai_cfg.get("ai_active") is False or prof.get("ai_active") is False:
                     ai_active = False
 
-                # 2. Daily Message Limit Status (PDF 1 §B.7)
+                # 2. Daily Message Limit Status (Section 39)
                 if prof.get("message_limit_reached") is True:
                     message_limit_status = "LIMIT_REACHED"
 
-                # 3. Prices Confirmed Today (PDF 1 §B.3 & PDF 2 §13)
+                # 3. Prices Confirmed Today (Section 39)
                 confirmed_date = ai_cfg.get("prices_confirmed_date")
                 is_confirmed = ai_cfg.get("prices_confirmed_today")
                 if confirmed_date != today_pst or is_confirmed is False:
                     if is_confirmed is False or (confirmed_date and confirmed_date != today_pst):
                         prices_confirmed_today = False
 
-                # 4. Active Rules (PDF 1 §B.6)
+                # 4. Active Rules (Section 39)
                 custom_rules = prof.get("active_rules") or prof.get("sales_rules")
                 if custom_rules:
                     active_rules = custom_rules
 
-                # 5. Returning Customer History & Custom Pricing (PDF 1 §B.5 & PDF 2 §24)
+                # 5. Owner Preferences (Section 39)
+                if prof.get("owner_preferences"):
+                    owner_preferences = prof.get("owner_preferences")
+
+                # 6. Verified Business Profile (Section 0)
+                biz_name = (tenant.name if tenant else None) or prof.get("business_name") or business_name or "Haider Arms / Haider Khan & Sons Arms & Ammunition Dealer"
+                owner_name = prof.get("owner_name", "Shahzad Haider Khan")
+                address = prof.get("address", "Shop 4, Old Fruit Market, GT Rd, Sikander Town Sikandar Town, Peshawar")
+                maps_url = prof.get("google_maps_url", "https://www.google.com/maps/place/Haider+Arms/@34.0162786,71.5943887,17z/data=!3m1!4b1!4m6!3m5!1s0x38d93d4bd8ca0b29:0xf89b91b07be45815!8m2!3d34.0162786!4d71.5943887!16s%2Fg%2F11kq4xt0x4?entry=ttu&g_ep=EgoyMDI2MDkwMi4wIKXMDSoASAFQAw%3D%3D")
+                phone = (tenant.business_phone if tenant else None) or prof.get("phone", "+923040124445")
+                hours = prof.get("opening_hours", "9:00 am till 7:00pm")
+                fb = prof.get("facebook_url", "https://www.facebook.com/share/1FPQsjhe7k/?mibextid=wwXIfr")
+                insta = prof.get("instagram_url", "https://www.instagram.com/haiderarmsofficial?igsi=MWVma3I0aWFva2M2bw%3D%3D&utm_source=qr")
+                website = prof.get("website", "haiderarms.com")
+                yt = prof.get("youtube_url", "https://www.youtube.com/@haiderarmofficial")
+
+                business_details = (
+                    f"BUSINESS NAME: {biz_name}\n"
+                    f"OWNER NAME: {owner_name}\n"
+                    f"LOCATION: {address}\n"
+                    f"GOOGLE MAPS: {maps_url}\n"
+                    f"FACEBOOK: {fb}\n"
+                    f"INSTAGRAM: {insta}\n"
+                    f"WEBSITE: {website}\n"
+                    f"YOUTUBE: {yt}\n"
+                    f"AI ACTIVE: 24/7\n"
+                    f"PHYSICAL SHOP HOURS: {hours}"
+                )
+
+                # 7. Returning Customer History & Custom Pricing (Section 24)
                 if sender_phone:
                     phone_clean = re.sub(r'[^\d]', '', sender_phone)
                     all_escs = _load_persisted_escalations()
@@ -123,7 +173,7 @@ async def _get_live_business_and_customer_context(
     except Exception as e:
         logger.warning("[_get_live_business_and_customer_context] Error reading live context: %s", e)
 
-    return ai_active, message_limit_status, prices_confirmed_today, customer_history, active_rules
+    return ai_active, message_limit_status, prices_confirmed_today, customer_history, active_rules, business_details, owner_preferences
 
 
 class WhatsAppStoreAgent:
@@ -173,12 +223,12 @@ class WhatsAppStoreAgent:
                 "source": src,
             }
 
-        # PDF 1 Part B: Query live business and customer context
-        ai_active, msg_limit_status, prices_confirmed_today, customer_hist, active_rules = (
-            await _get_live_business_and_customer_context(tenant_id, sender_phone)
+        # Query live business, catalog, and customer context (Section 39)
+        ai_active, msg_limit_status, prices_confirmed_today, customer_hist, active_rules, biz_details, owner_prefs = (
+            await _get_live_business_and_customer_context(tenant_id, sender_phone, business_name, industry)
         )
 
-        # PDF 1 §B.8: AI Active Status Guardrail
+        # Section 39 Guardrail: AI Active Status
         if not ai_active:
             logger.info("[%s] AI customer responses are PAUSED for tenant %s. Suppressing response.", request_id, tenant_id)
             return {
@@ -193,7 +243,7 @@ class WhatsAppStoreAgent:
                 "source": "guardrail_ai_paused",
             }
 
-        # PDF 1 §B.7: Daily Message Limit Guardrail
+        # Section 39 Guardrail: Daily Message Limit
         if msg_limit_status == "LIMIT_REACHED":
             logger.info("[%s] Daily message limit reached for tenant %s. Flagging for manual takeover.", request_id, tenant_id)
             return {
@@ -216,14 +266,15 @@ class WhatsAppStoreAgent:
             except Exception as e:
                 logger.warning("[%s] Could not decode image_base64: %s", request_id, e)
 
-        # Build comprehensive system instructions with fresh Part B live data
+        # Build comprehensive system instructions with fresh Section 39 live data
         system_instruction = build_customer_sales_prompt(
-            business_details=f"Store Name: {business_name}\nIndustry: {industry}\nLocation: GT Road, Peshawar, KPK",
+            business_details=biz_details,
             products_and_prices=catalog_context,
             prices_confirmed_today=prices_confirmed_today,
             image_index="",
             customer_history=customer_hist,
             active_rules=active_rules,
+            owner_preferences=owner_prefs,
             message_limit_status=msg_limit_status,
             ai_active=ai_active,
         )

@@ -225,11 +225,11 @@ def test_build_customer_sales_prompt_part_b_injection():
         message_limit_status="ACTIVE",
         ai_active=True,
     )
-    assert "B.3 — PRICES CONFIRMED STATUS\nNO" in prompt
+    assert "PRICES_CONFIRMED_TODAY: NO" in prompt
     assert "Trigger OWNER_QUERY" in prompt
-    assert "B.5 — CUSTOMER HISTORY\nName: Tariq" in prompt
-    assert "B.6 — ACTIVE RULES FROM OWNER\nNo discounts on ammo" in prompt
-    assert "B.8 — AI ACTIVE STATUS\nYES" in prompt
+    assert "CUSTOMER_HISTORY: Name: Tariq" in prompt
+    assert "ACTIVE_RULES: No discounts on ammo" in prompt
+    assert "AI_ACTIVE: YES" in prompt
 
 
 def test_build_customer_sales_prompt_ai_paused():
@@ -239,7 +239,7 @@ def test_build_customer_sales_prompt_ai_paused():
         products_and_prices="Glock 19 | 485,000 PKR",
         ai_active=False,
     )
-    assert "B.8 — AI ACTIVE STATUS\nNO" in prompt
+    assert "AI_ACTIVE: NO" in prompt
 
 
 def test_scheduler_agent_initialization():
