@@ -28,9 +28,28 @@ class WhatsAppService:
         }
 
     async def send_text_message(self, to_phone: str, message: str) -> bool:
-        """Sends a text message to a WhatsApp user using Meta Cloud API."""
+        """Sends a text message to a WhatsApp user via Baileys QR Gateway or Meta Cloud API."""
+        clean_phone = to_phone.replace("+", "").replace(" ", "").replace("-", "")
+
+        # 1. Try Baileys QR Gateway (internal Docker network or localhost)
+        gateway_urls = [
+            "http://gateway:3001/api/send-message",
+            "http://localhost:3001/api/send-message",
+            "http://127.0.0.1:3001/api/send-message",
+        ]
+        for g_url in gateway_urls:
+            try:
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    resp = await client.post(g_url, json={"phone": clean_phone, "message": message})
+                    if resp.status_code == 200:
+                        logger.info("[WhatsApp] Dispatched via Baileys gateway (%s) to %s", g_url, clean_phone)
+                        return True
+            except Exception:
+                continue
+
+        # 2. Try Meta Cloud API if configured
         if not settings.WHATSAPP_ACCESS_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
-            logger.warning("[WhatsApp] Missing API keys. Simulating message output:\nTo: %s\nText: %s", to_phone, message)
+            logger.warning("[WhatsApp] Neither Baileys nor Meta API reachable. Simulating message output:\nTo: %s\nText: %s", to_phone, message)
             return True
 
         payload = {

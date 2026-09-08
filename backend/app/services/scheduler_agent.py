@@ -105,19 +105,19 @@ class SchedulerAgent:
                 if confirmed:
                     continue
 
-                # Stage 0 → 1: Send initial at 9:00 AM
-                if stage_today == 0 and hour == 9 and minute >= 0:
+                # Stage 0 → 1: Send initial if 9:00 AM PST or later and not sent today
+                if stage_today == 0 and hour >= 9:
                     await self._send_price_confirmation_initial()
                     stage_today = 1
                     logger.info("[SchedulerAgent] Sent daily price confirmation (initial) at %s", now)
 
-                # Stage 1 → 2: Send reminder at 9:30 AM
-                elif stage_today == 1 and hour == 9 and minute >= 30:
+                # Stage 1 → 2: Send reminder at 9:30 AM PST
+                elif stage_today == 1 and (hour > 9 or (hour == 9 and minute >= 30)):
                     await self._send_price_confirmation_reminder1()
                     stage_today = 2
                     logger.info("[SchedulerAgent] Sent price confirmation reminder 1 at %s", now)
 
-                # Stage 2 → 3: Send final reminder at 10:00 AM
+                # Stage 2 → 3: Send final reminder at 10:00 AM PST
                 elif stage_today == 2 and hour >= 10:
                     await self._send_price_confirmation_reminder2()
                     stage_today = 3
@@ -146,7 +146,8 @@ class SchedulerAgent:
 
                 ai_cfg = tenant.ai_persona_config or {}
                 confirmed_date = ai_cfg.get("prices_confirmed_date")
-                return confirmed_date == _today_pst_date()
+                is_confirmed = ai_cfg.get("prices_confirmed_today")
+                return bool(confirmed_date == _today_pst_date() and is_confirmed is True)
         except Exception as e:
             logger.error("[SchedulerAgent] Error checking price confirmation: %s", e)
             return True  # Default to confirmed to avoid spamming
