@@ -23,13 +23,20 @@ router = APIRouter(prefix="/api/gateway", tags=["WhatsApp QR Gateway Bridge"])
 # Catalog cache (60s TTL) + recent media cache (300s TTL) + metrics
 # ---------------------------------------------------------------------------
 _catalog_cache: Dict[str, Any] = {}
-_recent_media_cache: Dict[str, Tuple[float, str]] = {}
+_recent_media_cache: Dict[str, List[Dict[str, Any]]] = {}
 _metrics = {
     "total_incoming": 0,
     "total_replies": 0,
     "total_errors": 0,
     "recent_failures": [],
 }
+
+
+def clear_recent_media_cache(sender: str):
+    """Clear cached photos for a sender after successful catalog intake."""
+    norm = normalize_phone(sender)
+    if norm:
+        _recent_media_cache.pop(norm, None)
 
 
 def _record_failure(business_phone: str, customer_phone: str, error: str, request_id: str):
@@ -151,6 +158,12 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             # Preserve uploaded media across short follow-up messages (e.g. Turn 1: photo, Turn 2: "Add this" or "Price 700k")
             effective_image_b64 = payload.image_base64
             saved_image_url = None
+            now = time.time()
+
+            # Clean entries older than 300s (5 mins)
+            existing_media = _recent_media_cache.get(norm_from, [])
+            valid_media = [e for e in existing_media if (now - e.get("ts", 0)) < 300]
+
             if payload.image_base64:
                 try:
                     from app.services.catalog_tools import save_catalog_image_bytes
@@ -158,17 +171,21 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                     saved_image_url = save_catalog_image_bytes(img_raw, f"inbound_{norm_from}")
                 except Exception as e:
                     logger.warning("Failed to auto-save inbound image: %s", e)
-                _recent_media_cache[norm_from] = (time.time(), payload.image_base64, saved_image_url)
-            elif norm_from in _recent_media_cache:
-                cache_entry = _recent_media_cache[norm_from]
-                cached_ts = cache_entry[0]
-                cached_b64 = cache_entry[1]
-                cached_url = cache_entry[2] if len(cache_entry) > 2 else None
-                if (time.time() - cached_ts) < 600:  # 10 minutes TTL
-                    msg_l = effective_message.lower()
-                    if is_boss or any(kw in msg_l for kw in ["add", "photo", "image", "pic", "tasveer", "ye", "yeh", "isko", "is ko", "this", "kardo", "kar do", "rate", "price", "k"]) or any(c.isdigit() for c in msg_l):
-                        effective_image_b64 = cached_b64
-                        saved_image_url = cached_url
+                valid_media.append({
+                    "ts": now,
+                    "base64": payload.image_base64,
+                    "url": saved_image_url,
+                })
+                _recent_media_cache[norm_from] = valid_media
+            elif valid_media:
+                _recent_media_cache[norm_from] = valid_media
+                msg_l = effective_message.lower()
+                if is_boss or any(kw in msg_l for kw in ["add", "photo", "image", "pic", "tasveer", "ye", "yeh", "isko", "is ko", "this", "kardo", "kar do", "rate", "price", "k"]) or any(c.isdigit() for c in msg_l):
+                    effective_image_b64 = valid_media[-1].get("base64")
+                    saved_image_url = valid_media[-1].get("url")
+
+            # Collect all active cached URLs for this sender (e.g. 2-3 images sent together)
+            all_cached_urls = [e["url"] for e in _recent_media_cache.get(norm_from, []) if e.get("url")]
 
             # ---------------------------------------------------------------
             # 4. LANGGRAPH INVOCATION
@@ -195,6 +212,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 "catalog_context": catalog_context,
                 "image_base64": effective_image_b64,
                 "image_url": saved_image_url,
+                "image_urls": all_cached_urls if all_cached_urls else ([saved_image_url] if saved_image_url else None),
                 "conversation_history": history,
                 "customer_sim_phone": detected_sim,
                 "push_name": payload.push_name,

@@ -54,6 +54,49 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
             "owner_alert": None,
         }
 
+    # 2. Check Pending Photo Confirmation (Option 1: Replace vs Option 2: Keep Both)
+    from app.services.catalog_tools import (
+        get_pending_photo_confirmation,
+        resolve_pending_photo_confirmation,
+        clear_pending_photo_confirmation,
+    )
+    pending_photo = get_pending_photo_confirmation(str(t_uuid))
+    if pending_photo:
+        raw_l = raw_message.strip().lower()
+        choice_action = None
+
+        # Option 1: Replace / Delete Old
+        if raw_l in ["1", "one", "first", "option 1", "pehla", "pehli", "replace", "delete"]:
+            choice_action = "replace"
+        elif any(kw in raw_l for kw in ["replace", "purani delete", "old delete", "hata do", "hata dein", "delete kardo", "delete kar do", "badal do"]):
+            choice_action = "replace"
+        elif re.search(r'\b1\b', raw_l) and not re.search(r'\b2\b', raw_l):
+            choice_action = "replace"
+
+        # Option 2: Keep Both / Dono
+        elif raw_l in ["2", "two", "second", "option 2", "doosra", "doosri", "dono", "keep", "both", "all", "saari"]:
+            choice_action = "keep_both"
+        elif any(kw in raw_l for kw in ["dono", "keep", "both", "saari", "sari", "purani bhi", "old bhi", "add kardo", "add kar do", "rakhein", "rakh lo", "rakhlo"]):
+            choice_action = "keep_both"
+        elif re.search(r'\b2\b', raw_l) and not re.search(r'\b1\b', raw_l):
+            choice_action = "keep_both"
+
+        # Cancel
+        elif any(kw in raw_l for kw in ["cancel", "rehnay do", "rehnde", "chhoro", "no"]):
+            choice_action = "cancel"
+
+        if choice_action:
+            res = await resolve_pending_photo_confirmation(str(t_uuid), choice_action)
+            reply = res.get("message") or "Photo confirmation updated."
+            return {
+                **state,
+                "reply_text": reply,
+                "reply_chunks": [reply],
+                "media_url": None,
+                "media_urls": None,
+                "owner_alert": None,
+            }
+
     # Decode image bytes if owner sent an image
     image_bytes = None
     if image_b64:
@@ -68,6 +111,7 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
         "is_boss": True,
         "pending_image_url": state.get("image_url") or state.get("media_url"),
         "image_url": state.get("image_url"),
+        "image_urls": state.get("image_urls") or ([state.get("image_url")] if state.get("image_url") else []),
         "image_bytes": image_bytes,
         "image_base64": image_b64,
     }

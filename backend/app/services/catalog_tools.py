@@ -6,6 +6,9 @@ Provides strict JSON schema tool declarations and deterministic Python
 execution handlers for both Customer Sales Intelligence and Owner Copilot.
 """
 from __future__ import annotations
+import os
+import json
+import time
 import re
 import base64
 import logging
@@ -420,6 +423,10 @@ OWNER_TOOLS_DECLARATIONS = [
                 "product_name": {
                     "type": "string",
                     "description": "Name or model of existing firearm to attach photo to (e.g. 'Diamondback DB10', 'Ruger-57 Black')",
+                },
+                "action": {
+                    "type": "string",
+                    "description": "Optional: 'replace' to delete old photos and set new ones, or 'keep_both' to keep old and add new ones. If omitted, system asks owner.",
                 },
             },
             "required": ["product_name"],
@@ -1032,8 +1039,6 @@ async def get_product_photos(
                             "price": float(it.price) if it.price else None,
                             "caption": f"Yeh hai piece{price_str}. Genuine import.",
                         })
-                        if not allow_multiple:
-                            break
 
         return photos
 
@@ -1360,19 +1365,160 @@ async def _tool_update_stock_status(tenant_id: str, args: Dict[str, Any]) -> Dic
         }
 
 
+# ---------------------------------------------------------------------------
+# Pending Photo Confirmations (Option 1: Replace vs Option 2: Keep Both)
+# ---------------------------------------------------------------------------
+_PENDING_PHOTOS_FILE = (
+    "/tmp/rabta_pending_photos.json"
+    if os.name != 'nt'
+    else os.path.join(os.environ.get("TEMP", "C:\\temp"), "rabta_pending_photos.json")
+)
+try:
+    os.makedirs(os.path.dirname(_PENDING_PHOTOS_FILE), exist_ok=True)
+except Exception:
+    pass
+
+_pending_photo_confirmations: Dict[str, Dict[str, Any]] = {}
+
+
+def _load_pending_photo_confirmations() -> Dict[str, Dict[str, Any]]:
+    global _pending_photo_confirmations
+    if os.path.exists(_PENDING_PHOTOS_FILE):
+        try:
+            with open(_PENDING_PHOTOS_FILE, "r", encoding="utf-8") as f:
+                _pending_photo_confirmations = json.load(f)
+        except Exception as e:
+            logger.warning("[CatalogTools] Failed to load pending photos: %s", e)
+    return _pending_photo_confirmations
+
+
+def _save_pending_photo_confirmations():
+    try:
+        with open(_PENDING_PHOTOS_FILE, "w", encoding="utf-8") as f:
+            json.dump(_pending_photo_confirmations, f, indent=2)
+    except Exception as e:
+        logger.warning("[CatalogTools] Failed to save pending photos: %s", e)
+
+
+_load_pending_photo_confirmations()
+
+
+def get_pending_photo_confirmation(tenant_id: str) -> Optional[Dict[str, Any]]:
+    _load_pending_photo_confirmations()
+    entry = _pending_photo_confirmations.get(str(tenant_id))
+    if entry:
+        if time.time() - entry.get("created_at", 0) > 900:  # 15 mins TTL
+            clear_pending_photo_confirmation(tenant_id)
+            return None
+        return entry
+    return None
+
+
+def set_pending_photo_confirmation(tenant_id: str, data: Dict[str, Any]):
+    data["created_at"] = time.time()
+    _pending_photo_confirmations[str(tenant_id)] = data
+    _save_pending_photo_confirmations()
+
+
+def clear_pending_photo_confirmation(tenant_id: str):
+    if str(tenant_id) in _pending_photo_confirmations:
+        _pending_photo_confirmations.pop(str(tenant_id), None)
+        _save_pending_photo_confirmations()
+
+
+async def resolve_pending_photo_confirmation(tenant_id: str, action: str) -> Dict[str, Any]:
+    """
+    Executes the owner's choice:
+    - 'replace': Delete old photos and replace them with new photos.
+    - 'keep_both': Keep old photos and append new ones without duplicates.
+    - 'cancel': Dismiss update.
+    """
+    pending = get_pending_photo_confirmation(tenant_id)
+    if not pending:
+        return {"status": "not_found", "message": "Koi pending photo confirmation nahi mili."}
+
+    item_id = pending.get("item_id")
+    prod_name = pending.get("product_name", "Weapon")
+    old_images = pending.get("old_images") or []
+    new_images = pending.get("new_images") or []
+    new_price = pending.get("price")
+
+    if action == "cancel":
+        clear_pending_photo_confirmation(tenant_id)
+        return {
+            "status": "cancelled",
+            "message": f"Theek hai Haider bhai, '{prod_name}' ki photos update cancel kardi gayi hai.",
+        }
+
+    try:
+        t_uuid = uuid.UUID(str(tenant_id))
+        i_uuid = uuid.UUID(str(item_id))
+    except Exception:
+        clear_pending_photo_confirmation(tenant_id)
+        return {"status": "error", "message": "Invalid item or tenant ID."}
+
+    async with AsyncSessionLocal() as session:
+        res = await session.execute(
+            select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, CatalogItem.id == i_uuid).limit(1)
+        )
+        item = res.scalars().first()
+        if not item:
+            clear_pending_photo_confirmation(tenant_id)
+            return {"status": "not_found", "message": f"Catalog item '{prod_name}' nahi mila."}
+
+        if action == "replace":
+            item.images = list(new_images)
+            action_desc = f"purani {len(old_images)} photos delete karke {len(new_images)} new photos replace kardi gayi hain"
+        else:  # keep_both
+            combined = list(item.images or old_images)
+            for img in new_images:
+                if img not in combined:
+                    combined.append(img)
+            item.images = combined
+            action_desc = f"purani photos ke sath new photos bhi add kardi gayi hain (Total {len(combined)} photos)"
+
+        if new_price and float(new_price) > 0:
+            item.price = float(new_price)
+        item.in_stock = True
+
+        await session.commit()
+        await session.refresh(item)
+
+        try:
+            from app.api.gateway_bridge import invalidate_catalog_cache, clear_recent_media_cache
+            invalidate_catalog_cache(str(tenant_id))
+            clear_recent_media_cache(pending.get("sender_phone", ""))
+        except Exception:
+            pass
+
+        clear_pending_photo_confirmation(tenant_id)
+
+        return {
+            "status": "success",
+            "product_name": item.name,
+            "images": item.images,
+            "count": len(item.images),
+            "message": f"Haider bhai, '{item.name}' mein {action_desc}. Ab customer ko sab photos nazar aayengi.",
+        }
+
+
 def save_catalog_image_bytes(image_bytes: bytes, product_name: str) -> Optional[str]:
     """
     Saves raw image bytes into the static catalog_images directory and returns the absolute URL.
     Works seamlessly in Docker container (/app/app/static/catalog_images) and host VPS environment.
+    Uses unique timestamp and UUID suffix to prevent overwriting other photos of the same firearm.
     """
     if not image_bytes or len(image_bytes) < 100:
         return None
 
     import os
     import re
+    import time
+    import uuid
 
-    slug = re.sub(r'[^a-z0-9]+', '_', product_name.lower()).strip('_')[:50]
-    filename = f"{slug}.jpg"
+    slug = re.sub(r'[^a-z0-9]+', '_', product_name.lower()).strip('_')[:40]
+    unique_suffix = f"{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    filename = f"{slug}_{unique_suffix}.jpg"
 
     possible_dirs = [
         "/app/app/static/catalog_images",
@@ -1410,14 +1556,27 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
     origin = args.get("origin", "Imported")
     caliber = args.get("caliber", "9mm")
     capacity = args.get("capacity", "")
+    explicit_action = args.get("action", "").lower().strip()
 
     try:
         t_uuid = uuid.UUID(tenant_id)
     except (ValueError, TypeError):
         return {"status": "error", "message": "Invalid tenant ID"}
 
-    images = []
-    # 1. Check if owner uploaded image bytes or base64 in context
+    images: List[str] = []
+    # 1. Check all image URLs in context (e.g. multi-image batch from gateway)
+    if context.get("image_urls") and isinstance(context["image_urls"], list):
+        for u in context["image_urls"]:
+            if u and u not in images:
+                images.append(u)
+
+    # 2. Check pending_image_url / image_url from context
+    for k in ["pending_image_url", "image_url"]:
+        u = context.get(k)
+        if u and u not in images:
+            images.append(u)
+
+    # 3. Check if owner uploaded image bytes or base64
     img_bytes = context.get("image_bytes")
     if not img_bytes and context.get("image_base64"):
         try:
@@ -1427,13 +1586,8 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
 
     if img_bytes:
         saved_url = save_catalog_image_bytes(img_bytes, name)
-        if saved_url:
+        if saved_url and saved_url not in images:
             images.append(saved_url)
-
-    # 2. Check pending_image_url / image_url from context
-    pending_img = context.get("pending_image_url") or context.get("image_url")
-    if pending_img and pending_img not in images:
-        images.append(pending_img)
 
     async with AsyncSessionLocal() as session:
         # Check if item with this name already exists in catalog
@@ -1441,14 +1595,61 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
             select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, CatalogItem.name.ilike(name)).limit(1)
         )
         existing_item = existing_res.scalars().first()
+
         if existing_item:
-            existing_item.price = price
-            if images:
-                existing_item.images = images
-            existing_item.in_stock = True
-            await session.commit()
-            await session.refresh(existing_item)
-            item = existing_item
+            # If item already exists AND has photos AND new photos were provided
+            if existing_item.images and len(existing_item.images) > 0 and images:
+                if explicit_action == "replace":
+                    existing_item.images = images
+                    if price > 0:
+                        existing_item.price = price
+                    existing_item.in_stock = True
+                    await session.commit()
+                    await session.refresh(existing_item)
+                    item = existing_item
+                elif explicit_action in ("keep_both", "keep", "dono", "append", "both"):
+                    combined = list(existing_item.images)
+                    for img in images:
+                        if img not in combined:
+                            combined.append(img)
+                    existing_item.images = combined
+                    if price > 0:
+                        existing_item.price = price
+                    existing_item.in_stock = True
+                    await session.commit()
+                    await session.refresh(existing_item)
+                    item = existing_item
+                else:
+                    # PROMPT OWNER: ask replace vs keep both
+                    set_pending_photo_confirmation(tenant_id, {
+                        "tenant_id": tenant_id,
+                        "item_id": str(existing_item.id),
+                        "product_name": existing_item.name,
+                        "old_images": list(existing_item.images),
+                        "new_images": images,
+                        "price": price,
+                        "sender_phone": context.get("sender_phone", ""),
+                    })
+                    prompt_msg = (
+                        f"Haider bhai, '{existing_item.name}' catalog mein pehle se mojood hai aur iski {len(existing_item.images)} photo(s) hain.\n\n"
+                        f"Aap kya karna chahte hain?\n"
+                        f"1️⃣ *Purani delete karke new se replace karein* (Reply: 1 / Replace)\n"
+                        f"2️⃣ *Purani bhi rakhein aur new bhi add karein* (Dono show hon customer ko) (Reply: 2 / Dono / Keep)"
+                    )
+                    return {
+                        "status": "confirmation_required",
+                        "product_name": existing_item.name,
+                        "message": prompt_msg,
+                    }
+            else:
+                if price > 0:
+                    existing_item.price = price
+                if images:
+                    existing_item.images = images
+                existing_item.in_stock = True
+                await session.commit()
+                await session.refresh(existing_item)
+                item = existing_item
         else:
             item = CatalogItem(
                 tenant_id=t_uuid,
@@ -1469,8 +1670,9 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
             await session.refresh(item)
 
         try:
-            from app.api.gateway_bridge import invalidate_catalog_cache
+            from app.api.gateway_bridge import invalidate_catalog_cache, clear_recent_media_cache
             invalidate_catalog_cache(tenant_id)
+            clear_recent_media_cache(context.get("sender_phone", ""))
         except Exception:
             pass
 
@@ -1487,11 +1689,26 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
 
 async def _tool_update_catalog_item_photo(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     product_name = args.get("product_name", "").strip()
+    explicit_action = args.get("action", "").lower().strip()
     try:
         t_uuid = uuid.UUID(tenant_id)
     except (ValueError, TypeError):
         return {"status": "error", "message": "Invalid tenant ID"}
 
+    images: List[str] = []
+    # 1. Collect all images from context.image_urls
+    if context.get("image_urls") and isinstance(context["image_urls"], list):
+        for u in context["image_urls"]:
+            if u and u not in images:
+                images.append(u)
+
+    # 2. Check pending_image_url / image_url
+    for k in ["pending_image_url", "image_url"]:
+        u = context.get(k)
+        if u and u not in images:
+            images.append(u)
+
+    # 3. Check image_bytes / image_base64
     img_bytes = context.get("image_bytes")
     if not img_bytes and context.get("image_base64"):
         try:
@@ -1499,19 +1716,16 @@ async def _tool_update_catalog_item_photo(tenant_id: str, args: Dict[str, Any], 
         except Exception:
             pass
 
-    if not img_bytes:
-        pending_img = context.get("pending_image_url") or context.get("image_url")
-        if not pending_img:
-            return {
-                "status": "error",
-                "message": "Koi photo receive nahi hui. Please firearm ki photo WhatsApp par send karein.",
-            }
-        saved_url = pending_img
-    else:
+    if img_bytes:
         saved_url = save_catalog_image_bytes(img_bytes, product_name)
+        if saved_url and saved_url not in images:
+            images.append(saved_url)
 
-    if not saved_url:
-        return {"status": "error", "message": "Photo save karne mein issue aaya."}
+    if not images:
+        return {
+            "status": "error",
+            "message": "Koi photo receive nahi hui. Please firearm ki photo WhatsApp par send karein.",
+        }
 
     async with AsyncSessionLocal() as session:
         # Search item by name
@@ -1523,24 +1737,62 @@ async def _tool_update_catalog_item_photo(tenant_id: str, args: Dict[str, Any], 
             return {"status": "not_found", "message": f"Catalog mein '{product_name}' nahi mila."}
 
         target = items[0]
-        if img_bytes:
-            saved_url = save_catalog_image_bytes(img_bytes, target.name) or saved_url
 
-        target.images = [saved_url]
-        await session.commit()
-        await session.refresh(target)
+        # If firearm already has photos:
+        if target.images and len(target.images) > 0:
+            if explicit_action == "replace":
+                target.images = images
+                await session.commit()
+                await session.refresh(target)
+                action_desc = f"purani photos delete karke {len(images)} new photos replace kardi gayi hain"
+            elif explicit_action in ("keep_both", "keep", "dono", "append", "both"):
+                combined = list(target.images)
+                for img in images:
+                    if img not in combined:
+                        combined.append(img)
+                target.images = combined
+                await session.commit()
+                await session.refresh(target)
+                action_desc = f"purani photos ke sath new photos bhi add kardi gayi hain (Total {len(combined)} photos)"
+            else:
+                # Prompt owner
+                set_pending_photo_confirmation(tenant_id, {
+                    "tenant_id": tenant_id,
+                    "item_id": str(target.id),
+                    "product_name": target.name,
+                    "old_images": list(target.images),
+                    "new_images": images,
+                    "sender_phone": context.get("sender_phone", ""),
+                })
+                prompt_msg = (
+                    f"Haider bhai, '{target.name}' catalog mein pehle se mojood hai aur iski {len(target.images)} photo(s) hain.\n\n"
+                    f"Aap kya karna chahte hain?\n"
+                    f"1️⃣ *Purani delete karke new se replace karein* (Reply: 1 / Replace)\n"
+                    f"2️⃣ *Purani bhi rakhein aur new bhi add karein* (Dono show hon customer ko) (Reply: 2 / Dono / Keep)"
+                )
+                return {
+                    "status": "confirmation_required",
+                    "product_name": target.name,
+                    "message": prompt_msg,
+                }
+        else:
+            target.images = images
+            await session.commit()
+            await session.refresh(target)
+            action_desc = f"{len(images)} photo(s) successfully catalog mein save aur link kardi gayi hain"
 
         try:
-            from app.api.gateway_bridge import invalidate_catalog_cache
+            from app.api.gateway_bridge import invalidate_catalog_cache, clear_recent_media_cache
             invalidate_catalog_cache(tenant_id)
+            clear_recent_media_cache(context.get("sender_phone", ""))
         except Exception:
             pass
 
         return {
             "status": "success",
             "product_name": target.name,
-            "image_url": saved_url,
-            "message": f"Haider bhai, '{target.name}' ki photo successfully catalog mein save aur link kardi gayi hai: {saved_url}",
+            "images": target.images,
+            "message": f"Haider bhai, '{target.name}' ki {action_desc}.",
         }
 
 

@@ -581,7 +581,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                 photos = await get_product_photos(
                     tenant_id=tenant_id_str,
                     product_name=cand_product,
-                    allow_multiple=False,
+                    allow_multiple=True,
                 )
                 if photos:
                     media_url = photos[0]["url"]
@@ -591,7 +591,14 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                         p_val = photos[0].get("price")
                         p_str = f" — {p_val:,.0f} PKR" if p_val else ""
                         caption_text = f"Yeh hai piece{p_str}. Genuine import."
-                    media_urls = [{"name": prod_name, "url": media_url, "caption": caption_text}]
+                    media_urls = [
+                        {
+                            "name": p.get("product_name") or prod_name,
+                            "url": p["url"],
+                            "caption": caption_text if idx == 0 else None,
+                        }
+                        for idx, p in enumerate(photos)
+                    ]
                     reply = caption_text
                     return {
                         **state,
@@ -665,12 +672,19 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             photos = await get_product_photos(
                 tenant_id=tenant_id_str,
                 product_name=target_product,
-                allow_multiple=False,
+                allow_multiple=True,
             )
             if photos:
                 media_url = photos[0]["url"]
                 prod_name = photos[0].get("product_name") or target_product.title()
-                media_urls = [{"name": prod_name, "url": media_url, "caption": photos[0].get("caption", f"Jee yeh rahi {prod_name} ki picture.")}]
+                media_urls = [
+                    {
+                        "name": p.get("product_name") or prod_name,
+                        "url": p["url"],
+                        "caption": photos[0].get("caption", f"Jee yeh rahi {prod_name} ki picture.") if idx == 0 else None,
+                    }
+                    for idx, p in enumerate(photos)
+                ]
                 reply_text = f"Yeh rahi {prod_name} ki picture bhai. Genuine import piece."
                 reply_chunks = [reply_text]
             else:
