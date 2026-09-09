@@ -965,7 +965,7 @@ async def get_product_photos(
                 token_conds.append(CatalogItem.name.ilike("%57%"))
                 token_conds.append(CatalogItem.name.ilike("%5-7%"))
 
-        stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, or_(*token_conds)).limit(20)
+        stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, or_(*token_conds)).order_by(CatalogItem.created_at.desc()).limit(20)
         res = await session.execute(stmt)
         candidates = res.scalars().all()
 
@@ -1009,6 +1009,10 @@ async def get_product_photos(
 
             if matched_count == 0:
                 return 0.0
+
+            # 4. Tie-breaking bonus: prefer candidate with more images (gives customer full photo gallery)
+            num_images = len(it.images) if isinstance(it.images, list) else 0
+            score += min(num_images, 5) * 0.5
 
             return score
 
