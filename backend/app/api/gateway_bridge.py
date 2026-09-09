@@ -34,9 +34,15 @@ _metrics = {
 
 def clear_recent_media_cache(sender: str):
     """Clear cached photos for a sender after successful catalog intake."""
+    if not sender:
+        return
     norm = normalize_phone(sender)
     if norm:
         _recent_media_cache.pop(norm, None)
+    _recent_media_cache.pop(sender, None)
+    clean_digits = re.sub(r'\D', '', sender)
+    if clean_digits:
+        _recent_media_cache.pop(clean_digits, None)
 
 
 def _record_failure(business_phone: str, customer_phone: str, error: str, request_id: str):
@@ -72,6 +78,7 @@ class GatewayMessagePayload(BaseModel):
     push_name: Optional[str] = None
     sender_jid: Optional[str] = None
     image_base64: Optional[str] = None
+    images_base64: Optional[List[str]] = None
     audio_base64: Optional[str] = None
     audio_mime: Optional[str] = None
     platform: str = "baileys_qr"
@@ -156,7 +163,8 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             )
 
             # Preserve uploaded media across short follow-up messages (e.g. Turn 1: photo, Turn 2: "Add this" or "Price 700k")
-            effective_image_b64 = payload.image_base64
+            incoming_images_b64 = payload.images_base64 or ([payload.image_base64] if payload.image_base64 else [])
+            effective_image_b64 = incoming_images_b64[0] if incoming_images_b64 else None
             saved_image_url = None
             now = time.time()
 
@@ -164,19 +172,26 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             existing_media = _recent_media_cache.get(norm_from, [])
             valid_media = [e for e in existing_media if (now - e.get("ts", 0)) < 300]
 
-            if payload.image_base64:
-                try:
-                    from app.services.catalog_tools import save_catalog_image_bytes
-                    img_raw = base64.b64decode(payload.image_base64)
-                    saved_image_url = save_catalog_image_bytes(img_raw, f"inbound_{norm_from}")
-                except Exception as e:
-                    logger.warning("Failed to auto-save inbound image: %s", e)
-                valid_media.append({
-                    "ts": now,
-                    "base64": payload.image_base64,
-                    "url": saved_image_url,
-                })
+            from app.services.catalog_tools import save_catalog_image_bytes
+
+            newly_saved_urls = []
+            if incoming_images_b64:
+                for idx, b64_str in enumerate(incoming_images_b64):
+                    try:
+                        img_raw = base64.b64decode(b64_str)
+                        s_url = save_catalog_image_bytes(img_raw, f"inbound_{norm_from}_{idx}")
+                        if s_url:
+                            newly_saved_urls.append(s_url)
+                            valid_media.append({
+                                "ts": now,
+                                "base64": b64_str,
+                                "url": s_url,
+                            })
+                    except Exception as e:
+                        logger.warning("Failed to auto-save inbound image %d: %s", idx, e)
                 _recent_media_cache[norm_from] = valid_media
+                if newly_saved_urls:
+                    saved_image_url = newly_saved_urls[0]
             elif valid_media:
                 _recent_media_cache[norm_from] = valid_media
                 msg_l = effective_message.lower()
@@ -186,6 +201,13 @@ async def process_gateway_message(payload: GatewayMessagePayload):
 
             # Collect all active cached URLs for this sender (e.g. 2-3 images sent together)
             all_cached_urls = [e["url"] for e in _recent_media_cache.get(norm_from, []) if e.get("url")]
+            seen_urls = set()
+            deduped_urls = []
+            target_list = newly_saved_urls if newly_saved_urls else all_cached_urls
+            for u in target_list:
+                if u and u not in seen_urls:
+                    seen_urls.add(u)
+                    deduped_urls.append(u)
 
             # ---------------------------------------------------------------
             # 4. LANGGRAPH INVOCATION
@@ -211,8 +233,8 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 "raw_message": effective_message,
                 "catalog_context": catalog_context,
                 "image_base64": effective_image_b64,
-                "image_url": saved_image_url,
-                "image_urls": all_cached_urls if all_cached_urls else ([saved_image_url] if saved_image_url else None),
+                "image_url": saved_image_url or (deduped_urls[0] if deduped_urls else None),
+                "image_urls": deduped_urls if deduped_urls else None,
                 "conversation_history": history,
                 "customer_sim_phone": detected_sim,
                 "push_name": payload.push_name,

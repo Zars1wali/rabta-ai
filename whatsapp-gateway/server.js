@@ -91,63 +91,81 @@ function enqueueCustomerMessage(phone, taskFn) {
     });
 }
 
-async function handleIncomingMessage(msg) {
-    const sender = msg.key.remoteJid;
+// Pending multi-image / album debounce buffer: senderPhone -> batchObject
+const mediaBatchBuffer = new Map();
+
+async function handleIncomingMessage(input) {
+    const isBatch = !!input?.isBatch;
+    const msg = isBatch ? input.msg : input;
+    const sender = input?.sender || msg?.key?.remoteJid;
     if (!sender || sender.includes('@g.us')) return;
     if (sender.includes('@broadcast') || sender.includes('@newsletter')) return;
     if (connectedNumber && sender.split('@')[0] === connectedNumber) return;
 
-    const senderPhone = sender.split('@')[0];
-    const msgId = msg.key.id;
+    const senderPhone = input?.senderPhone || sender.split('@')[0];
+    const msgId = msg?.key?.id;
 
-    const textMessage = extractTextMessage(msg.message);
-
+    let textMessage = '';
     let imageBase64 = null;
+    let imagesBase64 = [];
     let audioBase64 = null;
     let audioMime = null;
-    let m = msg.message;
-    if (m.ephemeralMessage) m = m.ephemeralMessage.message;
-    if (m.viewOnceMessage) m = m.viewOnceMessage.message;
-    if (m.viewOnceMessageV2) m = m.viewOnceMessageV2.message;
 
-    const isImage = !!m.imageMessage;
-    const isQuotedImage = !!m.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
-    const isAudio = !!m.audioMessage;
+    if (isBatch) {
+        textMessage = input.textMessage || '';
+        imagesBase64 = input.imagesBase64 || [];
+        imageBase64 = imagesBase64.length > 0 ? imagesBase64[0] : null;
+        audioBase64 = input.audioBase64 || null;
+        audioMime = input.audioMime || null;
+    } else {
+        textMessage = extractTextMessage(msg.message);
 
-    if (isAudio) {
-        try {
-            const buffer = await downloadMediaMessage(msg, 'buffer', {});
-            if (buffer && buffer.length > 0) {
-                audioBase64 = buffer.toString('base64');
-                audioMime = m.audioMessage?.mimetype || 'audio/ogg; codecs=opus';
-                console.log(`🎙️ Downloaded voice note (${Math.round(buffer.length / 1024)} KB)`);
+        let m = msg.message;
+        if (m.ephemeralMessage) m = m.ephemeralMessage.message;
+        if (m.viewOnceMessage) m = m.viewOnceMessage.message;
+        if (m.viewOnceMessageV2) m = m.viewOnceMessageV2.message;
+
+        const isImage = !!m.imageMessage;
+        const isQuotedImage = !!m.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+        const isAudio = !!m.audioMessage;
+
+        if (isAudio) {
+            try {
+                const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                if (buffer && buffer.length > 0) {
+                    audioBase64 = buffer.toString('base64');
+                    audioMime = m.audioMessage?.mimetype || 'audio/ogg; codecs=opus';
+                    console.log(`🎙️ Downloaded voice note (${Math.round(buffer.length / 1024)} KB)`);
+                }
+            } catch (e) {
+                console.warn(`[${senderPhone}] Could not download audio:`, e.message);
             }
-        } catch (e) {
-            console.warn(`[${senderPhone}] Could not download audio:`, e.message);
-        }
-    } else if (isImage) {
-        try {
-            const buffer = await downloadMediaMessage(msg, 'buffer', {});
-            if (buffer && buffer.length > 0) {
-                imageBase64 = buffer.toString('base64');
-                console.log(`📸 Downloaded customer image (${Math.round(buffer.length / 1024)} KB)`);
+        } else if (isImage) {
+            try {
+                const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                if (buffer && buffer.length > 0) {
+                    imageBase64 = buffer.toString('base64');
+                    imagesBase64 = [imageBase64];
+                    console.log(`📸 Downloaded customer image (${Math.round(buffer.length / 1024)} KB)`);
+                }
+            } catch (e) {
+                console.warn(`[${senderPhone}] Could not download image:`, e.message);
             }
-        } catch (e) {
-            console.warn(`[${senderPhone}] Could not download image:`, e.message);
-        }
-    } else if (isQuotedImage) {
-        try {
-            const quotedMsg = {
-                key: { remoteJid: sender },
-                message: m.extendedTextMessage.contextInfo.quotedMessage
-            };
-            const buffer = await downloadMediaMessage(quotedMsg, 'buffer', {});
-            if (buffer && buffer.length > 0) {
-                imageBase64 = buffer.toString('base64');
-                console.log(`📸 Downloaded quoted image (${Math.round(buffer.length / 1024)} KB)`);
+        } else if (isQuotedImage) {
+            try {
+                const quotedMsg = {
+                    key: { remoteJid: sender },
+                    message: m.extendedTextMessage.contextInfo.quotedMessage
+                };
+                const buffer = await downloadMediaMessage(quotedMsg, 'buffer', {});
+                if (buffer && buffer.length > 0) {
+                    imageBase64 = buffer.toString('base64');
+                    imagesBase64 = [imageBase64];
+                    console.log(`📸 Downloaded quoted image (${Math.round(buffer.length / 1024)} KB)`);
+                }
+            } catch (e) {
+                console.warn(`[${senderPhone}] Could not download quoted image:`, e.message);
             }
-        } catch (e) {
-            console.warn(`[${senderPhone}] Could not download quoted image:`, e.message);
         }
     }
 
@@ -186,12 +204,12 @@ async function handleIncomingMessage(msg) {
     if (!isLid && sender.endsWith('@s.whatsapp.net')) {
         realSimPhone = sender.split('@')[0];
     } else {
-        const p = msg.key?.participant || msg.participant || m?.extendedTextMessage?.contextInfo?.participant;
+        const p = msg?.key?.participant || msg?.participant || msg?.message?.extendedTextMessage?.contextInfo?.participant;
         if (p && p.endsWith('@s.whatsapp.net')) {
             realSimPhone = p.split('@')[0];
         }
     }
-    const pushName = msg.pushName || null;
+    const pushName = input?.pushName || msg?.pushName || null;
 
     // Track customer JID so relay back to customer always uses correct destination
     if (!isOwnerMsg) {
@@ -205,7 +223,7 @@ async function handleIncomingMessage(msg) {
         || (audioBase64 ? '[VOICE NOTE — transcribe and respond]' : '');
     if (!promptText && !imageBase64 && !audioBase64) return;
 
-    console.log(`📩 Incoming WhatsApp from [${effectiveSenderPhone}] (SIM: ${realSimPhone || 'unknown'}, Name: ${pushName}): "${promptText.substring(0, 60)}"`);
+    console.log(`📩 Incoming WhatsApp from [${effectiveSenderPhone}] (SIM: ${realSimPhone || 'unknown'}, Name: ${pushName}): "${promptText.substring(0, 60)}" [Images: ${imagesBase64.length}]`);
 
     try {
         const response = await axios.post(`${PYTHON_BACKEND_URL}/api/gateway/process-message`, {
@@ -216,6 +234,7 @@ async function handleIncomingMessage(msg) {
             business_phone: connectedNumber || 'default',
             message: promptText,
             image_base64: imageBase64,
+            images_base64: imagesBase64.length > 0 ? imagesBase64 : (imageBase64 ? [imageBase64] : undefined),
             audio_base64: audioBase64,
             audio_mime: audioMime,
             platform: 'baileys_qr'
@@ -417,9 +436,99 @@ async function connectToWhatsApp() {
 
             const sender = msg.key.remoteJid;
             if (!sender || sender.includes('@g.us')) continue;
+            if (sender.includes('@broadcast') || sender.includes('@newsletter')) continue;
+            if (connectedNumber && sender.split('@')[0] === connectedNumber) continue;
+
             const senderPhone = sender.split('@')[0];
 
-            enqueueCustomerMessage(senderPhone, () => handleIncomingMessage(msg));
+            // Inspect message for images or audio
+            let inner = msg.message;
+            if (inner.ephemeralMessage) inner = inner.ephemeralMessage.message;
+            if (inner.viewOnceMessage) inner = inner.viewOnceMessage.message;
+            if (inner.viewOnceMessageV2) inner = inner.viewOnceMessageV2.message;
+
+            const isImage = !!inner.imageMessage;
+            const isQuotedImage = !!inner.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+            const isAudio = !!inner.audioMessage;
+            const hasMedia = isImage || isQuotedImage || isAudio;
+            const hasPendingBatch = mediaBatchBuffer.has(senderPhone);
+
+            if (hasMedia || hasPendingBatch) {
+                let batch = mediaBatchBuffer.get(senderPhone);
+                if (!batch) {
+                    batch = {
+                        isBatch: true,
+                        sender,
+                        senderPhone,
+                        msg,
+                        imagesBase64: [],
+                        textMessage: '',
+                        audioBase64: null,
+                        audioMime: null,
+                        pushName: msg.pushName || null,
+                        msgIds: [msgId],
+                        timer: null
+                    };
+                    mediaBatchBuffer.set(senderPhone, batch);
+                } else {
+                    batch.msgIds.push(msgId);
+                    if (msg.pushName) batch.pushName = msg.pushName;
+                    batch.msg = msg;
+                }
+
+                // Download image if present
+                if (isImage) {
+                    try {
+                        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                        if (buffer && buffer.length > 0) {
+                            batch.imagesBase64.push(buffer.toString('base64'));
+                            console.log(`📸 [BATCH] Buffered image ${batch.imagesBase64.length} from [${senderPhone}] (${Math.round(buffer.length / 1024)} KB)`);
+                        }
+                    } catch (e) {
+                        console.warn(`[${senderPhone}] Could not download batch image:`, e.message);
+                    }
+                } else if (isQuotedImage) {
+                    try {
+                        const quotedMsg = {
+                            key: { remoteJid: sender },
+                            message: inner.extendedTextMessage.contextInfo.quotedMessage
+                        };
+                        const buffer = await downloadMediaMessage(quotedMsg, 'buffer', {});
+                        if (buffer && buffer.length > 0) {
+                            batch.imagesBase64.push(buffer.toString('base64'));
+                            console.log(`📸 [BATCH] Buffered quoted image ${batch.imagesBase64.length} from [${senderPhone}] (${Math.round(buffer.length / 1024)} KB)`);
+                        }
+                    } catch (e) {
+                        console.warn(`[${senderPhone}] Could not download batch quoted image:`, e.message);
+                    }
+                } else if (isAudio) {
+                    try {
+                        const buffer = await downloadMediaMessage(msg, 'buffer', {});
+                        if (buffer && buffer.length > 0) {
+                            batch.audioBase64 = buffer.toString('base64');
+                            batch.audioMime = inner.audioMessage?.mimetype || 'audio/ogg; codecs=opus';
+                            console.log(`🎙️ [BATCH] Buffered voice note from [${senderPhone}] (${Math.round(buffer.length / 1024)} KB)`);
+                        }
+                    } catch (e) {
+                        console.warn(`[${senderPhone}] Could not download batch audio:`, e.message);
+                    }
+                }
+
+                // Extract text and append to batch
+                const txt = extractTextMessage(msg.message);
+                if (txt && txt.trim()) {
+                    batch.textMessage = batch.textMessage ? `${batch.textMessage} ${txt.trim()}` : txt.trim();
+                }
+
+                // Reset debounce timer
+                if (batch.timer) clearTimeout(batch.timer);
+                batch.timer = setTimeout(() => {
+                    mediaBatchBuffer.delete(senderPhone);
+                    enqueueCustomerMessage(senderPhone, () => handleIncomingMessage(batch));
+                }, 1800);
+            } else {
+                enqueueCustomerMessage(senderPhone, () => handleIncomingMessage(msg));
+            }
         }
     });
 }
