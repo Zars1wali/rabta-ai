@@ -27,7 +27,7 @@ from app.services.catalog_tools import (
     resolve_pending_photo_confirmation,
 )
 from app.graph.nodes.owner import owner_react_node
-from app.graph.nodes.customer import customer_sales_chat_node
+from app.graph.nodes.customer import customer_sales_chat
 from app.models.database import CatalogItem
 from app.db.session import AsyncSessionLocal
 from sqlalchemy import select, delete
@@ -111,7 +111,7 @@ async def test_multi_photo_intake_and_confirmation_flow():
         "raw_message": f"send pics of {test_gun_name}",
         "conversation_history": [],
     }
-    cust_out = await customer_sales_chat_node(cust_state)
+    cust_out = await customer_sales_chat(cust_state)
     assert cust_out.get("media_urls") is not None
     assert len(cust_out["media_urls"]) == 2
     print(f"PASS: Customer node returned media_urls with {len(cust_out['media_urls'])} items.")
