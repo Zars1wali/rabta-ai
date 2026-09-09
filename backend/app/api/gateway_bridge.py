@@ -114,9 +114,18 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             norm_owner = normalize_phone(owner_phone)
             is_boss = bool(norm_from and norm_owner and norm_from == norm_owner)
 
+            # Recognize owner Privacy LIDs (e.g. 61379545444551 for 3169827188, 79938417877160 for 3140922056)
+            sender_jid = (payload.sender_jid or "").lower()
+            if not is_boss and norm_owner and norm_owner.endswith("3169827188"):
+                if "61379545444551" in norm_from or "61379545444551" in sender_jid:
+                    is_boss = True
+            elif not is_boss and norm_owner and norm_owner.endswith("3140922056"):
+                if "79938417877160" in norm_from or "79938417877160" in sender_jid:
+                    is_boss = True
+
             logger.info(
-                "Routing message: from=%s owner=%s is_boss=%s",
-                norm_from, norm_owner, is_boss
+                "Routing message: from=%s owner=%s is_boss=%s (jid=%s)",
+                norm_from, norm_owner, is_boss, sender_jid
             )
 
             # ---------------------------------------------------------------
@@ -133,9 +142,10 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             # ---------------------------------------------------------------
             # 3. CONTEXT GATHERING
             # ---------------------------------------------------------------
+            owner_conv_key = norm_owner if is_boss else norm_from
             catalog_context = await _get_cached_catalog(session, str(tenant_id))
             history = await conversation_store.get_history_async(
-                tenant_id, payload.customer_phone if not is_boss else norm_from, limit=10
+                tenant_id, owner_conv_key, limit=10
             )
 
             # Preserve uploaded media across short follow-up messages (e.g. Turn 1: photo, Turn 2: "Add this" or "Price 700k")
@@ -165,7 +175,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             # ---------------------------------------------------------------
             from app.graph.builder import get_graph_async
             graph = await get_graph_async()
-            thread_config = make_thread_config(str(tenant_id), norm_from)
+            thread_config = make_thread_config(str(tenant_id), owner_conv_key)
 
             # Detect real SIM phone
             detected_sim = payload.real_phone or (
@@ -176,7 +186,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             input_state: RabtaGraphState = {
                 "tenant_id": str(tenant_id),
                 "is_boss": is_boss,
-                "sender_phone": norm_from,
+                "sender_phone": owner_conv_key,
                 "owner_phone": owner_phone,
                 "business_phone": payload.business_phone,
                 "business_name": biz_name,
@@ -251,11 +261,11 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                     )
             else:
                 await conversation_store.add_message_async(
-                    tenant_id, norm_from, "customer", effective_message
+                    tenant_id, owner_conv_key, "customer", effective_message
                 )
                 if reply_text:
                     await conversation_store.add_message_async(
-                        tenant_id, norm_from, "assistant", reply_text
+                        tenant_id, owner_conv_key, "assistant", reply_text
                     )
                 # If boss replied to an escalation, relay & save in customer thread
                 if forward_to_customer and forward_message:

@@ -509,10 +509,12 @@ app.post('/api/set-owner', (req, res) => {
     const { phone, lid } = req.body;
     if (!phone) return res.status(400).json({ error: 'phone is required' });
     activeOwnerPhone = phone;
-    if (lid !== undefined) {
+    if (lid !== undefined && lid !== null) {
         activeOwnerLid = lid;
     } else if (phone.replace(/[^\d]/g, '').endsWith('3140922056')) {
         activeOwnerLid = '79938417877160';
+    } else if (phone.replace(/[^\d]/g, '').endsWith('3169827188')) {
+        activeOwnerLid = '61379545444551';
     } else {
         activeOwnerLid = null;
     }
