@@ -22,6 +22,9 @@ from app.models.database import CatalogItem, PriceChangeLog, Tenant
 from app.services.knowledge_base import kb_service
 from app.services.escalation_service import escalation_service, _load_persisted_escalations
 
+import asyncio
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 # ==============================================================================
@@ -1491,7 +1494,7 @@ async def resolve_pending_photo_confirmation(tenant_id: str, action: str) -> Dic
         try:
             from app.api.gateway_bridge import invalidate_catalog_cache, clear_recent_media_cache
             invalidate_catalog_cache(str(tenant_id))
-            clear_recent_media_cache(pending.get("sender_phone", ""))
+            clear_recent_media_cache(pending.get("sender_phone", ""), is_owner=True)
         except Exception:
             pass
 
@@ -1553,6 +1556,116 @@ def save_catalog_image_bytes(image_bytes: bytes, product_name: str) -> Optional[
         return None
 
 
+def get_image_bytes_from_source(image_bytes: Optional[bytes] = None, image_url: Optional[str] = None) -> Optional[bytes]:
+    """Retrieve raw image bytes from local disk cache or network URL."""
+    if image_bytes and len(image_bytes) > 0:
+        return image_bytes
+    if not image_url:
+        return None
+    try:
+        filename = os.path.basename(image_url.split("?")[0])
+        possible_dirs = [
+            "/app/app/static/catalog_images",
+            "/opt/rabta/backend/app/static/catalog_images",
+            os.path.join(os.path.dirname(__file__), "..", "static", "catalog_images"),
+        ]
+        for d in possible_dirs:
+            fp = os.path.join(d, filename)
+            if os.path.exists(fp):
+                with open(fp, "rb") as f:
+                    return f.read()
+    except Exception:
+        pass
+    try:
+        import urllib.request
+        req = urllib.request.Request(image_url, headers={"User-Agent": "RabtaAI/2.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.read()
+    except Exception:
+        pass
+    return None
+
+
+async def verify_catalog_image_match(
+    image_bytes: Optional[bytes] = None,
+    image_url: Optional[str] = None,
+    product_name: str = "",
+    category: str = "",
+    caliber: str = "",
+) -> Dict[str, Any]:
+    """
+    Intelligent Multimodal Vision Guard:
+    Analyzes firearm photo using Gemini Vision to verify it does not contradict
+    the target catalog firearm (category, rollmarks, slide engravings, model).
+    Returns {"is_match": bool, "confidence": float, "mismatch_reason": Optional[str]}.
+    """
+    raw_bytes = get_image_bytes_from_source(image_bytes=image_bytes, image_url=image_url)
+    if not raw_bytes or len(raw_bytes) < 1000:
+        return {"is_match": True, "confidence": 0.5, "mismatch_reason": None}
+
+    if not getattr(settings, "GEMINI_API_KEY", None):
+        return {"is_match": True, "confidence": 0.5, "mismatch_reason": None}
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        prompt = (
+            f"You are an elite firearms appraiser and catalog quality verification inspector.\n"
+            f"Examine this image and determine if it can genuinely be the firearm '{product_name}' "
+            f"(Category: {category or 'General'}, Caliber: {caliber or 'Unknown'}).\n\n"
+            f"Check for:\n"
+            f"1. Category Mismatch: Is the image showing a long Rifle/Carbine/Shotgun while the product is a Handgun/Pistol "
+            f"(e.g. AR-10, DB10, PA-15, M4 vs Kimber 1911/2K11, Glock 17, Glock 19, CZ P-10)? Or vice versa?\n"
+            f"2. Rollmarks / Slide Engravings / Markings: Are there visible rollmarks, slide engravings, or box labels "
+            f"that clearly identify a completely different manufacturer/model (e.g. 'Diamondback DB10', 'Bear Creek Arsenal', "
+            f"'Glock 19X', 'GLFA', 'Kimber', 'Sig Sauer')?\n"
+            f"3. Clear Contradiction: If this photo definitely depicts a completely different firearm than '{product_name}', "
+            f"mark is_match as false.\n\n"
+            f"Respond ONLY with a JSON object:\n"
+            f'{{\n'
+            f'  "is_match": true or false,\n'
+            f'  "confidence": 0.0 to 1.0,\n'
+            f'  "detected_type": "Pistol" / "Rifle" / "Shotgun" / "Unknown",\n'
+            f'  "detected_markings": "rollmarks or text seen on gun or box",\n'
+            f'  "mismatch_reason": null or "Concise reason why this photo does not match {product_name}"\n'
+            f'}}'
+        )
+
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model="gemini-3.5-flash-lite",
+            contents=[
+                types.Part.from_bytes(data=raw_bytes, mime_type="image/jpeg"),
+                types.Part.from_text(text=prompt),
+            ],
+            config=types.GenerateContentConfig(
+                temperature=0.1,
+                response_mime_type="application/json",
+            ),
+        )
+
+        resp_text = (response.text or "").strip()
+        data = json.loads(resp_text)
+        is_match = bool(data.get("is_match", True))
+        conf = float(data.get("confidence", 0.0))
+        reason = data.get("mismatch_reason")
+
+        if not is_match and conf >= 0.70:
+            logger.warning(
+                "[VisionGuard] Rejected photo for '%s': %s (conf=%.2f, markings=%s)",
+                product_name, reason, conf, data.get("detected_markings")
+            )
+            return {"is_match": False, "confidence": conf, "mismatch_reason": reason}
+
+        return {"is_match": True, "confidence": conf, "mismatch_reason": None}
+
+    except Exception as e:
+        logger.warning("[VisionGuard] Image verification check bypassed due to error: %s", e)
+        return {"is_match": True, "confidence": 0.5, "mismatch_reason": None}
+
+
 async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     name = args.get("name", "").strip()
     price = float(args.get("price", 0))
@@ -1580,7 +1693,7 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
         if u and u not in images:
             images.append(u)
 
-    # 3. Check if owner uploaded image bytes or base64
+    # 3. Check if owner uploaded image bytes or base64 (only save if no URLs provided)
     img_bytes = context.get("image_bytes")
     if not img_bytes and context.get("image_base64"):
         try:
@@ -1588,10 +1701,31 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
         except Exception:
             pass
 
-    if img_bytes:
+    if not images and img_bytes:
         saved_url = save_catalog_image_bytes(img_bytes, name)
         if saved_url and saved_url not in images:
             images.append(saved_url)
+
+    # 4. Multimodal Vision Guard: Verify image does not contradict product name/category
+    if images:
+        sample_img = images[0]
+        verif = await verify_catalog_image_match(
+            image_bytes=img_bytes,
+            image_url=sample_img,
+            product_name=name,
+            category=category,
+            caliber=caliber,
+        )
+        if not verif.get("is_match", True):
+            return {
+                "status": "mismatch_detected",
+                "product_name": name,
+                "message": (
+                    f"⚠️ Photo Mismatch Warning: Haider bhai, yeh photo '{name}' se match nahi kar rahi.\n"
+                    f"Wajah: {verif.get('mismatch_reason')}\n\n"
+                    f"Ghalat photo attach hone se roknay ke liye isko block kar diya gaya hai. Please verify karke sahi firearm ki photo send karein."
+                ),
+            }
 
     async with AsyncSessionLocal() as session:
         # Check if item with this name already exists in catalog
@@ -1676,7 +1810,9 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
         try:
             from app.api.gateway_bridge import invalidate_catalog_cache, clear_recent_media_cache
             invalidate_catalog_cache(tenant_id)
-            clear_recent_media_cache(context.get("sender_phone", ""))
+            sender_p = context.get("sender_phone", "")
+            aliases = context.get("sender_aliases", [])
+            clear_recent_media_cache(sender_p, additional_keys=aliases, is_owner=True)
         except Exception:
             pass
 
@@ -1712,7 +1848,7 @@ async def _tool_update_catalog_item_photo(tenant_id: str, args: Dict[str, Any], 
         if u and u not in images:
             images.append(u)
 
-    # 3. Check image_bytes / image_base64
+    # 3. Check image_bytes / image_base64 (only save if no URLs provided)
     img_bytes = context.get("image_bytes")
     if not img_bytes and context.get("image_base64"):
         try:
@@ -1720,7 +1856,7 @@ async def _tool_update_catalog_item_photo(tenant_id: str, args: Dict[str, Any], 
         except Exception:
             pass
 
-    if img_bytes:
+    if not images and img_bytes:
         saved_url = save_catalog_image_bytes(img_bytes, product_name)
         if saved_url and saved_url not in images:
             images.append(saved_url)
@@ -1741,6 +1877,27 @@ async def _tool_update_catalog_item_photo(tenant_id: str, args: Dict[str, Any], 
             return {"status": "not_found", "message": f"Catalog mein '{product_name}' nahi mila."}
 
         target = items[0]
+
+        # Multimodal Vision Guard: Verify image does not contradict target firearm
+        if images:
+            sample_img = images[0]
+            verif = await verify_catalog_image_match(
+                image_bytes=img_bytes,
+                image_url=sample_img,
+                product_name=target.name,
+                category=target.category or "",
+                caliber=(target.metadata_json or {}).get("caliber", ""),
+            )
+            if not verif.get("is_match", True):
+                return {
+                    "status": "mismatch_detected",
+                    "product_name": target.name,
+                    "message": (
+                        f"⚠️ Photo Mismatch Warning: Haider bhai, yeh photo '{target.name}' se match nahi kar rahi.\n"
+                        f"Wajah: {verif.get('mismatch_reason')}\n\n"
+                        f"Ghalat photo attach hone se roknay ke liye isko block kar diya gaya hai. Please verify karke sahi firearm ki photo send karein."
+                    ),
+                }
 
         # If firearm already has photos:
         if target.images and len(target.images) > 0:
@@ -1788,7 +1945,9 @@ async def _tool_update_catalog_item_photo(tenant_id: str, args: Dict[str, Any], 
         try:
             from app.api.gateway_bridge import invalidate_catalog_cache, clear_recent_media_cache
             invalidate_catalog_cache(tenant_id)
-            clear_recent_media_cache(context.get("sender_phone", ""))
+            sender_p = context.get("sender_phone", "")
+            aliases = context.get("sender_aliases", [])
+            clear_recent_media_cache(sender_p, additional_keys=aliases, is_owner=True)
         except Exception:
             pass
 
@@ -2359,7 +2518,32 @@ async def _tool_onboard_product_from_image(tenant_id: str, args: Dict[str, Any],
     except (ValueError, TypeError):
         return {"status": "error", "message": "Invalid tenant ID"}
 
-    images = [image_url] if image_url else []
+    images: List[str] = []
+    if context.get("image_urls") and isinstance(context["image_urls"], list):
+        for u in context["image_urls"]:
+            if u and u not in images:
+                images.append(u)
+    if image_url and image_url not in images:
+        images.append(image_url)
+
+    # Multimodal Vision Guard: Verify image does not contradict product name/category
+    if images:
+        verif = await verify_catalog_image_match(
+            image_url=images[0],
+            product_name=name,
+            category=category,
+            caliber=caliber,
+        )
+        if not verif.get("is_match", True):
+            return {
+                "status": "mismatch_detected",
+                "product_name": name,
+                "message": (
+                    f"⚠️ Photo Mismatch Warning: Haider bhai, yeh photo '{name}' se match nahi kar rahi.\n"
+                    f"Wajah: {verif.get('mismatch_reason')}\n\n"
+                    f"Ghalat photo attach hone se roknay ke liye isko block kar diya gaya hai."
+                ),
+            }
 
     async with AsyncSessionLocal() as session:
         # PDF 2 §22: Anti-Merge Rule — Never merge Gen 4 vs Gen 5, USA vs Turkey, or distinct calibers
@@ -2466,8 +2650,11 @@ async def _tool_onboard_product_from_image(tenant_id: str, args: Dict[str, Any],
             action_done = "added"
 
         try:
-            from app.api.gateway_bridge import invalidate_catalog_cache
+            from app.api.gateway_bridge import invalidate_catalog_cache, clear_recent_media_cache
             invalidate_catalog_cache(tenant_id)
+            sender_p = context.get("sender_phone", "")
+            aliases = context.get("sender_aliases", [])
+            clear_recent_media_cache(sender_p, additional_keys=aliases, is_owner=True)
         except Exception:
             pass
 

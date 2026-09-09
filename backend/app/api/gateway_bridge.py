@@ -1,3 +1,4 @@
+import re
 import time
 import uuid
 import base64
@@ -32,17 +33,34 @@ _metrics = {
 }
 
 
-def clear_recent_media_cache(sender: str):
-    """Clear cached photos for a sender after successful catalog intake."""
-    if not sender:
-        return
-    norm = normalize_phone(sender)
-    if norm:
-        _recent_media_cache.pop(norm, None)
-    _recent_media_cache.pop(sender, None)
-    clean_digits = re.sub(r'\D', '', sender)
-    if clean_digits:
-        _recent_media_cache.pop(clean_digits, None)
+def clear_recent_media_cache(sender: str, additional_keys: Optional[List[str]] = None, is_owner: bool = False):
+    """Clear cached photos for a sender after successful catalog intake across all aliases."""
+    keys_to_clear = set()
+    for s in [sender] + (additional_keys or []):
+        if not s:
+            continue
+        keys_to_clear.add(str(s))
+        norm = normalize_phone(str(s))
+        if norm:
+            keys_to_clear.add(norm)
+        clean_digits = re.sub(r'\D', '', str(s))
+        if clean_digits:
+            keys_to_clear.add(clean_digits)
+        if "@" in str(s):
+            keys_to_clear.add(str(s).split("@")[0])
+
+    if is_owner:
+        # Known owner phone and privacy LID variants
+        for ok in ["923169827188", "3169827188", "61379545444551", "923140922056", "3140922056", "79938417877160"]:
+            keys_to_clear.add(ok)
+
+    cleared_count = 0
+    for k in keys_to_clear:
+        if _recent_media_cache.pop(k, None) is not None:
+            cleared_count += 1
+
+    if cleared_count > 0:
+        logger.info("[clear_recent_media_cache] Cleared %d keys from media buffer", cleared_count)
 
 
 def _record_failure(business_phone: str, customer_phone: str, error: str, request_id: str):
@@ -168,42 +186,61 @@ async def process_gateway_message(payload: GatewayMessagePayload):
             saved_image_url = None
             now = time.time()
 
-            # Clean entries older than 300s (5 mins)
+            # Clean entries older than 90s (1.5 mins)
+            MEDIA_CACHE_TTL = 90.0
             existing_media = _recent_media_cache.get(norm_from, [])
-            valid_media = [e for e in existing_media if (now - e.get("ts", 0)) < 300]
+            valid_media = [e for e in existing_media if (now - e.get("ts", 0)) < MEDIA_CACHE_TTL]
 
             from app.services.catalog_tools import save_catalog_image_bytes
 
             newly_saved_urls = []
             if incoming_images_b64:
+                # BRAND NEW PHOTO BATCH: Atomically replace any prior unconsumed media.
+                # NEVER append new photos to photos from an older upload!
+                new_batch = []
                 for idx, b64_str in enumerate(incoming_images_b64):
                     try:
                         img_raw = base64.b64decode(b64_str)
-                        s_url = save_catalog_image_bytes(img_raw, f"inbound_{norm_from}_{idx}")
+                        s_url = save_catalog_image_bytes(img_raw, f"inbound_{norm_from}_{int(now)}_{idx}")
                         if s_url:
                             newly_saved_urls.append(s_url)
-                            valid_media.append({
+                            new_batch.append({
                                 "ts": now,
                                 "base64": b64_str,
                                 "url": s_url,
                             })
                     except Exception as e:
                         logger.warning("Failed to auto-save inbound image %d: %s", idx, e)
-                _recent_media_cache[norm_from] = valid_media
+
+                _recent_media_cache[norm_from] = new_batch
+                if is_boss:
+                    _recent_media_cache[norm_owner] = new_batch
+                    if payload.sender_jid:
+                        _recent_media_cache[payload.sender_jid] = new_batch
                 if newly_saved_urls:
                     saved_image_url = newly_saved_urls[0]
+                target_list = newly_saved_urls
             elif valid_media:
-                _recent_media_cache[norm_from] = valid_media
+                # Follow-up text turn referencing a firearm / photo
                 msg_l = effective_message.lower()
-                if is_boss or any(kw in msg_l for kw in ["add", "photo", "image", "pic", "tasveer", "ye", "yeh", "isko", "is ko", "this", "kardo", "kar do", "rate", "price", "k"]) or any(c.isdigit() for c in msg_l):
+                is_catalog_action = is_boss and (
+                    any(kw in msg_l for kw in [
+                        "add", "photo", "image", "pic", "tasveer", "ye", "yeh", "isko", "is ko", "this",
+                        "kardo", "kar do", "rate", "price", "k", "lac", "lakh", "replace", "dono", "both", "keep"
+                    ]) or any(c.isdigit() for c in msg_l)
+                )
+                if is_catalog_action:
                     effective_image_b64 = valid_media[-1].get("base64")
                     saved_image_url = valid_media[-1].get("url")
+                    target_list = [e["url"] for e in valid_media if e.get("url")]
+                else:
+                    # Unrelated conversation turn — do not bleed prior images
+                    target_list = []
+            else:
+                target_list = []
 
-            # Collect all active cached URLs for this sender (e.g. 2-3 images sent together)
-            all_cached_urls = [e["url"] for e in _recent_media_cache.get(norm_from, []) if e.get("url")]
             seen_urls = set()
             deduped_urls = []
-            target_list = newly_saved_urls if newly_saved_urls else all_cached_urls
             for u in target_list:
                 if u and u not in seen_urls:
                     seen_urls.add(u)
@@ -222,6 +259,11 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 else None
             )
 
+            sender_aliases_list = [
+                a for a in [norm_from, norm_owner, payload.sender_jid, payload.customer_phone, payload.real_phone]
+                if a
+            ]
+
             input_state: RabtaGraphState = {
                 "tenant_id": str(tenant_id),
                 "is_boss": is_boss,
@@ -235,6 +277,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 "image_base64": effective_image_b64,
                 "image_url": saved_image_url or (deduped_urls[0] if deduped_urls else None),
                 "image_urls": deduped_urls if deduped_urls else None,
+                "sender_aliases": sender_aliases_list,
                 "conversation_history": history,
                 "customer_sim_phone": detected_sim,
                 "push_name": payload.push_name,
