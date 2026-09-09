@@ -61,9 +61,12 @@ services:
       dockerfile: Dockerfile
     container_name: rabta_gateway
     restart: unless-stopped
+    env_file: .env
     environment:
       PYTHON_BACKEND_URL: http://backend:8000
       NODE_ENV: production
+      OWNER_PHONE: ${OWNER_PHONE:-+923169827188}
+      OWNER_LID: ${OWNER_LID:-61379545444551}
     depends_on:
       backend:
         condition: service_healthy

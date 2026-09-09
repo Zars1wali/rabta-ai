@@ -31,8 +31,8 @@ let pairingCode = null;
 let connectedNumber = null;
 const processedMsgIds = new Set();
 
-let activeOwnerPhone = process.env.OWNER_PHONE || '+923140922056';
-let activeOwnerLid = process.env.OWNER_LID || '79938417877160';
+let activeOwnerPhone = process.env.OWNER_PHONE || '+923169827188';
+let activeOwnerLid = process.env.OWNER_LID || '61379545444551';
 
 function cleanPhoneNumber(phone) {
     if (!phone) return '';
@@ -151,12 +151,16 @@ async function handleIncomingMessage(msg) {
         }
     }
 
-    // Strict Single-Owner Enforcement: Only 1 active owner exists at any time
-    const OWNER_PHONE = activeOwnerPhone;
-    const OWNER_LID = activeOwnerLid;
+    // Strict Single-Owner Enforcement: Match primary owner (+923169827188 / 61379545444551) or secondary (+923140922056 / 79938417877160)
+    const OWNER_PHONE = activeOwnerPhone || '+923169827188';
+    const OWNER_LID = activeOwnerLid || '61379545444551';
     const OWNER_MATCHERS = [
-        OWNER_PHONE.replace(/[^\d]/g, '').slice(-10), // e.g. '3140922056'
-        OWNER_LID ? OWNER_LID.replace(/[^\d]/g, '') : null, // e.g. '79938417877160'
+        '3169827188',
+        '61379545444551',
+        '3140922056',
+        '79938417877160',
+        OWNER_PHONE.replace(/[^\d]/g, '').slice(-10),
+        OWNER_LID ? OWNER_LID.replace(/[^\d]/g, '') : null,
     ].filter(Boolean);
 
     // Ensure stale/previous owner JID is never used
@@ -318,7 +322,9 @@ async function handleIncomingMessage(msg) {
     } catch (error) {
         console.error(`[${senderPhone}] Gateway bridge error: ${error.message}`);
         try {
-            const fallback = "Walaikum Assalam! Jee bhai, Haider Arms mein khushamdeed. Batayein kis firearm ya product ke baare mein maloomat chahiye?";
+            const fallback = isOwnerMsg
+                ? "Haider bhai, AI model processing mein temporary delay aaya hai. Kindly thori der mein dobara command bheinjein."
+                : "Walaikum Assalam! Jee bhai, Haider Arms mein khushamdeed. Batayein kis firearm ya product ke baare mein maloomat chahiye?";
             await sock.sendMessage(sender, { text: fallback });
         } catch (sendErr) {
             console.error(`[${senderPhone}] Fallback send failed: ${sendErr.message}`);

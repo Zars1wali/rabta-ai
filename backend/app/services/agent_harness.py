@@ -151,9 +151,9 @@ class ReActAgentHarness:
                 preferred = []
                 if _ACTIVE_HEALTHY_MODEL and _MODEL_COOLDOWNS.get(_ACTIVE_HEALTHY_MODEL, 0) < now:
                     preferred.append(_ACTIVE_HEALTHY_MODEL)
-                preferred.extend([self.model, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"])
+                preferred.extend(["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", self.model])
 
-                # Filter out models currently in cooldown to avoid wasting seconds on known 429 quota exhaustion
+                # Filter out models currently in cooldown to avoid wasting seconds on known 429/503 exhaustion
                 valid_pool = [m for m in preferred if m and _MODEL_COOLDOWNS.get(m, 0) < now]
                 if not valid_pool:
                     _MODEL_COOLDOWNS.clear()
@@ -189,9 +189,9 @@ class ReActAgentHarness:
                         except Exception as m_err:
                             last_exc = m_err
                             err_str = str(m_err)
-                            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                            if any(k in err_str for k in ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "quota", "demand")):
                                 _MODEL_COOLDOWNS[attempt_model] = time.time() + 180.0
-                                logger.warning("[ReActHarness] Model %s quota exhausted (429), cooling down for 180s", attempt_model)
+                                logger.warning("[ReActHarness] Model %s rate-limited/unavailable (%s), cooling down for 180s", attempt_model, err_str[:80])
                             else:
                                 logger.warning("[ReActHarness] Model %s failed (%s), trying next in pool", attempt_model, m_err)
                     
