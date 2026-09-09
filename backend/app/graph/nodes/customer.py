@@ -581,7 +581,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                 photos = await get_product_photos(
                     tenant_id=tenant_id_str,
                     product_name=cand_product,
-                    allow_multiple=True,
+                    allow_multiple=False,
                 )
                 if photos:
                     media_url = photos[0]["url"]
@@ -672,7 +672,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             photos = await get_product_photos(
                 tenant_id=tenant_id_str,
                 product_name=target_product,
-                allow_multiple=True,
+                allow_multiple=False,
             )
             if photos:
                 media_url = photos[0]["url"]
