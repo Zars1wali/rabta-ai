@@ -95,6 +95,36 @@ async def _polite_followup_loop():
             logger.error("[FollowUp] Error in follow-up worker loop: %s", exc, exc_info=True)
 
 
+_scheduler_lock_file = None
+
+
+def _acquire_scheduler_leader() -> bool:
+    """Acquire non-blocking flock to ensure only ONE worker process runs background cron loops."""
+    global _scheduler_lock_file
+    try:
+        import fcntl
+        _scheduler_lock_file = open("/tmp/rabta_scheduler.lock", "w")
+        fcntl.flock(_scheduler_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except (ImportError, AttributeError):
+        # Fallback for environments without fcntl (e.g. Windows dev)
+        return True
+    except (IOError, BlockingIOError):
+        return False
+
+
+def _release_scheduler_leader():
+    global _scheduler_lock_file
+    if _scheduler_lock_file:
+        try:
+            import fcntl
+            fcntl.flock(_scheduler_lock_file, fcntl.LOCK_UN)
+            _scheduler_lock_file.close()
+        except Exception:
+            pass
+        _scheduler_lock_file = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Initializing RABTA AI Backend Services...")
@@ -109,21 +139,22 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("[Graph] Failed to initialize LangGraph: %s", exc, exc_info=True)
 
-    # Start background 48h conversation cleanup loop
-    cleanup_task = asyncio.create_task(_conversation_cleanup_loop())
-    logger.info("[Cleanup] 48h conversation history cleanup scheduler started.")
+    is_leader = _acquire_scheduler_leader()
+    cleanup_task = None
+    followup_task = None
 
-    # Start background polite follow-up loop (scans every 60s)
-    followup_task = asyncio.create_task(_polite_followup_loop())
-    logger.info("[FollowUp] Polite conversation follow-up scheduler started.")
-
-    # Start autonomous background scheduler agent (PDF 2 §13, §15)
-    try:
-        from app.services.scheduler_agent import scheduler_agent
-        await scheduler_agent.start()
-        logger.info("[SchedulerAgent] Autonomous scheduler agent started.")
-    except Exception as exc:
-        logger.error("[SchedulerAgent] Failed to start scheduler agent: %s", exc, exc_info=True)
+    if is_leader:
+        logger.info("[SchedulerLeader] This worker acquired leader lock. Starting background workers...")
+        cleanup_task = asyncio.create_task(_conversation_cleanup_loop())
+        followup_task = asyncio.create_task(_polite_followup_loop())
+        try:
+            from app.services.scheduler_agent import scheduler_agent
+            await scheduler_agent.start()
+            logger.info("[SchedulerAgent] Autonomous scheduler agent started on leader worker.")
+        except Exception as exc:
+            logger.error("[SchedulerAgent] Failed to start scheduler agent: %s", exc, exc_info=True)
+    else:
+        logger.info("[SchedulerLeader] Another worker is already the scheduler leader. Background tasks skipped on this worker.")
 
     yield
 
@@ -133,19 +164,26 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
-    try:
-        from app.services.scheduler_agent import scheduler_agent
-        await scheduler_agent.stop()
-    except Exception:
-        pass
+    if is_leader:
+        try:
+            from app.services.scheduler_agent import scheduler_agent
+            await scheduler_agent.stop()
+        except Exception:
+            pass
 
-    cleanup_task.cancel()
-    followup_task.cancel()
-    try:
-        await cleanup_task
-        await followup_task
-    except asyncio.CancelledError:
-        pass
+        if cleanup_task:
+            cleanup_task.cancel()
+        if followup_task:
+            followup_task.cancel()
+        try:
+            if cleanup_task:
+                await cleanup_task
+            if followup_task:
+                await followup_task
+        except asyncio.CancelledError:
+            pass
+        _release_scheduler_leader()
+
     logger.info("Shutting down RABTA AI Backend...")
 
 

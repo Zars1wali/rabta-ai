@@ -60,6 +60,102 @@ const customerQueues = new Map();
 
 // Outgoing message deduplication cache (prevents duplicate messages to the same JID within 30 seconds)
 const recentOutgoingCache = new Map();
+
+// Persistent phone-to-JID mapping
+const JID_MAP_FILE = path.join(AUTH_DIR, 'jid_map.json');
+const _jidMap = new Map();
+global._customerJidMap = _jidMap;
+
+// Known owner static mappings
+const KNOWN_OWNER_MAP = {
+    '3169827188': '61379545444551@lid',
+    '923169827188': '61379545444551@lid',
+    '03169827188': '61379545444551@lid',
+    '61379545444551': '61379545444551@lid',
+    '3140922056': '79938417877160@lid',
+    '923140922056': '79938417877160@lid',
+    '03140922056': '79938417877160@lid',
+    '79938417877160': '79938417877160@lid',
+};
+
+function loadJidMap() {
+    for (const [k, v] of Object.entries(KNOWN_OWNER_MAP)) {
+        _jidMap.set(k, v);
+    }
+    try {
+        if (fs.existsSync(JID_MAP_FILE)) {
+            const raw = fs.readFileSync(JID_MAP_FILE, 'utf-8');
+            const data = JSON.parse(raw);
+            for (const [k, v] of Object.entries(data)) {
+                _jidMap.set(k, v);
+            }
+            console.log(`📋 [JID MAP] Loaded ${_jidMap.size} phone-to-JID mappings from disk.`);
+        }
+    } catch (e) {
+        console.warn(`⚠️ [JID MAP] Could not load jid_map.json:`, e.message);
+    }
+}
+
+let saveJidMapTimer = null;
+function recordJidMapping(phoneKey, jid) {
+    if (!phoneKey || !jid) return;
+    const strKey = String(phoneKey).trim();
+    const cleanKey = cleanPhoneNumber(strKey);
+    const last10 = cleanKey.slice(-10);
+
+    _jidMap.set(strKey, jid);
+    if (cleanKey) _jidMap.set(cleanKey, jid);
+    if (last10 && last10.length >= 10) _jidMap.set(last10, jid);
+
+    if (!saveJidMapTimer) {
+        saveJidMapTimer = setTimeout(() => {
+            saveJidMapTimer = null;
+            try {
+                const obj = {};
+                for (const [k, v] of _jidMap.entries()) {
+                    obj[k] = v;
+                }
+                fs.writeFileSync(JID_MAP_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+            } catch (err) {
+                console.warn(`⚠️ [JID MAP] Failed to persist jid_map.json:`, err.message);
+            }
+        }, 3000);
+    }
+}
+
+function resolveDestinationJid(target) {
+    if (!target) return null;
+    const str = String(target).trim();
+    if (str.endsWith('@lid') || str.endsWith('@s.whatsapp.net')) {
+        return str;
+    }
+    const clean = cleanPhoneNumber(str);
+    const last10 = clean.slice(-10);
+
+    // 1. Direct match for known owner phones / LIDs
+    if (clean.includes('3169827188') || clean.includes('61379545444551') || last10 === '3169827188') {
+        return '61379545444551@lid';
+    }
+    if (clean.includes('3140922056') || clean.includes('79938417877160') || last10 === '3140922056') {
+        return '79938417877160@lid';
+    }
+    if (activeOwnerLid && (clean === activeOwnerLid || str.includes(activeOwnerLid))) {
+        return `${activeOwnerLid}@lid`;
+    }
+    if (activeOwnerPhone && (clean === cleanPhoneNumber(activeOwnerPhone) || last10 === cleanPhoneNumber(activeOwnerPhone).slice(-10))) {
+        if (activeOwnerLid) return `${activeOwnerLid}@lid`;
+        if (global._lastKnownOwnerJid) return global._lastKnownOwnerJid;
+    }
+
+    // 2. Check persistent JID map
+    if (_jidMap.has(str)) return _jidMap.get(str);
+    if (_jidMap.has(clean)) return _jidMap.get(clean);
+    if (last10 && _jidMap.has(last10)) return _jidMap.get(last10);
+
+    // 3. Fallback to standard WhatsApp user JID
+    return `${clean}@s.whatsapp.net`;
+}
+
 function isDuplicateOutgoing(jid, text) {
     if (!text || !jid) return false;
     const cleanText = text.trim();
@@ -211,11 +307,13 @@ async function handleIncomingMessage(input) {
     }
     const pushName = input?.pushName || msg?.pushName || null;
 
-    // Track customer JID so relay back to customer always uses correct destination
-    if (!isOwnerMsg) {
-        if (!global._customerJidMap) global._customerJidMap = new Map();
-        global._customerJidMap.set(senderPhone, sender);
-        if (realSimPhone) global._customerJidMap.set(realSimPhone, sender);
+    // Track JID mapping so relay back to customer or owner always uses correct destination
+    recordJidMapping(senderPhone, sender);
+    if (realSimPhone) recordJidMapping(realSimPhone, sender);
+    if (isOwnerMsg) {
+        recordJidMapping(OWNER_PHONE, sender);
+        recordJidMapping(cleanPhoneNumber(OWNER_PHONE), sender);
+        if (OWNER_LID) recordJidMapping(OWNER_LID, sender);
     }
 
     const promptText = textMessage
@@ -317,24 +415,18 @@ async function handleIncomingMessage(input) {
             }
         }
 
-        // 4. Send clean notification to the Boss (both phone JID and LID for 100% delivery)
+        // 4. Send clean notification to the Boss (using single resolved owner JID)
         if (ownerAlert && ownerPhone) {
-            const phoneJid = `${cleanPhoneNumber(ownerPhone)}@s.whatsapp.net`;
-            const destinations = [phoneJid];
-            if (global._lastKnownOwnerJid && global._lastKnownOwnerJid !== phoneJid) {
-                destinations.push(global._lastKnownOwnerJid);
-            }
-            for (const targetOwnerJid of destinations) {
-                if (isDuplicateOutgoing(targetOwnerJid, ownerAlert)) {
-                    console.log(`🛡️ [DEDUP] Suppressed duplicate alert to Boss on [${targetOwnerJid}]`);
-                } else {
-                    console.log(`🚨 [ALERT] Notifying Boss on [${targetOwnerJid}]`);
-                    try {
-                        const sent = await sock.sendMessage(targetOwnerJid, { text: ownerAlert });
-                        if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
-                    } catch (alertErr) {
-                        console.error(`Failed to send alert to ${targetOwnerJid}: ${alertErr.message}`);
-                    }
+            const targetOwnerJid = resolveDestinationJid(ownerPhone);
+            if (isDuplicateOutgoing(targetOwnerJid, ownerAlert)) {
+                console.log(`🛡️ [DEDUP] Suppressed duplicate alert to Boss on [${targetOwnerJid}]`);
+            } else {
+                console.log(`🚨 [ALERT] Notifying Boss on [${targetOwnerJid}]`);
+                try {
+                    const sent = await sock.sendMessage(targetOwnerJid, { text: ownerAlert });
+                    if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+                } catch (alertErr) {
+                    console.error(`Failed to send alert to ${targetOwnerJid}: ${alertErr.message}`);
                 }
             }
         }
@@ -589,22 +681,7 @@ app.post('/api/send-message', async (req, res) => {
     if (connectionStatus !== 'CONNECTED') return res.status(503).json({ error: 'WhatsApp not connected' });
 
     try {
-        let jid;
-        if (typeof target === 'string' && (target.endsWith('@lid') || target.endsWith('@s.whatsapp.net'))) {
-            jid = target;
-        } else {
-            const cleanPhone = cleanPhoneNumber(target);
-            const OWNER_LID = activeOwnerLid;
-            if ((OWNER_LID && cleanPhone === OWNER_LID) || (OWNER_LID && target.includes(OWNER_LID))) {
-                jid = global._lastKnownOwnerJid || `${OWNER_LID}@lid`;
-            } else if (global._customerJidMap && global._customerJidMap.get(cleanPhone)) {
-                jid = global._customerJidMap.get(cleanPhone);
-            } else if (global._customerJidMap && global._customerJidMap.get(target)) {
-                jid = global._customerJidMap.get(target);
-            } else {
-                jid = `${cleanPhone}@s.whatsapp.net`;
-            }
-        }
+        const jid = resolveDestinationJid(target);
         if (isDuplicateOutgoing(jid, message)) {
             console.log(`🛡️ [/api/send-message] [DEDUP] Suppressed duplicate message to [${jid}]`);
             return res.json({ success: true, jid, deduped: true });
@@ -640,6 +717,7 @@ app.post('/api/set-owner', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
+    loadJidMap();
     console.log(`WhatsApp Gateway running on port ${PORT}`);
     connectToWhatsApp();
 });

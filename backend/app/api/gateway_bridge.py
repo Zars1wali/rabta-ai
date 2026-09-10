@@ -429,6 +429,14 @@ async def trigger_followups(payload: FollowUpTriggerPayload = FollowUpTriggerPay
     return {"status": "ok", "processed_count": len(processed), "followups": processed}
 
 
+@router.post("/trigger-price-confirmation")
+async def trigger_price_confirmation():
+    """Manually trigger daily price confirmation dispatch to store owner."""
+    from app.services.scheduler_agent import scheduler_agent
+    await scheduler_agent.trigger_price_confirmation_now()
+    return {"status": "ok", "message": "Price confirmation triggered successfully"}
+
+
 def _reply(text: str, biz_name: str = "Haider Arms") -> Dict[str, Any]:
     return {
         "reply": text,

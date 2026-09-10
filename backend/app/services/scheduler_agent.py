@@ -198,6 +198,11 @@ class SchedulerAgent:
 
         await self._send_whatsapp_to_owner(owner_phone, message)
 
+    async def trigger_price_confirmation_now(self):
+        """Force-trigger the daily price confirmation dispatch to the store owner."""
+        logger.info("[SchedulerAgent] Force-triggering daily price confirmation dispatch...")
+        await self._send_price_confirmation_initial()
+
     async def _send_price_confirmation_reminder1(self):
         """PDF 2 §13: 9:30 AM reminder."""
         owner_phone, _, _ = await self._get_owner_phone_and_products()
