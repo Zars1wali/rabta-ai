@@ -119,29 +119,33 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
         "image_base64": image_b64,
     }
 
-    # If owner is directly answering a pending customer escalation, execute _tool_relay_to_customer
-    pending_list = escalation_service.get_pending_for_tenant(t_uuid)
-    if pending_list:
-        esc, clean_ans = escalation_service.find_target_escalation(t_uuid, raw_message)
-        has_num = bool(re.search(r'\d+', raw_message))
-        is_reply = has_num or any(kw in raw_message.lower() for kw in ["batao", "bolo", "kaho", "bhej do", "share", "charges", "rate", "available", "yes", "haan", "nahi", "no", "ok", "theek"])
-        if esc and is_reply:
-            from app.services.catalog_tools import _tool_relay_to_customer
-            relay_res = await _tool_relay_to_customer(str(t_uuid), {"escalation_id": esc.escalation_id, "reply_message": raw_message}, execution_context)
-            if relay_res.get("status") == "success":
-                confirm_msg = relay_res.get("message") or f"Jee Haider bhai, customer ko message deliver kar diya hai: '{relay_res.get('formatted_reply')}'"
-                return {
-                    **state,
-                    "reply_text": confirm_msg,
-                    "reply_chunks": [confirm_msg],
-                    "forward_to_customer": relay_res.get("customer_jid") or relay_res.get("customer_phone"),
-                    "forward_message": relay_res.get("formatted_reply"),
-                    "escalation_resolved_id": esc.escalation_id,
-                    "media_url": None,
-                    "media_urls": None,
-                    "owner_alert": None,
-                }
-        elif not esc and len(pending_list) > 1 and is_reply:
+    # 3. Direct Customer Inquiry Reply Routing (Fast Path)
+    # Checks pending inquiries first, then recent inquiries (within 48h) to handle late replies
+    esc, clean_ans = escalation_service.find_target_escalation(t_uuid, raw_message, allow_recent_resolved=True)
+    has_num = bool(re.search(r'\d+', raw_message))
+    is_spec = any(kw in raw_message.lower() for kw in ["twist", "twist rate", "barrel", "caliber", "m/s", "inch", "mm", "round", "delivery", "charges", "rate"])
+    is_reply_kw = any(kw in raw_message.lower() for kw in ["batao", "bolo", "kaho", "bhej do", "share", "charges", "rate", "available", "yes", "haan", "nahi", "no", "ok", "theek", "daniyal", "customer"])
+    is_reply = (has_num or is_spec or is_reply_kw)
+
+    if esc and is_reply:
+        from app.services.catalog_tools import _tool_relay_to_customer
+        relay_res = await _tool_relay_to_customer(str(t_uuid), {"escalation_id": esc.escalation_id, "reply_message": raw_message}, execution_context)
+        if relay_res.get("status") == "success":
+            confirm_msg = relay_res.get("message") or f"Jee Haider bhai, {esc.customer_name or 'customer'} ko message deliver kar diya hai: '{relay_res.get('formatted_reply')}'"
+            return {
+                **state,
+                "reply_text": confirm_msg,
+                "reply_chunks": [confirm_msg],
+                "forward_to_customer": relay_res.get("customer_jid") or relay_res.get("customer_phone"),
+                "forward_message": relay_res.get("formatted_reply"),
+                "escalation_resolved_id": esc.escalation_id,
+                "media_url": None,
+                "media_urls": None,
+                "owner_alert": None,
+            }
+    elif not esc:
+        pending_list = escalation_service.get_pending_for_tenant(t_uuid)
+        if len(pending_list) > 1 and is_reply:
             from app.services.catalog_tools import _tool_relay_to_customer
             relay_res = await _tool_relay_to_customer(str(t_uuid), {"reply_message": raw_message}, execution_context)
             if relay_res.get("status") == "ambiguous":
@@ -157,8 +161,11 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
                     "owner_alert": None,
                 }
 
-    # Inject dynamic pending inquiries summary into the ReAct prompt
+    # Inject dynamic pending inquiries summary or recent inquiries into the ReAct prompt
     pending_summary = escalation_service.format_pending_escalations_summary(t_uuid)
+    if not pending_summary:
+        pending_summary = escalation_service.format_recent_escalations_summary(t_uuid, hours=24.0)
+
     dynamic_instruction = OWNER_INTELLIGENCE_SYSTEM_PROMPT
     if pending_summary:
         dynamic_instruction = f"{OWNER_INTELLIGENCE_SYSTEM_PROMPT}\n\n{pending_summary}"
@@ -180,6 +187,62 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
     fwd_cust = result.get("forward_to_customer")
     fwd_msg = result.get("forward_message")
     esc_res_id = result.get("escalation_resolved_id")
+
+    # STRICT ANTI-HALLUCINATION & GUARANTEED RELAY GUARD:
+    # If reply claims a message was sent/relayed to a customer, but forward_to_customer is missing:
+    delivery_patterns = [
+        r'\b(?:bhej\s+(?:diya|raha|dia))\b',
+        r'\b(?:deliver\s+(?:kar\s+diya|kar\s+raha|kardi|diya))\b',
+        r'\b(?:relay\s+(?:kar\s+diya|kar\s+raha|kardi|kardo|kr\s+dia))\b',
+        r'\b(?:pahuncha\s+diya)\b',
+        r'\b(?:message\s+(?:bhej|deliver|relay|kar\s+diya))\b',
+        r'\b(?:escalation\s+resolve)\b',
+        r'\b(?:bata\s+diya)\b',
+    ]
+    claims_delivery = any(re.search(pat, reply_text, re.IGNORECASE) for pat in delivery_patterns)
+
+    if claims_delivery and not fwd_cust:
+        logger.warning(
+            "[OwnerReActNode] DETECTED RELAY HALLUCINATION: Model claimed delivery without tool execution! Intercepting..."
+        )
+        # Attempt deterministic recovery
+        rec_esc, _ = escalation_service.find_target_escalation(t_uuid, raw_message, allow_recent_resolved=True)
+        if not rec_esc and history:
+            # Check conversation history for customer name
+            for turn in reversed(history[-8:]):
+                t_content = turn.get("content", "") or ""
+                for w in ["Daniyal", "Asad", "Kamran", "Tariq", "Usman", "Bilal", "Ali", "Zaheer"]:
+                    if w.lower() in t_content.lower():
+                        rec_esc, _ = escalation_service.find_target_escalation(t_uuid, w, allow_recent_resolved=True)
+                        if rec_esc:
+                            break
+                if rec_esc:
+                    break
+
+        if rec_esc:
+            from app.services.catalog_tools import _tool_relay_to_customer
+            relay_res = await _tool_relay_to_customer(
+                str(t_uuid),
+                {"escalation_id": rec_esc.escalation_id, "reply_message": raw_message},
+                execution_context,
+            )
+            if relay_res.get("status") == "success":
+                fwd_cust = relay_res.get("customer_jid") or relay_res.get("customer_phone")
+                fwd_msg = relay_res.get("formatted_reply")
+                esc_res_id = rec_esc.escalation_id
+                reply_text = relay_res.get("message") or f"Jee Haider bhai, {rec_esc.customer_name or 'customer'} ko message deliver kar diya hai: '{fwd_msg}'"
+                reply_chunks = [reply_text]
+                logger.info(
+                    "[OwnerReActNode] Successfully recovered and executed relay to %s (%s)",
+                    fwd_cust,
+                    rec_esc.customer_name,
+                )
+
+        if not fwd_cust:
+            # Recovery failed - NEVER lie to the owner!
+            logger.error("[OwnerReActNode] Relay recovery failed: No customer found. Replacing false confirmation.")
+            reply_text = "Haider bhai, customer ka contact record nahi mil saka is liye message deliver nahi ho paya. Kindly customer ka naam ya phone number batayein taake main unhein yeh details convey kar sakoon."
+            reply_chunks = [reply_text]
 
     logger.info(
         "[OwnerReActNode] Completed turn. Tools: %s. Reply: '%s' | Media: %d | Forward: %s",

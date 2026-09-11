@@ -1987,6 +1987,7 @@ async def _tool_get_pending_escalations(tenant_id: str, args: Dict[str, Any]) ->
 async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     reply_msg = args.get("reply_message", "").strip()
     escalation_id = (args.get("escalation_id") or "latest").strip()
+    target_cust = args.get("target_customer") or args.get("customer_name") or args.get("customer_phone")
 
     try:
         t_uuid = uuid.UUID(tenant_id)
@@ -1999,34 +2000,40 @@ async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context:
 
     # Fallback to intelligent context matching if specific ID not found
     if not esc:
-        esc, _ = escalation_service.find_target_escalation(t_uuid, reply_msg)
+        search_term = f"{target_cust} {reply_msg}".strip() if target_cust else reply_msg
+        esc, _ = escalation_service.find_target_escalation(t_uuid, search_term, allow_recent_resolved=True)
 
-    # If still unresolved, inspect pending list
+    # If still unresolved, check pending or single recent inquiry
     if not esc:
         pending = escalation_service.get_pending_for_tenant(t_uuid)
-        if not pending:
-            return {
-                "status": "not_found",
-                "message": "Abhi koi pending customer inquiry nahi mili jise reply convey karna ho.",
-            }
-        if len(pending) > 1:
-            # Multiple inquiries are pending and owner's answer was ambiguous!
-            # Do NOT guess or send to a random customer.
-            lines = [
-                "Haider bhai, aap ka yeh jawab kis customer ke liye hai? Abhi ek se zyada inquiries pending hain:"
-            ]
-            for idx, p in enumerate(pending, 1):
-                name_str = p.customer_name or "Customer"
-                city_str = f" ({p.customer_city})" if p.customer_city else ""
-                prod_str = f" — {p.product_context}" if p.product_context else f" — \"{p.customer_question[:40]}\""
-                lines.append(f"{idx}. {name_str}{city_str}{prod_str} [ID: {p.escalation_id}]")
-            lines.append("Customer ka naam, shehar ya ID batayein taake sahi bande ko deliver ho.")
-            return {
-                "status": "ambiguous",
-                "message": "\n".join(lines),
-            }
+        if pending:
+            if len(pending) > 1:
+                # Multiple inquiries are pending and owner's answer was ambiguous!
+                lines = [
+                    "Haider bhai, aap ka yeh jawab kis customer ke liye hai? Abhi ek se zyada inquiries pending hain:"
+                ]
+                for idx, p in enumerate(pending, 1):
+                    name_str = p.customer_name or "Customer"
+                    city_str = f" ({p.customer_city})" if p.customer_city else ""
+                    prod_str = f" — {p.product_context}" if p.product_context else f" — \"{p.customer_question[:40]}\""
+                    lines.append(f"{idx}. {name_str}{city_str}{prod_str} [ID: {p.escalation_id}]")
+                lines.append("Customer ka naam, shehar ya ID batayein taake sahi bande ko deliver ho.")
+                return {
+                    "status": "ambiguous",
+                    "message": "\n".join(lines),
+                }
+            else:
+                esc = pending[0]
         else:
-            esc = pending[0]
+            # Fallback to most recent customer escalation in the last 48 hours
+            recent = escalation_service.get_recent_escalations_for_tenant(t_uuid, max_age_hours=48.0)
+            if len(recent) == 1:
+                esc = recent[0]
+            elif not recent:
+                return {
+                    "status": "not_found",
+                    "message": "Abhi koi active ya recent customer inquiry nahi mili jise reply convey karna ho. Customer ka naam ya phone specify karein.",
+                }
 
     # Format a warm, polite customer reply in Roman Urdu
     cust_name = esc.customer_name or "Customer"

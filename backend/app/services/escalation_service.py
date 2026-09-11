@@ -31,35 +31,54 @@ class EscalationRecord(BaseModel):
     resolved_at: Optional[float] = None
 
 
-_STORAGE_FILE = "/tmp/rabta_escalations.json" if os.name != 'nt' else os.path.join(os.environ.get("TEMP", "C:\\temp"), "rabta_escalations.json")
-try:
-    os.makedirs(os.path.dirname(_STORAGE_FILE), exist_ok=True)
-except Exception:
-    pass
+_BACKUP_STORAGE = "/app/backups/rabta_escalations.json"
+_TMP_STORAGE = "/tmp/rabta_escalations.json" if os.name != 'nt' else os.path.join(os.environ.get("TEMP", "C:\\temp"), "rabta_escalations.json")
+_STORAGE_FILE = _BACKUP_STORAGE if (os.path.isdir("/app/backups") or os.path.exists(_BACKUP_STORAGE)) else _TMP_STORAGE
+
+for target_dir in ["/app/backups", os.path.dirname(_TMP_STORAGE)]:
+    if target_dir:
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+        except Exception:
+            pass
 
 _global_escalations: Dict[str, EscalationRecord] = {}
 
 
 def _load_persisted_escalations() -> Dict[str, EscalationRecord]:
-    """Load escalations from shared file so all uvicorn worker processes are in sync."""
+    """Load escalations from shared persistent file so all processes/restarts remain in sync."""
     global _global_escalations
-    if os.path.exists(_STORAGE_FILE):
-        try:
-            with open(_STORAGE_FILE, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-            for k, v in raw.items():
-                _global_escalations[k] = EscalationRecord(**v)
-        except Exception as e:
-            logger.warning("[EscalationService] Error loading persisted escalations: %s", e)
+    paths_to_try = [_STORAGE_FILE, _TMP_STORAGE, _BACKUP_STORAGE]
+    loaded = False
+    for path in paths_to_try:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                for k, v in raw.items():
+                    if k not in _global_escalations or v.get("status") == "PENDING":
+                        _global_escalations[k] = EscalationRecord(**v)
+                loaded = True
+                break
+            except Exception as e:
+                logger.warning("[EscalationService] Error loading persisted escalations from %s: %s", path, e)
     return _global_escalations
 
 
 def _save_persisted_escalations():
-    """Save all escalations to disk."""
+    """Save all escalations to disk across both persistent backup and /tmp."""
     try:
         data = {k: v.model_dump() for k, v in _global_escalations.items()}
-        with open(_STORAGE_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        target_paths = set([_STORAGE_FILE, _TMP_STORAGE])
+        if os.path.isdir("/app/backups"):
+            target_paths.add(_BACKUP_STORAGE)
+        for path in target_paths:
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+            except Exception as pe:
+                logger.warning("[EscalationService] Failed to write %s: %s", path, pe)
     except Exception as e:
         logger.warning("[EscalationService] Error saving escalations to disk: %s", e)
 
@@ -174,17 +193,60 @@ class EscalationService:
         lines.append("Instruction: If you provide an answer for a customer, identify the customer by Name, City, or ID!")
         return "\n".join(lines)
 
+    def get_recent_escalations_for_tenant(
+        self, tenant_id: uuid.UUID, max_age_hours: float = 48.0
+    ) -> List[EscalationRecord]:
+        """Returns all escalations for this tenant within max_age_hours, sorted by created_at DESC.
+        Includes PENDING, RESOLVED, and EXPIRED records so context is preserved when owner replies late.
+        """
+        _load_persisted_escalations()
+        now = time.time()
+        max_age_secs = max_age_hours * 3600.0
+        records = [
+            esc for esc in _global_escalations.values()
+            if esc.tenant_id == str(tenant_id) and (now - esc.created_at) <= max_age_secs
+        ]
+        return sorted(records, key=lambda x: x.created_at, reverse=True)
+
+    def format_recent_escalations_summary(self, tenant_id: uuid.UUID, hours: float = 24.0) -> str:
+        """Returns a concise summary of recent inquiries handled today to give ReAct agent conversational context."""
+        recent = self.get_recent_escalations_for_tenant(tenant_id, max_age_hours=hours)
+        if not recent:
+            return ""
+        from app.db.repositories.tenant_repo import format_pakistani_phone_display
+        lines = ["=== RECENT CUSTOMER INQUIRIES FROM TODAY ==="]
+        for esc in recent[:5]:
+            phone_disp = format_pakistani_phone_display(esc.customer_phone) if esc.customer_phone else "Unknown"
+            name_part = esc.customer_name or "Customer"
+            city_part = f", City: {esc.customer_city}" if esc.customer_city else ""
+            prod_part = f", Product: {esc.product_context}" if esc.product_context else ""
+            status_tag = f"[{esc.status}]"
+            lines.append(f"• {status_tag} [ID: {esc.escalation_id}] {name_part} ({phone_disp}{city_part}{prod_part})")
+            lines.append(f"  Question: \"{esc.customer_question}\"")
+            if esc.owner_answer:
+                lines.append(f"  Answer: \"{esc.owner_answer}\"")
+        lines.append("Instruction: If Haider bhai sends additional details for a customer above, call relay_to_customer with their escalation_id!")
+        return "\n".join(lines)
+
     def find_target_escalation(
-        self, tenant_id: uuid.UUID, owner_text: str
+        self, tenant_id: uuid.UUID, owner_text: str, allow_recent_resolved: bool = True
     ) -> Tuple[Optional[EscalationRecord], str]:
         """
-        Intelligently resolves which pending customer inquiry the owner is addressing.
+        Intelligently resolves which customer inquiry the owner is addressing.
+        First checks PENDING escalations. If none match and allow_recent_resolved is True,
+        checks recently resolved inquiries (last 48h) to prevent missed late replies.
         Matches by ID, phone, customer name, city, or product keyword.
         Zero Blind Relays: If multiple inquiries are pending and NO target attribute matches,
         returns (None, 'AMBIGUOUS') to prevent misrouting messages.
         """
         pending = self.get_pending_for_tenant(tenant_id)
-        if not pending:
+        candidates = pending
+        is_fallback_recent = False
+        if not candidates and allow_recent_resolved:
+            candidates = self.get_recent_escalations_for_tenant(tenant_id, max_age_hours=48.0)
+            is_fallback_recent = True
+
+        if not candidates:
             return None, owner_text
 
         raw = owner_text.strip()
@@ -206,54 +268,64 @@ class EscalationService:
                     clean_ans = f"Delivery charges Rs. {num_match.group(1)}"
 
         # 1. Match by explicit Escalation ID if mentioned (e.g. "ESC-A1" or "ESC-3F")
-        for esc in pending:
+        for esc in candidates:
             if esc.escalation_id.lower() in lower_raw:
                 return esc, clean_ans or raw
 
-        # 2. Match by phone digits
-        for esc in pending:
+        # 2. Match by phone digits or LID
+        for esc in candidates:
             clean_digits = re.sub(r'[^\d]', '', esc.customer_phone or "")
             short_phone = clean_digits[-7:] if len(clean_digits) >= 7 else clean_digits
             if short_phone and len(short_phone) >= 4 and short_phone in raw:
                 return esc, clean_ans or raw
+            if esc.customer_jid and esc.customer_jid.lower() in lower_raw:
+                return esc, clean_ans or raw
 
-        # 3. Match by Customer Name if mentioned (e.g. "Ali", "Asad", "Tariq")
-        for esc in pending:
+        # 3. Match by Customer Name if mentioned (e.g. "Ali", "Asad", "Tariq", "Daniyal")
+        for esc in candidates:
             if esc.customer_name and len(esc.customer_name) >= 3:
                 for token in esc.customer_name.lower().split():
                     if len(token) >= 3 and token in lower_raw:
                         return esc, clean_ans or raw
 
-        # 4. Match by City if mentioned (e.g. "hyderabad", "karachi", "lahore", "quetta")
-        for esc in pending:
+        # 4. Match by City if mentioned (e.g. "hyderabad", "karachi", "lahore", "quetta", "gujrat")
+        for esc in candidates:
             if esc.customer_city and len(esc.customer_city) >= 3 and esc.customer_city.lower() in lower_raw:
                 return esc, clean_ans or raw
-            for word in ["hyderabad", "karachi", "lahore", "islamabad", "rawalpindi", "peshawar", "quetta", "multan", "faisalabad", "sialkot", "gujranwala"]:
+            for word in ["hyderabad", "karachi", "lahore", "islamabad", "rawalpindi", "peshawar", "quetta", "multan", "faisalabad", "sialkot", "gujranwala", "gujrat"]:
                 if word in lower_raw and (word in esc.customer_question.lower() or (esc.customer_city and word in esc.customer_city.lower())):
                     return esc, clean_ans or raw
 
-        # 5. Match by Product name keywords (e.g. "glock", "beretta", "taurus", "sig", "colt")
-        for esc in pending:
+        # 5. Match by Product name keywords (e.g. "glock", "beretta", "taurus", "sig", "colt", "diamondback", "glfa")
+        for esc in candidates:
             if esc.product_context:
                 for token in esc.product_context.lower().split():
                     if len(token) >= 4 and token in lower_raw:
                         return esc, clean_ans or raw
 
-        # 6. If only 1 pending escalation exists, it safely matches that single inquiry
-        if len(pending) == 1:
-            return pending[0], clean_ans or raw.strip()
+        # 6. If only 1 candidate exists:
+        # If it's a pending escalation, safely match
+        if len(candidates) == 1 and not is_fallback_recent:
+            return candidates[0], clean_ans or raw.strip()
 
-        # 7. MULTIPLE INQUIRIES PENDING AND NO ATTRIBUTE MATCHED:
-        # Prevent blind fallback to pending[0] or pending[-1]!
-        # Return None, "AMBIGUOUS" to trigger owner clarification
-        return None, "AMBIGUOUS"
+        # If it's a recent candidate and the owner text clearly provides specifications/numbers
+        if len(candidates) == 1 and is_fallback_recent:
+            has_num = bool(re.search(r'\d+', raw))
+            is_reply_kw = any(w in lower_raw for w in ["twist", "twist rate", "delivery", "charges", "charges 15000", "rate", "available", "batao", "bolo", "ok", "theek"])
+            if has_num or is_reply_kw:
+                return candidates[0], clean_ans or raw.strip()
+
+        # 7. Multiple candidates without explicit match:
+        if not is_fallback_recent:
+            return None, "AMBIGUOUS"
+        return None, owner_text
 
     def resolve_escalation(
         self, escalation_id: str, owner_answer: str
     ) -> Optional[EscalationRecord]:
         _load_persisted_escalations()
         esc = self.get_escalation(escalation_id)
-        if not esc or esc.status != "PENDING":
+        if not esc:
             return None
 
         esc.status = "RESOLVED"

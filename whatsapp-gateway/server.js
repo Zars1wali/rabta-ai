@@ -402,6 +402,7 @@ async function handleIncomingMessage(input) {
         if (forwardCustomer && forwardMessage) {
             const custJid = (global._customerJidMap && global._customerJidMap.get(forwardCustomer))
                 || (global._customerJidMap && global._customerJidMap.get(cleanPhoneNumber(forwardCustomer)))
+                || resolveDestinationJid(forwardCustomer)
                 || `${cleanPhoneNumber(forwardCustomer)}@s.whatsapp.net`;
             if (isDuplicateOutgoing(custJid, forwardMessage)) {
                 console.log(`🛡️ [DEDUP] Suppressed duplicate relay to customer [${forwardCustomer}]`);
