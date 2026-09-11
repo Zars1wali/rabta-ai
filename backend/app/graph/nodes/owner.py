@@ -122,6 +122,7 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
     # 3. Direct Customer Inquiry Reply Routing (Fast Path)
     # Only fast-path if this is an explicit relay to a customer or a clear answer to an active PENDING escalation.
     # NEVER hijack questions to the assistant, catalog updates, or requests for images for the owner!
+    raw_l = raw_message.lower()
     is_question = "?" in raw_message or any(w in raw_l for w in ["apke saath", "apke pas", "ap ke pas", "right", "kia add", "add kia", "save kia", "muje", "mujhe", "bataiye"])
     is_catalog_cmd = any(w in raw_l for w in ["add new product", "ye images", "yeh images", "new item", "photo add", "photo update", "catalog"])
     is_for_owner = any(w in raw_l for w in ["muje", "mujhe", "hamen", "hamein"]) and any(w in raw_l for w in ["image", "images", "photo", "photos", "tasveer", "pic", "pics"])
