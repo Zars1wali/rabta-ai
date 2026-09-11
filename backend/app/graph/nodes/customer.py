@@ -571,11 +571,29 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             "owner_alert": None,
         }
 
+    # Maintain customer_product across turns if mentioned in current message
+    current_product = state.get("customer_product")
+    msg_product = clean_product_query(raw_message)
+    if msg_product and len(msg_product) >= 3 and not any(w in raw_l for w in ["pic", "pics", "photo", "photos", "image", "images", "tasveer"]):
+        current_product = msg_product
+        state["customer_product"] = current_product
+
     # Direct high-accuracy photo lookup fast-path:
     # If customer explicitly requests a photo of a firearm, query catalog photos directly
-    is_photo_req = any(w in raw_l for w in ["pic", "pics", "picture", "pictures", "photo", "photos", "tasveer", "tasveerein", "tasweer"])
+    is_photo_req = any(w in raw_l for w in [
+        "pic", "pics", "picture", "pictures", "photo", "photos", "image", "images", "img", "imgs",
+        "tasveer", "tasveerein", "tasweer", "tasweere", "fotu", "pucs", "picx"
+    ])
     if is_photo_req:
-        cand_product = clean_product_query(raw_message) or state.get("customer_product")
+        cand_product = clean_product_query(raw_message) or current_product
+        if not cand_product and state.get("conversation_history"):
+            for msg in reversed(state.get("conversation_history")[-6:]):
+                content = (msg.get("content") or msg.get("content_text") or "").strip()
+                extracted = clean_product_query(content)
+                if extracted and len(extracted) >= 2:
+                    cand_product = extracted
+                    break
+
         if cand_product and len(cand_product) >= 2:
             try:
                 photos = await get_product_photos(
@@ -590,7 +608,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                     if not caption_text:
                         p_val = photos[0].get("price")
                         p_str = f" — {p_val:,.0f} PKR" if p_val else ""
-                        caption_text = f"Yeh hai piece{p_str}. Genuine import."
+                        caption_text = f"Yeh rahi {prod_name} ki picture bhai{p_str}. Genuine import piece."
                     media_urls = [
                         {
                             "name": p.get("product_name") or prod_name,
@@ -610,6 +628,8 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                         "reply_chunks": [reply],
                         "owner_alert": None,
                     }
+                else:
+                    logger.info("[customer_sales_chat] No photos found for requested product: %s", cand_product)
             except Exception as pe:
                 logger.warning("[customer_sales_chat] Photo fast-path error: %s", pe)
 

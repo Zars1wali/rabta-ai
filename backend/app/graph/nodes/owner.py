@@ -120,14 +120,17 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
     }
 
     # 3. Direct Customer Inquiry Reply Routing (Fast Path)
-    # Checks pending inquiries first, then recent inquiries (within 48h) to handle late replies
-    esc, clean_ans = escalation_service.find_target_escalation(t_uuid, raw_message, allow_recent_resolved=True)
-    has_num = bool(re.search(r'\d+', raw_message))
-    is_spec = any(kw in raw_message.lower() for kw in ["twist", "twist rate", "barrel", "caliber", "m/s", "inch", "mm", "round", "delivery", "charges", "rate"])
-    is_reply_kw = any(kw in raw_message.lower() for kw in ["batao", "bolo", "kaho", "bhej do", "share", "charges", "rate", "available", "yes", "haan", "nahi", "no", "ok", "theek", "daniyal", "customer"])
-    is_reply = (has_num or is_spec or is_reply_kw)
+    # Only fast-path if this is an explicit relay to a customer or a clear answer to an active PENDING escalation.
+    # NEVER hijack questions to the assistant, catalog updates, or requests for images for the owner!
+    is_question = "?" in raw_message or any(w in raw_l for w in ["apke saath", "apke pas", "ap ke pas", "right", "kia add", "add kia", "save kia", "muje", "mujhe", "bataiye"])
+    is_catalog_cmd = any(w in raw_l for w in ["add new product", "ye images", "yeh images", "new item", "photo add", "photo update", "catalog"])
+    is_for_owner = any(w in raw_l for w in ["muje", "mujhe", "hamen", "hamein"]) and any(w in raw_l for w in ["image", "images", "photo", "photos", "tasveer", "pic", "pics"])
 
-    if esc and is_reply:
+    esc, clean_ans = escalation_service.find_target_escalation(t_uuid, raw_message, allow_recent_resolved=False)
+    is_explicit_relay = bool(re.search(r'\b(?:customer\s+ko|unko|un\s+ko|.+?\s+ko)\s+(?:bolo|batao|batado|kaho|keh\s+do|bhej\s+do|dedo|de\s+do)\b', raw_message, re.IGNORECASE))
+    is_valid_relay_candidate = (is_explicit_relay or (esc and esc.status == "PENDING")) and not (is_question or is_catalog_cmd or is_for_owner)
+
+    if esc and is_valid_relay_candidate:
         from app.services.catalog_tools import _tool_relay_to_customer
         relay_res = await _tool_relay_to_customer(str(t_uuid), {"escalation_id": esc.escalation_id, "reply_message": raw_message}, execution_context)
         if relay_res.get("status") == "success":
@@ -143,23 +146,6 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
                 "media_urls": None,
                 "owner_alert": None,
             }
-    elif not esc:
-        pending_list = escalation_service.get_pending_for_tenant(t_uuid)
-        if len(pending_list) > 1 and is_reply:
-            from app.services.catalog_tools import _tool_relay_to_customer
-            relay_res = await _tool_relay_to_customer(str(t_uuid), {"reply_message": raw_message}, execution_context)
-            if relay_res.get("status") == "ambiguous":
-                clarify_msg = relay_res.get("message")
-                return {
-                    **state,
-                    "reply_text": clarify_msg,
-                    "reply_chunks": [clarify_msg],
-                    "forward_to_customer": None,
-                    "forward_message": None,
-                    "media_url": None,
-                    "media_urls": None,
-                    "owner_alert": None,
-                }
 
     # Inject dynamic pending inquiries summary or recent inquiries into the ReAct prompt
     pending_summary = escalation_service.format_pending_escalations_summary(t_uuid)

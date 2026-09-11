@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, update, or_, desc
 
 from app.db.session import AsyncSessionLocal
-from app.models.database import CatalogItem, PriceChangeLog, Tenant
+from app.models.database import CatalogItem, PriceChangeLog, Tenant, Customer, Conversation, Message
 from app.services.knowledge_base import kb_service
 from app.services.escalation_service import escalation_service, _load_persisted_escalations
 
@@ -2062,9 +2062,54 @@ async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context:
         else:
             # Fallback to most recent customer escalation in the last 48 hours
             recent = escalation_service.get_recent_escalations_for_tenant(t_uuid, max_age_hours=48.0)
-            if len(recent) == 1:
+            if recent:
                 esc = recent[0]
-            elif not recent:
+            else:
+                # Fallback to PostgreSQL database for active customers
+                try:
+                    from app.db.repositories.tenant_repo import format_pakistani_phone_display
+                    async with AsyncSessionLocal() as session:
+                        owner_clean = re.sub(r'[^\d]', '', settings.WHATSAPP_OWNER_PHONE or "923140922056")
+                        stmt = (
+                            select(Customer, Conversation)
+                            .join(Conversation, Customer.id == Conversation.customer_id)
+                            .where(
+                                Conversation.tenant_id == t_uuid,
+                                Customer.phone != owner_clean,
+                            )
+                            .order_by(Conversation.last_message_at.desc())
+                            .limit(10)
+                        )
+                        res = await session.execute(stmt)
+                        db_rows = res.all()
+                        if db_rows:
+                            target_row = None
+                            if target_cust:
+                                tc_l = target_cust.lower()
+                                for c_obj, conv_obj in db_rows:
+                                    if tc_l in (c_obj.name or "").lower() or tc_l in (c_obj.phone or ""):
+                                        target_row = (c_obj, conv_obj)
+                                        break
+                            if not target_row:
+                                target_row = db_rows[0]
+
+                            if target_row:
+                                c_obj, conv_obj = target_row
+                                dest_phone = c_obj.phone
+                                formatted_dest = format_pakistani_phone_display(dest_phone)
+                                name_prefix = f"Jee {c_obj.name} bhai! " if c_obj.name else "Jee bhai! "
+                                formatted_reply = f"{name_prefix}{reply_msg.strip()}"
+                                return {
+                                    "status": "success",
+                                    "customer_phone": dest_phone,
+                                    "customer_jid": f"{dest_phone}@s.whatsapp.net" if "@" not in dest_phone else dest_phone,
+                                    "customer_name": c_obj.name,
+                                    "formatted_reply": formatted_reply,
+                                    "message": f"Jee Haider bhai, message {c_obj.name or 'customer'} ({formatted_dest}) ko deliver kar diya gaya hai: '{formatted_reply}'",
+                                }
+                except Exception as dbe:
+                    logger.warning("[_tool_relay_to_customer] DB fallback error: %s", dbe)
+
                 return {
                     "status": "not_found",
                     "message": "Abhi koi active ya recent customer inquiry nahi mili jise reply convey karna ho. Customer ka naam ya phone specify karein.",
@@ -2227,6 +2272,60 @@ async def _tool_get_customer_details(tenant_id: str, args: Dict[str, Any]) -> Di
         pending.sort(key=lambda x: x.created_at, reverse=True)
 
     if not pending:
+        # Fallback to PostgreSQL database records
+        try:
+            async with AsyncSessionLocal() as session:
+                owner_clean = re.sub(r'[^\d]', '', settings.WHATSAPP_OWNER_PHONE or "923140922056")
+                stmt = (
+                    select(Customer, Message, Conversation)
+                    .join(Conversation, Customer.id == Conversation.customer_id)
+                    .join(Message, Message.conversation_id == Conversation.id)
+                    .where(
+                        Conversation.tenant_id == t_uuid,
+                        Message.sender_type == "customer",
+                        Customer.phone != owner_clean,
+                    )
+                    .order_by(Message.created_at.desc())
+                    .limit(10)
+                )
+                res = await session.execute(stmt)
+                rows = res.all()
+                if rows:
+                    q_val = (args.get("query") or "latest").strip().lower()
+                    matched_row = None
+                    if q_val and q_val != "latest":
+                        for c_obj, m_obj, conv_obj in rows:
+                            c_phone = re.sub(r'[^\d]', '', c_obj.phone or "")
+                            c_name = (c_obj.name or "").lower()
+                            c_text = (m_obj.content_text or "").lower()
+                            if q_val in c_phone or q_val in c_name or q_val in c_text:
+                                matched_row = (c_obj, m_obj, conv_obj)
+                                break
+                    if not matched_row:
+                        matched_row = rows[0]
+
+                    c_obj, m_obj, conv_obj = matched_row
+                    formatted_sim = format_pakistani_phone_display(c_obj.phone)
+                    cust_name = c_obj.name or ("Daniyal" if "daniyal" in (m_obj.content_text or "").lower() else "Customer")
+                    quest = m_obj.content_text or "Inquiry"
+                    prod = clean_product_query(quest) or "firearm"
+
+                    return {
+                        "status": "success",
+                        "customer_name": cust_name,
+                        "customer_phone": c_obj.phone,
+                        "formatted_sim": formatted_sim,
+                        "product": prod,
+                        "inquiry": quest,
+                        "escalation_id": "LATEST-DB",
+                        "message": (
+                            f"Haider bhai, yeh customer {cust_name} hain (WhatsApp SIM: {formatted_sim}). "
+                            f"Inhon ne {prod} ke baare mein poocha tha: \"{quest}\"."
+                        ),
+                    }
+        except Exception as dbe:
+            logger.warning("[_tool_get_customer_details] DB fallback error: %s", dbe)
+
         return {
             "status": "not_found",
             "message": "Haider bhai, abhi koi recent pending inquiry ya customer escalation record nahi mila.",
