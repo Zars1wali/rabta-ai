@@ -31,8 +31,8 @@ let pairingCode = null;
 let connectedNumber = null;
 const processedMsgIds = new Set();
 
-let activeOwnerPhone = process.env.OWNER_PHONE || '+923169827188';
-let activeOwnerLid = process.env.OWNER_LID || '61379545444551';
+let activeOwnerPhone = process.env.OWNER_PHONE || '+923140922056';
+let activeOwnerLid = process.env.OWNER_LID || '79938417877160';
 
 function cleanPhoneNumber(phone) {
     if (!phone) return '';
@@ -265,16 +265,14 @@ async function handleIncomingMessage(input) {
         }
     }
 
-    // Strict Single-Owner Enforcement: Match primary owner (+923169827188 / 61379545444551) or secondary (+923140922056 / 79938417877160)
-    const OWNER_PHONE = activeOwnerPhone || '+923169827188';
-    const OWNER_LID = activeOwnerLid || '61379545444551';
+    // Strict Single-Owner Enforcement: Solely match active owner (+923140922056 / 79938417877160)
+    const OWNER_PHONE = activeOwnerPhone || '+923140922056';
+    const OWNER_LID = activeOwnerLid || '79938417877160';
+    const cleanOwnerDigits = cleanPhoneNumber(OWNER_PHONE);
     const OWNER_MATCHERS = [
-        '3169827188',
-        '61379545444551',
-        '3140922056',
-        '79938417877160',
-        OWNER_PHONE.replace(/[^\d]/g, '').slice(-10),
-        OWNER_LID ? OWNER_LID.replace(/[^\d]/g, '') : null,
+        cleanOwnerDigits,
+        cleanOwnerDigits.slice(-10),
+        OWNER_LID ? String(OWNER_LID).replace(/[^\d]/g, '') : null,
     ].filter(Boolean);
 
     // Ensure stale/previous owner JID is never used

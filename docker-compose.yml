@@ -65,8 +65,8 @@ services:
     environment:
       PYTHON_BACKEND_URL: http://backend:8000
       NODE_ENV: production
-      OWNER_PHONE: ${OWNER_PHONE:-+923169827188}
-      OWNER_LID: ${OWNER_LID:-61379545444551}
+      OWNER_PHONE: ${OWNER_PHONE:-+923140922056}
+      OWNER_LID: ${OWNER_LID:-79938417877160}
     depends_on:
       backend:
         condition: service_healthy
