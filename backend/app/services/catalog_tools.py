@@ -1032,20 +1032,55 @@ async def get_product_photos(
 
         photos = []
         targets = [it for it in scored if _calculate_photo_score(it) >= 10.0 and it.images] if allow_multiple else [winner]
+
+        catalog_img_dirs = [
+            "/app/app/static/catalog_images",
+            "/opt/rabta/backend/app/static/catalog_images",
+            os.path.join(os.path.dirname(__file__), "..", "static", "catalog_images"),
+        ]
+
+        def _resolve_valid_photo_url(raw_url: str, prod_name: str) -> Optional[str]:
+            url = raw_url.strip()
+            if not url.startswith("http://") and not url.startswith("https://"):
+                url = f"http://65.20.90.130{url if url.startswith('/') else '/' + url}"
+            
+            # If it's a local static catalog image, verify it exists on disk
+            if "/static/catalog_images/" in url:
+                fname = url.split("/static/catalog_images/")[-1].split("?")[0]
+                exists = any(os.path.exists(os.path.join(d, fname)) for d in catalog_img_dirs)
+                if exists:
+                    return url
+                
+                # File not found at exact name; search catalog_images for matching alternative
+                clean_prod = re.sub(r'[^a-z0-9]+', '_', prod_name.lower()).strip('_')
+                for d in catalog_img_dirs:
+                    if os.path.exists(d):
+                        try:
+                            for f in os.listdir(d):
+                                if f.lower().endswith(('.jpg', '.jpeg', '.png')):
+                                    tokens = [t for t in clean_prod.split('_') if len(t) >= 3][:3]
+                                    if tokens and all(t in f.lower() for t in tokens):
+                                        logger.info("[get_product_photos] Recovered 404 '%s' with '%s'", fname, f)
+                                        return f"http://65.20.90.130/static/catalog_images/{f}"
+                        except Exception:
+                            pass
+                logger.warning("[get_product_photos] Image file not found on disk: %s", fname)
+                return None
+            return url
+
         for it in targets:
             if it.images and isinstance(it.images, list):
                 for img in it.images:
                     if isinstance(img, str) and img.strip():
-                        url = img.strip()
-                        if url.startswith("/"):
-                            url = f"http://65.20.90.130{url}"
-                        price_str = f" — {it.price:,.0f} PKR" if it.price else ""
-                        photos.append({
-                            "product_name": it.name,
-                            "url": url,
-                            "price": float(it.price) if it.price else None,
-                            "caption": f"Yeh hai piece{price_str}. Genuine import.",
-                        })
+                        valid_url = _resolve_valid_photo_url(img, it.name)
+                        if valid_url:
+                            price_str = f" — {it.price:,.0f} PKR" if it.price else ""
+                            photos.append({
+                                "product_name": it.name,
+                                "url": valid_url,
+                                "price": float(it.price) if it.price else None,
+                                "caption": f"Yeh hai piece{price_str}. Genuine import.",
+                            })
 
         return photos
 

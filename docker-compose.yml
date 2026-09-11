@@ -53,6 +53,7 @@ services:
     volumes:
       # Preserve alembic state and any static assets
       - ./backend/backups:/app/backups
+      - ./backend/app/static/catalog_images:/app/app/static/catalog_images
 
   # ── WhatsApp Baileys Gateway ───────────────────────────────────────────────
   gateway:

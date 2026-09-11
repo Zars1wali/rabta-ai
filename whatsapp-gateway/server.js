@@ -368,6 +368,7 @@ async function handleIncomingMessage(input) {
         }
 
         if (mediaUrls.length > 0) {
+            let sentAtLeastOne = false;
             for (let i = 0; i < mediaUrls.length; i++) {
                 if (i > 0) await new Promise(r => setTimeout(r, 1500));
                 const item = mediaUrls[i];
@@ -378,12 +379,16 @@ async function handleIncomingMessage(input) {
                         caption: item.caption || undefined
                     });
                     if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+                    sentAtLeastOne = true;
                 } catch (mediaErr) {
                     console.error(`❌ Failed to send image ${item.url}: ${mediaErr.message}`);
-                    const fallbackNotice = "Bhai is model ki picture verify ho rahi hai — main confirm karke fresh tasveer bhejta hoon.";
-                    const sent = await sock.sendMessage(sender, { text: fallbackNotice });
-                    if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
                 }
+            }
+            if (!sentAtLeastOne) {
+                const fallbackNotice = replyText || "Bhai is model ki picture verify ho rahi hai — main confirm karke fresh tasveer bhejta hoon.";
+                console.log(`⚠️ All images failed for [${senderPhone}], sending single fallback notice.`);
+                const sent = await sock.sendMessage(sender, { text: fallbackNotice });
+                if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
             }
         } else if (replyChunks && replyChunks.length > 0) {
             for (let i = 0; i < replyChunks.length; i++) {
