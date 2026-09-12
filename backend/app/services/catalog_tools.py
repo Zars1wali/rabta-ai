@@ -1072,6 +1072,15 @@ async def get_product_photos(
             if it.images and isinstance(it.images, list):
                 for img in it.images:
                     if isinstance(img, str) and img.strip():
+                        # Cross-contamination sanity check:
+                        # If the product is a handgun / pistol (e.g. Kimber, Glock, CZ), never return an image that has "db10", "db15", "diamondback" or rifle indicators
+                        img_l = img.lower()
+                        cat_lower = (getattr(it, "category", "") or "").lower()
+                        is_pistol = "pistol" in cat_lower or any(p in it.name.lower() for p in ["kimber", "glock", "taurus", "cz", "beretta", "canik", "zigana", "tisas", "sig p365", "sig p320"])
+                        if is_pistol and any(r in img_l for r in ["db10", "db15", "diamondback", "rifle", "ar10", "ar15", "shotgun", "bullpup"]):
+                            logger.warning("[get_product_photos] Blocked cross-contaminated rifle image '%s' for pistol '%s'", img, it.name)
+                            continue
+
                         valid_url = _resolve_valid_photo_url(img, it.name)
                         if valid_url:
                             price_str = f" — {it.price:,.0f} PKR" if it.price else ""
@@ -1741,26 +1750,50 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
         if saved_url and saved_url not in images:
             images.append(saved_url)
 
-    # 4. Multimodal Vision Guard: Verify image does not contradict product name/category
+    # 4. Multimodal Vision Guard: Verify every image does not contradict product name/category
     if images:
-        sample_img = images[0]
-        verif = await verify_catalog_image_match(
-            image_bytes=img_bytes,
-            image_url=sample_img,
-            product_name=name,
-            category=category,
-            caliber=caliber,
-        )
-        if not verif.get("is_match", True):
+        valid_images = []
+        mismatch_reasons = []
+        for idx, img_candidate in enumerate(images):
+            cand_lower = img_candidate.lower()
+            cat_lower = (category or "").lower()
+            is_pistol = "pistol" in cat_lower or any(p in name.lower() for p in ["kimber", "glock", "taurus", "cz", "beretta", "canik", "zigana", "tisas", "sig p365", "sig p320"])
+
+            verif = await verify_catalog_image_match(
+                image_bytes=img_bytes if idx == 0 else None,
+                image_url=img_candidate,
+                product_name=name,
+                category=category,
+                caliber=caliber,
+            )
+
+            # Fast category sanity check fallback if vision check didn't flag it
+            if verif.get("is_match", True) and is_pistol and any(r in cand_lower for r in ["db10", "db15", "diamondback", "rifle", "ar10", "ar15", "shotgun", "bullpup"]):
+                verif = {
+                    "is_match": False,
+                    "confidence": 0.99,
+                    "mismatch_reason": f"Image filename/URL indicates a rifle ({img_candidate}) but product '{name}' is a pistol.",
+                }
+
+            if verif.get("is_match", True):
+                valid_images.append(img_candidate)
+            else:
+                reason = verif.get("mismatch_reason") or "Image does not match product."
+                mismatch_reasons.append(reason)
+                logger.warning("[_tool_add_catalog_item] Image %s rejected for %s: %s", img_candidate, name, reason)
+
+        if not valid_images and images:
+            reasons_str = "\n- ".join(mismatch_reasons) if mismatch_reasons else "Photo mismatch detected."
             return {
                 "status": "mismatch_detected",
                 "product_name": name,
                 "message": (
-                    f"⚠️ Photo Mismatch Warning: Haider bhai, yeh photo '{name}' se match nahi kar rahi.\n"
-                    f"Wajah: {verif.get('mismatch_reason')}\n\n"
+                    f"⚠️ Photo Mismatch Warning: Haider bhai, provide ki gayi photo '{name}' se match nahi kar rahi.\n\n"
+                    f"Wajah: {reasons_str}\n\n"
                     f"Ghalat photo attach hone se roknay ke liye isko block kar diya gaya hai. Please verify karke sahi firearm ki photo send karein."
                 ),
             }
+        images = valid_images
 
     async with AsyncSessionLocal() as session:
         # Check if item with this name already exists in catalog

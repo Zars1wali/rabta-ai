@@ -209,9 +209,9 @@ def build_owner_inquiry_alert(
     from app.db.repositories.tenant_repo import format_pakistani_phone_display
 
     sim_display = format_pakistani_phone_display(customer_phone)
-    name_display = customer_name or "Customer"
+    name_display = customer_name if (customer_name and customer_name.lower() not in ("customer", "unknown", "none", "")) else "(Nahi bataya)"
     p_str = product or "firearm"
-    city_str = city or "City pending"
+    city_str = city if (city and "pending" not in city.lower() and city.lower() not in ("none", "unknown")) else "(Nahi bataya)"
 
     if inquiry_type in ("emergency", "legal_police", "fraud_claim", "critical_complaint"):
         return (

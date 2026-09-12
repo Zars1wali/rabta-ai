@@ -33,8 +33,6 @@ The following facts have been confirmed by the owner.
 Do not research, invent, or add to these from external sources.
 Do not communicate any business fact not explicitly listed here or in the live data injected before this conversation.
 
-If a customer asks something not covered here, trigger OWNER_QUERY silently.
-
 ```
 BUSINESS NAME: Haider Arms / Haider Khan & Sons Arms & Ammunition Dealer
 OWNER NAME: Shahzad Haider Khan 
@@ -42,20 +40,29 @@ LOCATION: Shop 4, Old Fruit Market, GT Rd, Sikander Town Sikandar Town, Peshawar
 GOOGLE MAPS: https://www.google.com/maps/place/Haider+Arms/@34.0162786,71.5943887,17z/data=!3m1!4b1!4m6!3m5!1s0x38d93d4bd8ca0b29:0xf89b91b07be45815!8m2!3d34.0162786!4d71.5943887!16s%2Fg%2F11kq4xt0x4?entry=ttu&g_ep=EgoyMDI2MDkwMi4wIKXMDSoASAFQAw%3D%3D
 
 FACEBOOK: https://www.facebook.com/share/1FPQsjhe7k/?mibextid=wwXIfr
-
-
 INSTAGRAM: https://www.instagram.com/haiderarmsofficial?igsi=MWVma3I0aWFva2M2bw%3D%3D&utm_source=qr
-
 WEBSITE: haiderarms.com 
-
 YOUTUBE: https://www.youtube.com/@haiderarmofficial
-
-
 
 AI ACTIVE: 24/7
 PHYSICAL SHOP HOURS: 9:00 am till 7:00pm 
 ```
 
+CRITICAL ROUTINE INQUIRY DIRECTIVES:
+1. SHOP LOCATION / ADDRESS ("apka shop kider", "shop kahan hai", "address", "location"):
+   Answer directly using the verified facts above: "Hamari physical shop Peshawar mein hai: Shop 4, Old Fruit Market, GT Rd, Sikander Town, Peshawar. Timing subah 9:00 baje se shaam 7:00 baje tak hai. Google Maps link yeh raha: [Google Maps link]".
+   NEVER trigger OWNER_QUERY or delivery alerts when a customer simply asks where the shop is located!
+2. WEAPON FINISH / SPECS / COLOR ("konse finish me hai", "konsa color hai"):
+   Answer directly based on the catalog item specs, or invoke `get_product_photos` to show the picture.
+   NEVER trigger OWNER_QUERY or discount escalations when asked about weapon finish or color!
+3. STATUS / PAYMENT ACKNOWLEDGMENTS ("ok payment process kia", "screen shot bhejta hoon", "theek hai"):
+   Acknowledge warmly: "Jee bilkul theek hai bhai! Aap jaise hi payment transfer ka screenshot share karenge, hum verify karke confirmation de denge."
+   NEVER trigger OWNER_QUERY for routine customer acknowledgments!
+4. ONLY trigger OWNER_QUERY for:
+   - Calculating delivery charges to a specific city after customer gives Name, City, and Address.
+   - Price discount negotiation when customer explicitly asks for discount/gunjaish on a specific firearm.
+   - Genuine out-of-stock / bulk requests.
+   - Urgent complaints / legal issues.
 
 ---
 
@@ -1112,18 +1119,28 @@ def build_customer_sales_prompt(
     if not business_details and not products_and_prices:
         return CUSTOMER_SALES_SYSTEM_TEMPLATE + "\n\nSYSTEM_ERROR: Business data not loaded. Do not respond to customer."
 
-    # Formatted values for Part B template
-    prompt = CUSTOMER_SALES_SYSTEM_TEMPLATE
-    prompt = prompt.replace("{{BUSINESS_DETAILS}}", business_details.strip())
-    prompt = prompt.replace("{{PRODUCTS_AND_PRICES}}", products_and_prices.strip())
-    prompt = prompt.replace("{{PRICES_CONFIRMED_TODAY}}", "YES" if prices_confirmed_today else "NO")
-    prompt = prompt.replace("{{IMAGE_LIBRARY}}", image_index.strip() if image_index else "Check catalog images dynamically via get_product_photos tool.")
-    prompt = prompt.replace("{{CUSTOMER_HISTORY}}", (customer_history or "New customer (no previous interaction on file).").strip())
-    prompt = prompt.replace("{{ACTIVE_RULES}}", (active_rules or "Standard dealership rules apply.").strip())
-    prompt = prompt.replace("{{OWNER_PREFERENCES}}", (owner_preferences or "Standard dealership margin priorities.").strip())
-    prompt = prompt.replace("{{MESSAGE_LIMIT_STATUS}}", message_limit_status.strip())
-    prompt = prompt.replace("{{AI_ACTIVE}}", "YES" if ai_active else "NO")
+    # Build Part B injected data block
+    b_details = business_details.strip() if business_details else "Standard Haider Arms store profile"
+    p_prices = products_and_prices.strip() if products_and_prices else "Live catalog accessible via search_catalog tool"
+    hist = (customer_history or "New customer (no previous interaction on file).").strip()
+    rules = (active_rules or "Standard dealership rules apply.").strip()
+    prefs = (owner_preferences or "Standard dealership margin priorities.").strip()
+    imgs = image_index.strip() if image_index else "Check catalog images dynamically via get_product_photos tool."
 
+    live_block = (
+        f"\n\n# PART B — LIVE INJECTED DATA\n"
+        f"BUSINESS_DETAILS: {b_details}\n"
+        f"PRODUCTS_AND_PRICES: {p_prices}\n"
+        f"PRICES_CONFIRMED_TODAY: {'YES' if prices_confirmed_today else 'NO'}\n"
+        f"IMAGE_LIBRARY: {imgs}\n"
+        f"CUSTOMER_HISTORY: {hist}\n"
+        f"ACTIVE_RULES: {rules}\n"
+        f"OWNER_PREFERENCES: {prefs}\n"
+        f"MESSAGE_LIMIT_STATUS: {message_limit_status.strip()}\n"
+        f"AI_ACTIVE: {'YES' if ai_active else 'NO'}\n"
+    )
+
+    prompt = CUSTOMER_SALES_SYSTEM_TEMPLATE + live_block
     return prompt
 
 

@@ -201,6 +201,26 @@ Generate the follow-up message text now:"""
                 if not customer or not tenant:
                     continue
 
+                # 3a. STRICT OWNER EXCLUSION GUARD:
+                # Store owners / bosses must NEVER receive customer follow-ups or Instagram follow-back messages!
+                import re
+                owner_clean = re.sub(r'[^\d]', '', tenant.owner_phone or "")
+                cust_clean = re.sub(r'[^\d]', '', customer.phone or "")
+                is_owner = False
+                if owner_clean and cust_clean:
+                    # Match last 9-10 digits to catch leading 0, 92, +92 variations
+                    if cust_clean[-9:] == owner_clean[-9:]:
+                        is_owner = True
+                # Also check hardcoded/environment owner phone fallback
+                if cust_clean and any(cust_clean.endswith(op[-9:]) for op in ["923140922056", "03140922056", "923146446144", "03146446144"]):
+                    is_owner = True
+
+                if is_owner:
+                    logger.info("[FollowUp] Skipping conv=%s: customer is store owner (%s)", conv.id, customer.phone)
+                    conv.has_followed_up = True
+                    await session.commit()
+                    continue
+
                 # 4. Check conversation history
                 recent_msgs = await get_recent_messages(session, conv.id, limit=6)
                 if not recent_msgs:

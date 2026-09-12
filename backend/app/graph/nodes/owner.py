@@ -119,17 +119,73 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
         "image_base64": image_b64,
     }
 
+    # 2b. Direct Daily Price Confirmation Fast-Path
+    # If owner confirms daily prices, execute confirm_daily_prices IMMEDIATELY and NEVER relay to customer!
+    raw_l = raw_message.lower().strip()
+    is_daily_price_confirm = any(
+        raw_l == w or raw_l.startswith(w) for w in [
+            "confirm", "confirm hai", "confirm kardo", "confirm kar do", "confirm kardo yar",
+            "sab confirm", "rates confirm", "prices confirm", "sab theek hai", "sab theek he",
+            "sab done hai", "sab done", "rates done", "sab same hai", "prices theek hain",
+            "price theek hai", "rate theek hai", "rates theek", "daily prices confirm"
+        ]
+    ) or (
+        "confirm" in raw_l and any(w in raw_l for w in ["price", "prices", "rate", "rates", "aaj", "daily", "sab", "yar", "yaar"])
+    )
+
+    if is_daily_price_confirm:
+        from app.services.catalog_tools import _tool_confirm_daily_prices
+        confirm_res = await _tool_confirm_daily_prices(str(t_uuid), {}, execution_context)
+        msg = confirm_res.get("message") or "Haider bhai, aaj ke tamam catalog prices successfully confirm mark kar diye gaye hain! Rabta customers ko live quotes dene ke liye ready hai."
+        return {
+            **state,
+            "reply_text": msg,
+            "reply_chunks": [msg],
+            "media_url": None,
+            "media_urls": None,
+            "forward_to_customer": None,
+            "forward_message": None,
+            "owner_alert": None,
+        }
+
     # 3. Direct Customer Inquiry Reply Routing (Fast Path)
     # Only fast-path if this is an explicit relay to a customer or a clear answer to an active PENDING escalation.
     # NEVER hijack questions to the assistant, catalog updates, or requests for images for the owner!
-    raw_l = raw_message.lower()
     is_question = "?" in raw_message or any(w in raw_l for w in ["apke saath", "apke pas", "ap ke pas", "right", "kia add", "add kia", "save kia", "muje", "mujhe", "bataiye"])
-    is_catalog_cmd = any(w in raw_l for w in ["add new product", "ye images", "yeh images", "new item", "photo add", "photo update", "catalog"])
+    is_catalog_cmd = any(w in raw_l for w in ["add new product", "ye images", "yeh images", "new item", "photo add", "photo update", "catalog", "duplicate", "remove", "delete"])
     is_for_owner = any(w in raw_l for w in ["muje", "mujhe", "hamen", "hamein"]) and any(w in raw_l for w in ["image", "images", "photo", "photos", "tasveer", "pic", "pics"])
 
-    esc, clean_ans = escalation_service.find_target_escalation(t_uuid, raw_message, allow_recent_resolved=False)
+    # Check if the bot just asked the owner about duplicate entries, removals, or settings
+    last_bot_msg = ""
+    if history:
+        for turn in reversed(history[-4:]):
+            if turn.get("role") in ("assistant", "ai", "model"):
+                last_bot_msg = (turn.get("content") or turn.get("text") or "").lower()
+                break
+    is_answering_bot = any(w in last_bot_msg for w in ["duplicate", "remove", "hata", "delete", "badal do", "confirm kar dein", "prices still pending", "prices confirm nahi hue"])
+
+    known_weapons = [
+        "kimber", "glock", "diamondback", "db10", "db15", "glfa", "cz", "beretta",
+        "taurus", "canik", "zigana", "tisas", "sig", "colt", "palmetto", "dsa"
+    ]
+    words = raw_l.split()
+    is_bare_model_name = len(words) <= 3 and any(kw in raw_l for kw in known_weapons) and not any(
+        w in raw_l for w in ["twist", "delivery", "charges", "rate", "available", "stock", "price", "lac", "lakh", "hazar", "rs", "rupay", "batao", "bolo", "keh", "bhej"]
+    )
+
+    esc, clean_ans = escalation_service.find_target_escalation(t_uuid, raw_message, allow_recent_resolved=True)
     is_explicit_relay = bool(re.search(r'\b(?:customer\s+ko|unko|un\s+ko|.+?\s+ko)\s+(?:bolo|batao|batado|kaho|keh\s+do|bhej\s+do|dedo|de\s+do)\b', raw_message, re.IGNORECASE))
-    is_valid_relay_candidate = (is_explicit_relay or (esc and esc.status == "PENDING")) and not (is_question or is_catalog_cmd or is_for_owner)
+    
+    # A short model name (e.g. "Kimber 2k11") is NOT a relay answer unless explicitly instructed!
+    is_pure_number = bool(re.match(r'^\d+[\d,.]*$', raw_message.strip()))
+    has_answer_content = (
+        is_pure_number
+        or any(w in raw_l for w in ["twist", "delivery", "charges", "available", "nahi hai", "stock", "dedo", "bol do", "batado", "bata do", "bhej do", "specs", "specification"])
+        or (any(c.isdigit() for c in raw_message) and any(w in raw_l for w in ["lac", "lakh", "hazar", "rs", "rupay", "twist", "delivery", "charges", "rate", "k"]))
+    )
+    is_valid_relay_candidate = (
+        is_explicit_relay or (esc and (esc.status == "PENDING" or esc.status == "RESOLVED") and has_answer_content)
+    ) and not (is_bare_model_name or is_question or is_catalog_cmd or is_for_owner or is_answering_bot)
 
     if esc and is_valid_relay_candidate:
         from app.services.catalog_tools import _tool_relay_to_customer

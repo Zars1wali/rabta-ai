@@ -38,9 +38,16 @@ def is_valid_human_name(n: Optional[str]) -> bool:
     non_name = {
         "customer", "user", "guest", "none", "unknown", "whatsapp", "haider arms", "owner",
         "delivery", "deliver", "chahiye", "bhejo", "bhej", "karo", "rate", "price", "kitna", "kitne",
-        "kya", "discount", "account", "bank", "details", "firearm", "pistol", "gun", "ammo", "available"
+        "kya", "discount", "account", "bank", "details", "firearm", "pistol", "gun", "ammo", "available",
+        "asalam", "assalam", "salam", "slam", "aslam", "aoa", "walaikum", "walikum", "wassalam",
+        "hello", "hi", "hey", "bhai", "sir", "janab", "bro", "dear", "greetings", "shukriya",
+        "thanks", "thank", "ok", "theek", "acha", "ji", "jee", "haan", "yes", "no", "nahi",
+        "apka", "aapka", "shop", "kider", "kidhar", "kahan", "location", "address", "process"
     }
     if any(t in non_name for t in tokens):
+        return False
+    # If the whole string is just greeting or polite marker
+    if clean.lower() in non_name:
         return False
     return True
 
@@ -113,7 +120,7 @@ def extract_customer_entities(
             clean_for_name = re.sub(r'(?:(?:\+92|0092|92|0)?\s?3\d{2}[-\s]?\d{7})', '', clean_for_name)
             if city:
                 clean_for_name = re.sub(rf'\b{re.escape(city)}\b', '', clean_for_name, flags=re.IGNORECASE)
-            clean_for_name = re.sub(r'\b(hai|he|hun|hoon|hy|aur|se|bhai|bhi|main|mera|meri|number|no|whatsapp|sim)\b', '', clean_for_name, flags=re.IGNORECASE)
+            clean_for_name = re.sub(r'\b(asalam|assalam|salam|slam|aoa|walaikum|walikum|hai|he|hun|hoon|hy|aur|se|bhai|bhi|main|mera|meri|number|no|whatsapp|sim|hello|hi|ok|theek|jee|ji)\b', '', clean_for_name, flags=re.IGNORECASE)
             clean_for_name = re.sub(r'[^A-Za-z\s]', '', clean_for_name).strip()
             tokens = clean_for_name.split()
             if 1 <= len(tokens) <= 3:
@@ -242,7 +249,9 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
     sim = extracted_sim or sim
 
     if not name and step == "name" and len(msg.split()) <= 3 and not any(w in msg.lower() for w in ["lahore", "karachi", "delivery", "payment"]):
-        name = msg.strip().title()
+        cand = msg.strip().title()
+        if is_valid_human_name(cand):
+            name = cand
 
     if not city and step == "city" and len(msg.split()) <= 3:
         city = msg.strip().title()
@@ -743,9 +752,52 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
 
     # 3. Handle OWNER_QUERY Flag (Section A.29)
     elif flag and flag.flag_type == "OWNER_QUERY":
-        customer_state = "ESCALATED"
         query_payload = flag.payload or raw_message
         q_lower = query_payload.lower()
+
+        # Routine direct resolutions — DO NOT alert the owner!
+        if any(w in q_lower for w in ["shop kider", "shop kidhar", "shop kahan", "address", "location", "dukaan", "showroom"]):
+            shop_reply = "Hamari physical shop Peshawar mein hai: Shop 4, Old Fruit Market, GT Rd, Sikander Town, Peshawar. Timing subah 9:00 AM se shaam 7:00 PM tak hai. Google Maps link yeh raha: https://www.google.com/maps/place/Haider+Arms/@34.0162786,71.5943887,17z"
+            return {
+                **state,
+                "customer_state": "BROWSING",
+                "customer_name": name,
+                "customer_city": city,
+                "customer_product": product,
+                "reply_text": shop_reply,
+                "reply_chunks": [shop_reply],
+                "owner_alert": None,
+            }
+
+        if any(w in q_lower for w in ["payment process", "process kia", "screenshot bhej", "bhejta hoon", "bhej raha hoon", "screen shot"]):
+            ack_reply = "Jee bilkul theek hai bhai! Aap payment transfer ka screenshot share kar dein, hum verify karke confirmation de denge."
+            return {
+                **state,
+                "customer_state": "COLLECTING_INFO",
+                "info_collection_step": "receipt_awaited",
+                "customer_name": name,
+                "customer_city": city,
+                "customer_product": product,
+                "reply_text": ack_reply,
+                "reply_chunks": [ack_reply],
+                "owner_alert": None,
+            }
+
+        if any(w in q_lower for w in ["konse finish", "konsi finish", "finish me", "finish mein", "konse finish me hai"]):
+            prod_clean = product or "firearm"
+            finish_reply = f"Jee bhai, {prod_clean} original import piece hai aur premium factory finish mein mojood hai. Aapko detailed pictures share kar doon?"
+            return {
+                **state,
+                "customer_state": "BROWSING",
+                "customer_name": name,
+                "customer_city": city,
+                "customer_product": product,
+                "reply_text": finish_reply,
+                "reply_chunks": [finish_reply],
+                "owner_alert": None,
+            }
+
+        customer_state = "ESCALATED"
 
         # Extract city from query if not already known
         if not city:

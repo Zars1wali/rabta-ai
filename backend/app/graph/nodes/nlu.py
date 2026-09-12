@@ -189,6 +189,9 @@ _NAME_BLACKLIST = {
     "nahi", "pata", "shop", "model", "firearm", "pistol", "gun",
     "cheez", "stoeger", "image", "photo", "pic", "kya", "konsa",
     "charges", "rates", "rate", "cost", "details",
+    "asalam", "assalam", "salam", "slam", "aslam", "aoa", "walaikum", "walikum", "wassalam",
+    "hello", "hi", "hey", "janab", "bro", "dear", "shukriya", "thanks", "ok", "theek",
+    "acha", "ji", "jee", "customer", "process",
 }
 
 _ORIGINS = ["USA", "Austria", "Turkey", "Pakistan", "Brazil", "China", "Italy"]
@@ -468,7 +471,18 @@ Return STRICT JSON only:
         if not any(token.lower() in msg_lower for token in name_clean.split() if len(token) >= 3):
             name = None
 
-    # Merge into session state
+    # Guard product against non-firearm conversational phrases (e.g. "apka shop kider", "ok payment process kia")
+    NON_PRODUCT_WORDS = {
+        "shop", "kider", "kidhar", "kahan", "address", "location", "dukaan", "payment",
+        "process", "delivery", "charges", "rate", "price", "kitna", "kitne", "hai", "karo",
+        "bhai", "ok", "yes", "no", "theek", "kia", "kya", "kar", "dein", "do", "salam", "showroom"
+    }
+    if product and isinstance(product, str):
+        p_tokens = set(re.findall(r'[a-z0-9]+', product.lower()))
+        if p_tokens.issubset(NON_PRODUCT_WORDS) or any(w in product.lower() for w in ["shop kider", "shop kidhar", "payment process", "process kia", "kya rate"]):
+            product = None
+
+    # Merge into session state (never overwrite a valid firearm with None or conversational garbage)
     merged_product = product or state.get("customer_product")
     merged_city = city or state.get("customer_city")
     merged_name = name or state.get("customer_name")
