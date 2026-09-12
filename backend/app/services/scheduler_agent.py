@@ -93,35 +93,53 @@ class SchedulerAgent:
                 now = _now_pst()
                 today = now.strftime("%Y-%m-%d")
 
-                # Reset state at midnight
+                # Reset state at midnight or sync with DB on date change
                 if last_action_date != today:
                     last_action_date = today
-                    stage_today = 0
+                    stage_today = await self._get_today_stage(today)
 
                 hour, minute = now.hour, now.minute
+
+                # STRICT MORNING-ONLY WINDOW GUARD (PDF 2 §13):
+                # Daily price confirmation MUST ONLY run in the morning (9:00 AM - 10:30 AM PKT).
+                # It must NEVER execute in the afternoon or at night (e.g. 9:00 PM / 21:00).
+                if hour < 9 or hour >= 11:
+                    # If server started after morning window, close stage for today
+                    if hour >= 11 and stage_today == 0:
+                        stage_today = 3
+                        await self._set_today_stage(3, today)
+                    continue
 
                 # Check if prices are already confirmed today
                 confirmed = await self._is_prices_confirmed_today()
                 if confirmed:
                     continue
 
-                # Stage 0 → 1: Send initial if 9:00 AM PST or later and not sent today
-                if stage_today == 0 and hour >= 9:
+                # Stage 0 → 1: Send initial at 9:00 AM PKT (strictly 9:00 AM - 9:29 AM)
+                if stage_today == 0 and hour == 9 and minute < 30:
                     await self._send_price_confirmation_initial()
                     stage_today = 1
+                    await self._set_today_stage(1, today)
                     logger.info("[SchedulerAgent] Sent daily price confirmation (initial) at %s", now)
 
-                # Stage 1 → 2: Send reminder at 9:30 AM PST
-                elif stage_today == 1 and (hour > 9 or (hour == 9 and minute >= 30)):
+                # Stage 1 → 2: Send reminder at 9:30 AM PKT (strictly 9:30 AM - 9:59 AM)
+                elif stage_today == 1 and hour == 9 and minute >= 30:
                     await self._send_price_confirmation_reminder1()
                     stage_today = 2
+                    await self._set_today_stage(2, today)
                     logger.info("[SchedulerAgent] Sent price confirmation reminder 1 at %s", now)
 
-                # Stage 2 → 3: Send final reminder at 10:00 AM PST
-                elif stage_today == 2 and hour >= 10:
+                # Stage 2 → 3: Send final reminder at 10:00 AM PKT (strictly 10:00 AM - 10:29 AM)
+                elif stage_today == 2 and hour == 10 and minute < 30:
                     await self._send_price_confirmation_reminder2()
                     stage_today = 3
+                    await self._set_today_stage(3, today)
                     logger.info("[SchedulerAgent] Sent price confirmation final reminder at %s", now)
+
+                # Past 10:30 AM: Close reminders for the day
+                elif hour >= 10 and minute >= 30:
+                    stage_today = 3
+                    await self._set_today_stage(3, today)
 
             except asyncio.CancelledError:
                 logger.info("[SchedulerAgent] Price confirmation loop cancelled.")
@@ -129,6 +147,47 @@ class SchedulerAgent:
             except Exception as e:
                 logger.error("[SchedulerAgent] Error in price confirmation loop: %s", e, exc_info=True)
                 await asyncio.sleep(300)  # Back off on error
+
+    async def _get_today_stage(self, today_str: str) -> int:
+        """Fetch persisted stage for today from tenant config."""
+        try:
+            from app.db.session import AsyncSessionLocal
+            from sqlalchemy import select
+            from app.models.database import Tenant
+
+            async with AsyncSessionLocal() as session:
+                stmt = select(Tenant).limit(1)
+                result = await session.execute(stmt)
+                tenant = result.scalar_one_or_none()
+                if not tenant:
+                    return 0
+                ai_cfg = tenant.ai_persona_config or {}
+                if ai_cfg.get("price_confirmation_date") == today_str:
+                    return int(ai_cfg.get("price_confirmation_stage", 0))
+                return 0
+        except Exception:
+            return 0
+
+    async def _set_today_stage(self, stage: int, today_str: str):
+        """Persist today's stage into tenant config to survive server restarts."""
+        try:
+            from app.db.session import AsyncSessionLocal
+            from sqlalchemy import select
+            from app.models.database import Tenant
+
+            async with AsyncSessionLocal() as session:
+                stmt = select(Tenant).limit(1)
+                result = await session.execute(stmt)
+                tenant = result.scalar_one_or_none()
+                if not tenant:
+                    return
+                ai_cfg = dict(tenant.ai_persona_config or {})
+                ai_cfg["price_confirmation_date"] = today_str
+                ai_cfg["price_confirmation_stage"] = stage
+                tenant.ai_persona_config = ai_cfg
+                await session.commit()
+        except Exception as e:
+            logger.warning("[SchedulerAgent] Failed to persist price confirmation stage: %s", e)
 
     async def _is_prices_confirmed_today(self) -> bool:
         """Check if prices were already confirmed today in tenant DB."""
