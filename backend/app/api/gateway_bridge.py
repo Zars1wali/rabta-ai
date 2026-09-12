@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/gateway", tags=["WhatsApp QR Gateway Bridge"])
 # ---------------------------------------------------------------------------
 _catalog_cache: Dict[str, Any] = {}
 _recent_media_cache: Dict[str, List[Dict[str, Any]]] = {}
+_recent_owner_alerts: Dict[str, float] = {}
 _metrics = {
     "total_incoming": 0,
     "total_replies": 0,
@@ -335,6 +336,26 @@ async def process_gateway_message(payload: GatewayMessagePayload):
 
             # Persist messages in DB
             if not is_boss:
+                # Strictly guarantee that a customer inbound turn NEVER triggers a relay
+                forward_to_customer = None
+                forward_message = None
+
+                # Suppress repeat owner alerts for the same customer within 10 minutes (prevents bombarding the owner)
+                if owner_alert:
+                    alert_phone = detected_sim or payload.customer_phone or ""
+                    alert_key = f"{tenant_id}:{normalize_phone(alert_phone)}"
+                    last_alert_time = _recent_owner_alerts.get(alert_key, 0.0)
+                    now_ts = time.time()
+                    if (now_ts - last_alert_time) < 600.0:
+                        logger.info(
+                            "[GatewayBridge] Cooldown active for %s (last alert %ds ago). Suppressing repeat owner_alert.",
+                            alert_key,
+                            int(now_ts - last_alert_time),
+                        )
+                        owner_alert = None
+                    else:
+                        _recent_owner_alerts[alert_key] = now_ts
+
                 await conversation_store.add_message_async(
                     tenant_id, payload.customer_phone, "customer", effective_message
                 )
@@ -353,6 +374,10 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                 # If boss replied to an escalation, relay & save in customer thread
                 if forward_to_customer and forward_message:
                     norm_cust = normalize_phone(forward_to_customer)
+                    # Owner responded; clear cooldown for this customer
+                    clear_key = f"{tenant_id}:{norm_cust}"
+                    _recent_owner_alerts.pop(clear_key, None)
+
                     # Reset the customer's graph state to BROWSING
                     try:
                         cust_thread_config = make_thread_config(str(tenant_id), norm_cust)
@@ -366,6 +391,9 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                     await conversation_store.add_message_async(
                         tenant_id, forward_to_customer, "assistant", forward_message
                     )
+
+            # Consolidate into strictly ONE outgoing message chunk to prevent message fragmentation
+            reply_chunks = [reply_text] if reply_text else []
 
             _metrics["total_replies"] += 1
             return {

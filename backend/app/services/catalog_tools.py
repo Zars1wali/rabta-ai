@@ -2162,15 +2162,27 @@ async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context:
     cust_name = esc.customer_name or "Customer"
     name_prefix = f"Jee {cust_name} bhai! " if esc.customer_name else "Jee bhai! "
     
-    # If the reply is just a raw number or brief phrase like "3500" or "charges 3500"
-    clean_text = reply_msg
-    if re.match(r'^\d+[\d,.]*$', clean_text.strip()):
-        city_prefix = f"{esc.customer_city} ke liye " if esc.customer_city else ""
-        clean_text = f"{city_prefix}delivery charges Rs. {clean_text.strip()} hain."
-    elif not clean_text.lower().startswith("jee") and not clean_text.lower().startswith("walaikum"):
-        clean_text = f"Shop owner se confirm kar liya hai: {clean_text}"
+    clean_text = reply_msg.strip()
+    # Strip any duplicated or nested greeting / confirmation prefixes
+    clean_text = re.sub(r'^(?:jee\s+[\w\s]+?bhai[!,.:\-]*\s*)+', '', clean_text, flags=re.IGNORECASE)
+    clean_text = re.sub(r'^(?:bhai[!,.:\-]*\s*)+', '', clean_text, flags=re.IGNORECASE)
+    clean_text = re.sub(r'^(?:shop\s+owner\s+se\s+confirm\s+(?:kar\s+liya|ho\s+gaya|ho\s+gayi)\s+hai[!,.:\-]*\s*)+', '', clean_text, flags=re.IGNORECASE)
+    clean_text = clean_text.strip()
 
-    formatted_customer_reply = f"{name_prefix}{clean_text}" if not clean_text.lower().startswith("jee") else clean_text
+    # If the reply is just a raw number or brief phrase like "3500", "25k", "15k"
+    k_match = re.match(r'^(\d+)\s*k\b', clean_text, re.IGNORECASE)
+    if re.match(r'^\d+[\d,.]*$', clean_text):
+        city_prefix = f"{esc.customer_city} ke liye " if esc.customer_city else ""
+        clean_text = f"{city_prefix}delivery charges Rs. {clean_text} hain."
+    elif k_match:
+        val_k = int(k_match.group(1)) * 1000
+        city_prefix = f"{esc.customer_city} ke liye " if esc.customer_city else ""
+        clean_text = f"{city_prefix}delivery charges Rs. {val_k:,} hain."
+
+    if not clean_text.lower().startswith("jee") and not clean_text.lower().startswith("walaikum"):
+        formatted_customer_reply = f"{name_prefix}Shop owner se confirm kar liya hai: {clean_text}"
+    else:
+        formatted_customer_reply = f"{name_prefix}{clean_text}"
 
     # Resolve escalation in service
     escalation_service.resolve_escalation(esc.escalation_id, formatted_customer_reply)

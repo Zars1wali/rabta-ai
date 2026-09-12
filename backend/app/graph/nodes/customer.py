@@ -909,6 +909,30 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         try:
             t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
             cust_jid = state.get("sender_jid") or sender_phone
+
+            # Check if an escalation is ALREADY pending for this customer to prevent bombarding the owner
+            pending_list = _esc_service.get_pending_for_tenant(t_uuid)
+            existing_esc = next(
+                (e for e in pending_list if e.customer_phone == effective_sim or e.customer_jid == cust_jid),
+                None,
+            )
+            if existing_esc:
+                existing_esc.customer_question = f"{existing_esc.customer_question} | Follow-up: {query_payload}"
+                _esc_service._save_persisted_escalations()
+                wait_followup = f"Jee {name} bhai! Aapka yeh sawal bhi note kar liya hai. Jaise hi shop owner ka response aata hai, main foran aapko update karta hoon."
+                return {
+                    **state,
+                    "customer_state": "ESCALATED",
+                    "customer_name": name,
+                    "customer_city": city,
+                    "customer_sim_phone": effective_sim,
+                    "customer_product": product,
+                    "escalation_id": existing_esc.escalation_id,
+                    "reply_text": wait_followup,
+                    "reply_chunks": [wait_followup],
+                    "owner_alert": None,
+                }
+
             esc = _esc_service.create_escalation(
                 tenant_id=t_uuid,
                 customer_phone=effective_sim,

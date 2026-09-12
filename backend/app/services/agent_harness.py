@@ -223,12 +223,12 @@ class ReActAgentHarness:
                         final_text = response.text or ""
                     except Exception:
                         final_text = last_tool_message or "Maaf kijiye, main is query par baat nahi kar sakta."
-                    chunks = [c.strip() for c in final_text.split("\n\n") if c.strip()]
+                    chunks = [final_text.strip()] if final_text.strip() else []
                     state_updates = context.get("state_updates") or {} if isinstance(context, dict) else {}
                     owner_alert = "\n\n".join(gathered_owner_alerts) if gathered_owner_alerts else state_updates.get("owner_alert")
                     return {
                         "reply_text": final_text,
-                        "reply_chunks": chunks or [final_text],
+                        "reply_chunks": chunks,
                         "media_urls": gathered_media,
                         "tool_calls_executed": tool_calls_executed,
                         "state_updates": state_updates,

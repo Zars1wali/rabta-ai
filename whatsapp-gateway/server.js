@@ -390,21 +390,24 @@ async function handleIncomingMessage(input) {
                 const sent = await sock.sendMessage(sender, { text: fallbackNotice });
                 if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
             }
-        } else if (replyChunks && replyChunks.length > 0) {
-            for (let i = 0; i < replyChunks.length; i++) {
-                if (i > 0) await new Promise(r => setTimeout(r, 1200));
-                console.log(`🤖 Replying to [${senderPhone}]: "${replyChunks[i].substring(0, 80)}..."`);
-                const sent = await sock.sendMessage(sender, { text: replyChunks[i] });
-                if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+        } else {
+            // Strictly ONE outgoing message to the sender (never fragmented into multiple messages)
+            const fullReply = (replyChunks && replyChunks.length > 0)
+                ? replyChunks.join('\n\n').trim()
+                : (replyText || '').trim();
+            if (fullReply) {
+                if (isDuplicateOutgoing(sender, fullReply)) {
+                    console.log(`🛡️ [DEDUP] Suppressed duplicate outgoing message to [${senderPhone}]`);
+                } else {
+                    console.log(`🤖 Replying to [${senderPhone}] (1 message): "${fullReply.substring(0, 80)}..."`);
+                    const sent = await sock.sendMessage(sender, { text: fullReply });
+                    if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
+                }
             }
-        } else if (replyText) {
-            console.log(`🤖 Replying to [${senderPhone}]: "${replyText.substring(0, 100)}..."`);
-            const sent = await sock.sendMessage(sender, { text: replyText });
-            if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
         }
 
-        // 3. Relay owner answer to customer if owner answered
-        if (forwardCustomer && forwardMessage) {
+        // 3. Relay owner answer to customer ONLY if inbound was from Boss (strictly 1 message outgoing)
+        if (isOwnerMsg && forwardCustomer && forwardMessage) {
             const custJid = (global._customerJidMap && global._customerJidMap.get(forwardCustomer))
                 || (global._customerJidMap && global._customerJidMap.get(cleanPhoneNumber(forwardCustomer)))
                 || resolveDestinationJid(forwardCustomer)
@@ -413,19 +416,19 @@ async function handleIncomingMessage(input) {
                 console.log(`🛡️ [DEDUP] Suppressed duplicate relay to customer [${forwardCustomer}]`);
             } else {
                 console.log(`📨 [RELAY] Forwarding Boss decision to customer [${forwardCustomer}] (JID: ${custJid}): "${forwardMessage.substring(0, 80)}..."`);
-                await new Promise(r => setTimeout(r, 1500));
+                await new Promise(r => setTimeout(r, 1000));
                 const sent = await sock.sendMessage(custJid, { text: forwardMessage });
                 if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
             }
         }
 
-        // 4. Send clean notification to the Boss (using single resolved owner JID)
-        if (ownerAlert && ownerPhone) {
+        // 4. Send clean notification to the Boss ONLY if inbound was from customer (strictly 1 message incoming to Boss)
+        if (!isOwnerMsg && ownerAlert && ownerPhone) {
             const targetOwnerJid = resolveDestinationJid(ownerPhone);
             if (isDuplicateOutgoing(targetOwnerJid, ownerAlert)) {
                 console.log(`🛡️ [DEDUP] Suppressed duplicate alert to Boss on [${targetOwnerJid}]`);
             } else {
-                console.log(`🚨 [ALERT] Notifying Boss on [${targetOwnerJid}]`);
+                console.log(`🚨 [ALERT] Notifying Boss on [${targetOwnerJid}] (1 message)`);
                 try {
                     const sent = await sock.sendMessage(targetOwnerJid, { text: ownerAlert });
                     if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);

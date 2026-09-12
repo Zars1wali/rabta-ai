@@ -102,6 +102,9 @@ class EscalationService:
         self.reminder2_secs = reminder2_secs
         self.timeout_secs = timeout_secs
 
+    def _save_persisted_escalations(self):
+        _save_persisted_escalations()
+
     def _generate_id(self) -> str:
         chars = string.ascii_uppercase + string.digits
         suffix = "".join(random.choices(chars, k=2))
