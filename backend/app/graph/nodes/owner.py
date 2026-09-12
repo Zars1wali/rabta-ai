@@ -148,6 +148,34 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
             "owner_alert": None,
         }
 
+    # 2c. Owner Manual Handling Fast-Path
+    # If owner indicates they will handle inquiries manually, resolve pending alerts and halt reminders immediately!
+    is_manual_handling = any(
+        phrase in raw_l for phrase in [
+            "ill handle", "i will handle", "handle it myself", "handle myself",
+            "respond manually", "reply manually", "khud dekh", "khud handle", "khud baat",
+            "me khud", "main khud", "ruk jao", "pause kardo", "stop reminding", "ignore karo"
+        ]
+    )
+    if is_manual_handling:
+        from app.services.escalation_service import _global_escalations, _save_persisted_escalations
+        for esc_rec in list(_global_escalations.values()):
+            if esc_rec.status == "PENDING":
+                esc_rec.status = "RESOLVED"
+                esc_rec.owner_answer = "Owner handling manually"
+        _save_persisted_escalations()
+        msg = "Jee Haider bhai, theek hai! Pending alerts resolve mark kar diye hain aur automated reminders band kar diye hain. Aap khud handle kar lein."
+        return {
+            **state,
+            "reply_text": msg,
+            "reply_chunks": [msg],
+            "media_url": None,
+            "media_urls": None,
+            "forward_to_customer": None,
+            "forward_message": None,
+            "owner_alert": None,
+        }
+
     # 3. Direct Customer Inquiry Reply Routing (Fast Path)
     # Only fast-path if this is an explicit relay to a customer or a clear answer to an active PENDING escalation.
     # NEVER hijack questions to the assistant, catalog updates, or requests for images for the owner!

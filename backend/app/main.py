@@ -146,7 +146,8 @@ async def lifespan(app: FastAPI):
     if is_leader:
         logger.info("[SchedulerLeader] This worker acquired leader lock. Starting background workers...")
         cleanup_task = asyncio.create_task(_conversation_cleanup_loop())
-        followup_task = asyncio.create_task(_polite_followup_loop())
+        # Outbound automated follow-ups disabled: only respond when customer messages or owner explicitly relays
+        followup_task = None
         try:
             from app.services.scheduler_agent import scheduler_agent
             await scheduler_agent.start()

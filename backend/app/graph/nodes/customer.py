@@ -240,6 +240,30 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
     if not sim and len(clean_sender) <= 12 and (clean_sender.startswith("923") or clean_sender.startswith("03") or clean_sender.startswith("3")):
         sim = clean_sender
 
+    msg_l = msg.lower().strip()
+    is_stop_req = any(
+        phrase in msg_l for phrase in [
+            "stop texting", "stop text", "dont text", "don't text", "dont message",
+            "don't message", "stop", "mat karo", "message mat karo", "msg mat karo",
+            "too many messages", "no need", "nahi chahiye", "na karo", "toba", "unsub"
+        ]
+    )
+    if is_stop_req:
+        logger.info("[CollectInfo] Customer %s requested stop/opt-out. Pausing AI.", phone)
+        reply = "Theek hai bhai, bilkul pareshan na hon. Main mazeed message nahi karunga. Agar aainda kabhi koi zaroorat ho toh aap bejhijhak rabta kar sakte hain. Allah hafiz! 🙏"
+        return {
+            **state,
+            "customer_state": "IDLE",
+            "info_collection_step": None,
+            "escalation_type": None,
+            "reply_text": reply,
+            "reply_chunks": [reply],
+            "media_url": None,
+            "media_urls": None,
+            "owner_alert": None,
+            "ai_active": False,
+        }
+
     # Entity extraction
     extracted_name, extracted_city, extracted_sim = extract_customer_entities(
         msg, current_name=name, current_city=city, current_sim=sim, push_name=state.get("push_name")
@@ -550,8 +574,28 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     sim = ext_sim or current_sim
     effective_sim = sim or sender_phone
 
+    raw_l = raw_message.lower().strip()
+    is_stop_req = any(
+        phrase in raw_l for phrase in [
+            "stop texting", "stop text", "dont text", "don't text", "dont message",
+            "don't message", "stop", "mat karo", "message mat karo", "msg mat karo",
+            "too many messages", "no need", "nahi chahiye", "na karo", "toba", "unsub"
+        ]
+    )
+    if is_stop_req:
+        logger.info("[CustomerNode] Customer %s requested stop/opt-out. Pausing AI.", sender_phone)
+        reply = "Theek hai bhai, bilkul pareshan na hon. Main mazeed message nahi karunga. Agar aainda kabhi koi zaroorat ho toh aap bejhijhak rabta kar sakte hain. Allah hafiz! 🙏"
+        return {
+            **state,
+            "reply_text": reply,
+            "reply_chunks": [reply],
+            "media_url": None,
+            "media_urls": None,
+            "owner_alert": None,
+            "ai_active": False,
+        }
+
     # PDF 1 §A.16: Collect customer Name and City before sharing bank details or triggering alert
-    raw_l = raw_message.lower()
     is_payment_req = any(w in raw_l for w in ["bank", "account", "jazzcash", "easypaisa", "raast", "payment details", "paise transfer", "online payment", "advance payment", "bank details", "a/c", "khata"])
     if is_payment_req and (not name or not city or (len(clean_sender) >= 13 and not sim)):
         if not name and not city:

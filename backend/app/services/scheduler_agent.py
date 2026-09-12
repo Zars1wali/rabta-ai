@@ -312,75 +312,70 @@ class SchedulerAgent:
     async def _process_escalation_reminders(self):
         """Check all pending escalations and send reminders if due."""
         import time
+        import re
         from app.services.escalation_service import escalation_service, _global_escalations, _save_persisted_escalations, _load_persisted_escalations
 
         _load_persisted_escalations()
 
         now = time.time()
-        owner_phone = await self._get_owner_phone()
+        owner_phone, _, tenant_id = await self._get_owner_phone_and_products()
         if not owner_phone:
             return
 
+        test_phones = {"03001234567", "923001234567", "923146446144", "03146446144", "923075659224", "03009998877", "231464461443156"}
+        test_names = {"shahid afridi", "tariq mehmood", "apex security", "zubair", "daniyal", "bilal", "kamran ali", "asad", "ahmed", "tariq"}
+
+        # Only process legitimate escalations for the current tenant
+        active_escalations = []
         for esc_id, esc in list(_global_escalations.items()):
             if esc.status != "PENDING":
                 continue
+            # Ignore escalations from other tenants or mock test runs
+            if tenant_id and str(esc.tenant_id) != str(tenant_id):
+                continue
+            clean_cust = re.sub(r'[^\d]', '', esc.customer_phone or "")
+            if clean_cust in test_phones:
+                continue
+            if (esc.customer_name or "").lower() in test_names:
+                continue
+            # Auto-expire escalations older than 6 hours so old inquiries don't spam
+            if hasattr(esc, "created_at") and (now - esc.created_at > 21600):
+                esc.status = "EXPIRED"
+                continue
+            active_escalations.append((esc_id, esc))
 
+        if not active_escalations:
+            return
+
+        # STRICT RATE-LIMIT: At most ONE reminder notification to owner every 60 minutes
+        last_notif = getattr(self, "_last_owner_escalation_notif_at", 0)
+        if (now - last_notif) < 3600:
+            return
+
+        from app.db.repositories.tenant_repo import format_pakistani_phone_display
+        due_list = []
+        for esc_id, esc in active_escalations:
             elapsed = now - esc.last_reminder_at
             is_emergency = self._is_emergency_escalation(esc)
+            reminder_threshold = 600 if is_emergency else 1800  # 10m emergency, 30m normal
 
-            if is_emergency:
-                # Compressed timeline: 10 min, 20 min
-                reminder1_secs = 600   # 10 minutes
-                reminder2_secs = 1200  # 20 minutes
+            if esc.reminder_stage < 2 and elapsed >= reminder_threshold:
+                due_list.append(esc)
+                esc.reminder_stage += 1
+                esc.last_reminder_at = now
+
+        if due_list:
+            self._last_owner_escalation_notif_at = now
+            _save_persisted_escalations()
+            if len(due_list) == 1:
+                e = due_list[0]
+                cust_display = f"{e.customer_name or 'Customer'} ({format_pakistani_phone_display(e.customer_phone)})"
+                msg = f"Bhai reminder — {cust_display} ka sawal pending hai:\n\"{e.customer_question[:100]}\""
             else:
-                # Normal timeline: 30 min, 60 min
-                reminder1_secs = 1800  # 30 minutes
-                reminder2_secs = 3600  # 60 minutes
-
-            from app.db.repositories.tenant_repo import format_pakistani_phone_display
-            cust_name = esc.customer_name or "Customer"
-            phone_display = format_pakistani_phone_display(esc.customer_phone)
-
-            if esc.reminder_stage == 0 and elapsed >= reminder1_secs:
-                # First reminder
-                if is_emergency:
-                    message = (
-                        f"Bhai urgent — {cust_name} ({phone_display}) ka complaint/issue abhi bhi wait kar raha hai. "
-                        f"Please check Messenger.\n"
-                        f"Issue: \"{esc.customer_question[:100]}\""
-                    )
-                else:
-                    message = (
-                        f"Bhai reply nahi aaya — {cust_name} ({phone_display}) abhi bhi wait kar raha hai.\n"
-                        f"Sawal: \"{esc.customer_question[:100]}\""
-                    )
-
-                await self._send_whatsapp_to_owner(owner_phone, message)
-                esc.reminder_stage = 1
-                esc.last_reminder_at = now
-                _save_persisted_escalations()
-                logger.info("[SchedulerAgent] Sent reminder 1 for %s (emergency=%s)", esc_id, is_emergency)
-
-            elif esc.reminder_stage == 1 and elapsed >= (reminder2_secs - reminder1_secs):
-                # Final reminder
-                if is_emergency:
-                    message = (
-                        f"Bhai URGENT final reminder — {cust_name} ({phone_display}) ka issue pending hai. "
-                        f"Agar Messenger pe reply kar rahe hain toh mujhe ignore karein."
-                    )
-                else:
-                    message = (
-                        f"Bhai last reminder — {cust_name} ({phone_display}) ka jawab pending hai. "
-                        f"Agar aap Messenger pe khud reply kar rahe hain toh mujhe ignore karein."
-                    )
-
-                await self._send_whatsapp_to_owner(owner_phone, message)
-                esc.reminder_stage = 2
-                esc.last_reminder_at = now
-                _save_persisted_escalations()
-                logger.info("[SchedulerAgent] Sent final reminder for %s (emergency=%s)", esc_id, is_emergency)
-
-            # After stage 2: stop reminding (PDF 2 §15)
+                lines = [f"• {e.customer_name or 'Customer'} ({e.customer_city or 'City'}): {e.customer_question[:50]}" for e in due_list[:3]]
+                msg = f"Bhai reminder — {len(due_list)} inquiries reply ke liye pending hain:\n" + "\n".join(lines)
+            await self._send_whatsapp_to_owner(owner_phone, msg)
+            logger.info("[SchedulerAgent] Sent single consolidated reminder to owner for %d escalations", len(due_list))
 
     def _is_emergency_escalation(self, esc) -> bool:
         """Determine if an escalation is an emergency requiring compressed timeline."""

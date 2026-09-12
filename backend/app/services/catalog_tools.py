@@ -2102,7 +2102,8 @@ async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context:
                 try:
                     from app.db.repositories.tenant_repo import format_pakistani_phone_display
                     async with AsyncSessionLocal() as session:
-                        owner_clean = re.sub(r'[^\d]', '', settings.WHATSAPP_OWNER_PHONE or "923140922056")
+                        owner_phone_val = getattr(settings, "WHATSAPP_OWNER_PHONE", None) or getattr(settings, "OWNER_PHONE", None) or "923140922056"
+                        owner_clean = re.sub(r'[^\d]', '', str(owner_phone_val))
                         stmt = (
                             select(Customer, Conversation)
                             .join(Conversation, Customer.id == Conversation.customer_id)
@@ -2123,8 +2124,17 @@ async def _tool_relay_to_customer(tenant_id: str, args: Dict[str, Any], context:
                                     if tc_l in (c_obj.name or "").lower() or tc_l in (c_obj.phone or ""):
                                         target_row = (c_obj, conv_obj)
                                         break
-                            if not target_row:
-                                target_row = db_rows[0]
+                                if not target_row:
+                                    logger.warning("[_tool_relay_to_customer] No customer matched target '%s'. Refusing blind relay.", target_cust)
+                                    return {
+                                        "status": "not_found",
+                                        "message": f"Haider bhai, customer '{target_cust or 'customer'}' ka record match nahi mila. Kisi ghalat contact ko message deliver hone se roknay ke liye forward cancel kar diya gaya hai. Please customer ka sahi naam ya phone number batayein.",
+                                    }
+                            else:
+                                return {
+                                    "status": "not_found",
+                                    "message": "Haider bhai, aap kis customer ko yeh message convey karna chahte hain? Please customer ka naam ya phone batayein.",
+                                }
 
                             if target_row:
                                 c_obj, conv_obj = target_row
