@@ -39,10 +39,12 @@ def is_valid_human_name(n: Optional[str]) -> bool:
         "customer", "user", "guest", "none", "unknown", "whatsapp", "haider arms", "owner",
         "delivery", "deliver", "chahiye", "bhejo", "bhej", "karo", "rate", "price", "kitna", "kitne",
         "kya", "discount", "account", "bank", "details", "firearm", "pistol", "gun", "ammo", "available",
-        "asalam", "assalam", "salam", "slam", "aslam", "aoa", "walaikum", "walikum", "wassalam",
+        "kimber", "glock", "beretta", "taurus", "cz", "sig", "colt", "tisas", "zigana", "sath",
+        "asalam", "assalam", "salam", "slam", "aoa", "walaikum", "walikum", "wassalam",
         "hello", "hi", "hey", "bhai", "sir", "janab", "bro", "dear", "greetings", "shukriya",
         "thanks", "thank", "ok", "theek", "acha", "ji", "jee", "haan", "yes", "no", "nahi",
-        "apka", "aapka", "shop", "kider", "kidhar", "kahan", "location", "address", "process"
+        "apka", "aapka", "shop", "kider", "kidhar", "kahan", "location", "address", "process",
+        "from", "frm", "live", "living", "rehta", "rehte", "se", "mein", "me", "ka", "ki", "ke", "ko"
     }
     if any(t in non_name for t in tokens):
         return False
@@ -103,30 +105,50 @@ def extract_customer_entities(
     if not name:
         name_match = re.search(r'(?:mera\s+naam|naam\s+hai|naam)\s+([A-Za-z\s]+?)(?:\s+(?:hai|he|hun|hoon|hy|,|\.|$))', text, re.IGNORECASE)
         if name_match:
-            cand = name_match.group(1).strip().title()
+            raw_cand = name_match.group(1).strip()
+            if city:
+                raw_cand = re.sub(rf'\b(?:from|frm|se|mein|in)?\s*{re.escape(city)}\b', '', raw_cand, flags=re.IGNORECASE).strip()
+            raw_cand = re.sub(r'\b(from|frm|se|aur|and|mein|me|ka|ki|ke|ko)\b.*$', '', raw_cand, flags=re.IGNORECASE).strip()
+            cand = raw_cand.title()
             if is_valid_human_name(cand):
                 name = cand
         else:
             name_match2 = re.search(r'(?:mera\s+naam|naam)\s+([A-Za-z\s]+)', text, re.IGNORECASE)
             if name_match2:
                 n = name_match2.group(1).strip()
-                n = re.sub(r'\b(hai|he|hun|hoon|hy|aur|se|bhai)\b.*$', '', n, flags=re.IGNORECASE).strip()
+                if city:
+                    n = re.sub(rf'\b(?:from|frm|se|mein|in)?\s*{re.escape(city)}\b', '', n, flags=re.IGNORECASE).strip()
+                n = re.sub(r'\b(hai|he|hun|hoon|hy|aur|se|bhai|from|frm|mein|me)\b.*$', '', n, flags=re.IGNORECASE).strip()
                 if is_valid_human_name(n):
                     name = n.title()
 
-        # Handle combined messages like "Ahmed 0307 5659224" or "Ahmed Hyderabad"
-        if not name:
-            clean_for_name = text
-            clean_for_name = re.sub(r'(?:(?:\+92|0092|92|0)?\s?3\d{2}[-\s]?\d{7})', '', clean_for_name)
-            if city:
-                clean_for_name = re.sub(rf'\b{re.escape(city)}\b', '', clean_for_name, flags=re.IGNORECASE)
-            clean_for_name = re.sub(r'\b(asalam|assalam|salam|slam|aoa|walaikum|walikum|hai|he|hun|hoon|hy|aur|se|bhai|bhi|main|mera|meri|number|no|whatsapp|sim|hello|hi|ok|theek|jee|ji)\b', '', clean_for_name, flags=re.IGNORECASE)
-            clean_for_name = re.sub(r'[^A-Za-z\s]', '', clean_for_name).strip()
-            tokens = clean_for_name.split()
-            if 1 <= len(tokens) <= 3:
-                cand = " ".join(tokens).title()
-                if is_valid_human_name(cand):
-                    name = cand
+        # Handle combined messages like "Ahmed 0307 5659224" or "Ahmed Hyderabad" or "Umer Wali from Islamabad"
+        if not name and len(text.split()) <= 6:
+            inquiry_markers = [
+                "?", "kya", "kia", "rate", "price", "kitna", "kitne", "available", "mil", "sakta",
+                "hoga", "chahiye", "order", "kerni", "karni", "stock", "detail", "details", "info",
+                "kimber", "glock", "beretta", "taurus", "cz", "sig", "colt", "tisas", "zigana", "sath"
+            ]
+            has_inquiry = any(m in text.lower() for m in inquiry_markers)
+            if not has_inquiry:
+                clean_for_name = text
+                clean_for_name = re.sub(r'(?:(?:\+92|0092|92|0)?\s?3\d{2}[-\s]?\d{7})', '', clean_for_name)
+                if city:
+                    clean_for_name = re.sub(rf'\b{re.escape(city)}\b', '', clean_for_name, flags=re.IGNORECASE)
+                clean_for_name = re.sub(
+                    r'\b(asalam|assalam|salam|slam|aoa|walaikum|walikum|hai|he|hun|hoon|hy|aur|se|bhai|bhi|main|mera|meri|number|no|whatsapp|sim|hello|hi|ok|theek|jee|ji|from|frm|live|living|rehta|rehte|in|mein|me|ka|ki|ke|ko)\b',
+                    '',
+                    clean_for_name,
+                    flags=re.IGNORECASE,
+                )
+                clean_for_name = re.sub(r'[^A-Za-z\s]', '', clean_for_name).strip()
+                tokens = [t for t in clean_for_name.split() if is_valid_human_name(t)]
+                if 1 <= len(tokens) <= 3:
+                    cand = " ".join(tokens).title()
+                    cand = re.sub(r'^(?:from|frm|se|aur|and)\s+', '', cand, flags=re.IGNORECASE).strip()
+                    cand = re.sub(r'\s+(?:from|frm|se|aur|and|mein|me|ka|ki|ke)$', '', cand, flags=re.IGNORECASE).strip()
+                    if is_valid_human_name(cand):
+                        name = cand
 
         if not name and push_name and is_valid_human_name(push_name) and len(push_name.split()) <= 3:
             name = push_name.strip().title()
@@ -293,6 +315,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
     effective_sim = sim if is_valid_pakistani_sim(sim) else (clean_sender_digits if is_valid_pakistani_sim(clean_sender_digits) else phone)
     saved_sim = effective_sim
     has_name = is_valid_human_name(name)
+    has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
 
     # ── WORKFLOW A: Payment & Bank Details Collection ─────────────────────────
     if step == "payment_details" or esc_type == "payment":
@@ -410,8 +433,37 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
                 "owner_alert": None,
             }
 
-        # Name is present; WhatsApp phone is auto-detected!
-        q_text = state.get("pending_owner_query") or state.get("raw_message") or "Customer inquiry"
+        # Gate: If customer is on a privacy LID and has not provided a real Pakistani SIM, ask for it!
+        if not has_sim:
+            reply = f"Jee {name} bhai! Apna WhatsApp contact number share kar dein taake shop se details confirm kar sakein."
+            return {
+                **state,
+                "customer_state": "COLLECTING_INFO",
+                "info_collection_step": "inquiry_details",
+                "escalation_type": esc_type or "inquiry",
+                "customer_name": name,
+                "customer_city": city,
+                "customer_address": address,
+                "customer_sim_phone": None,
+                "reply_text": reply,
+                "reply_chunks": [reply],
+                "owner_alert": None,
+            }
+
+        # Guard against cross-product stale query bleed from prior turns
+        stored_query = state.get("pending_owner_query")
+        if stored_query and product:
+            known_brands = ["kimber", "glock", "beretta", "sig", "cz", "taurus", "canik", "diamondback", "db10", "db15", "colt", "palmetto"]
+            stored_brands = [b for b in known_brands if b in stored_query.lower()]
+            prod_brands = [b for b in known_brands if b in product.lower()]
+            if stored_brands and prod_brands and set(stored_brands) != set(prod_brands):
+                logger.warning(
+                    "[CollectInfo] Stored pending query '%s' mentions %s, but active product is %s. Discarding stale query.",
+                    stored_query, stored_brands, product
+                )
+                stored_query = None
+
+        q_text = stored_query or (f"{product} ke hawale se inquiry" if product else state.get("raw_message") or "Customer inquiry")
         inq_type = esc_type or "inquiry"
         t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
         cust_jid = state.get("sender_jid") or phone
@@ -445,6 +497,7 @@ async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
             "customer_address": address,
             "customer_sim_phone": effective_sim,
             "escalation_id": esc.escalation_id,
+            "pending_owner_query": None,  # ALWAYS flush pending query on escalation!
             "reply_text": reply,
             "reply_chunks": [reply],
             "owner_alert": owner_alert,
@@ -628,6 +681,8 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     current_product = state.get("customer_product")
     msg_product = clean_product_query(raw_message)
     if msg_product and len(msg_product) >= 3 and not any(w in raw_l for w in ["pic", "pics", "photo", "photos", "image", "images", "tasveer"]):
+        if current_product and clean_product_query(current_product) != msg_product:
+            state["pending_owner_query"] = None
         current_product = msg_product
         state["customer_product"] = current_product
 

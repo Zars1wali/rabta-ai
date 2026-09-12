@@ -383,7 +383,7 @@ async def process_gateway_message(payload: GatewayMessagePayload):
                         cust_thread_config = make_thread_config(str(tenant_id), norm_cust)
                         await graph.aupdate_state(
                             cust_thread_config,
-                            {"customer_state": "BROWSING", "escalation_id": None}
+                            {"customer_state": "BROWSING", "escalation_id": None, "pending_owner_query": None}
                         )
                     except Exception as esc_upd_err:
                         logger.warning("Could not reset customer thread state: %s", esc_upd_err)

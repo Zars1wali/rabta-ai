@@ -138,3 +138,52 @@ async def test_gateway_bridge_single_message_and_customer_never_relays():
     # If a repeat alert comes within 600s, it must be suppressed
     now = time.time()
     assert (now - _recent_owner_alerts[key]) < 600.0
+
+
+def test_entity_extraction_strips_from_and_prepositions():
+    """Verify that 'umer wali from islamabad' extracts 'Umer Wali' and 'Islamabad', without 'from'."""
+    from app.graph.nodes.customer import extract_customer_entities
+
+    name, city, sim = extract_customer_entities("umer wali from islamabad")
+    assert name == "Umer Wali"
+    assert city == "Islamabad"
+
+    name2, city2, sim2 = extract_customer_entities("mera naam kamran ali from peshawar hai")
+    assert name2 == "Kamran Ali"
+    assert city2 == "Peshawar"
+
+
+@pytest.mark.asyncio
+async def test_cross_product_query_bleed_prevention():
+    """Verify that an old Kimber image query does not bleed into a new Glock 19 escalation."""
+    from app.graph.nodes.customer import collect_customer_info
+
+    state = {
+        "tenant_id": str(uuid.uuid4()),
+        "sender_phone": "923140001122",
+        "sender_jid": "923140001122@s.whatsapp.net",
+        "customer_state": "COLLECTING_INFO",
+        "info_collection_step": "inquiry_details",
+        "customer_name": "Umer Wali",
+        "customer_city": "Islamabad",
+        "customer_sim_phone": "923140001122",
+        "customer_product": "Glock 19 Gen 5",
+        # Stale query from prior conversation about Kimber
+        "pending_owner_query": "Kimber 2K11 Optic Ready image mismatch — customer reported 3 images sent, 1 is wrong (DB10)",
+        "raw_message": "umer wali from islamabad",
+    }
+
+    res = await collect_customer_info(state)
+
+    assert res["customer_state"] == "ESCALATED"
+    assert res["owner_alert"] is not None
+    # Stale Kimber query must NOT be present!
+    assert "Kimber" not in res["owner_alert"]
+    assert "DB10" not in res["owner_alert"]
+    # Active product Glock 19 MUST be present!
+    assert "Glock 19 Gen 5" in res["owner_alert"]
+    assert "Umer Wali" in res["owner_alert"]
+    assert "Islamabad" in res["owner_alert"]
+    # pending_owner_query must be flushed
+    assert res["pending_owner_query"] is None
+
