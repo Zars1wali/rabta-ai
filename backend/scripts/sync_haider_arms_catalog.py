@@ -89,8 +89,7 @@ EXACT_IMAGE_MAP = {
     # Rifles
     "Colt M4": ["/static/catalog_images/colt_m4.jpg"],
     "Anderson M4": ["/static/catalog_images/anderson_manufacturing_anderson_m4.jpg"],
-    "Norinco CQ M4": ["/static/catalog_images/norinco_cq_m4.jpg"],
-    "M4 Design .22LR": ["/static/catalog_images/m4_design_22lr.jpg"],
+    "Diamondback DB10 .308 Win": ["/static/catalog_images/diamondback_db10_308_win_od_green.jpg"],
     "Sig Sauer M400": ["/static/catalog_images/sig_sauer_m400.jpg"],
     "Sig Sauer MPX": ["/static/catalog_images/sig_sauer_mpx.jpg"],
     "Sig Sauer PMPX": ["/static/catalog_images/sig_sauer_pmpx.jpg"],
@@ -172,6 +171,20 @@ def export_excel_to_csv() -> List[Dict[str, Any]]:
             "description": description,
         })
 
+    # Ensure single genuine Diamondback DB10 is included if missing from master sheet
+    if not any("db10" in p["name"].lower() for p in products):
+        products.append({
+            "name": "Diamondback DB10 .308 Win",
+            "category": "Rifle",
+            "brand": "Diamondback",
+            "origin": "USA",
+            "caliber": ".308 Win",
+            "capacity": "20 rds",
+            "action": "Semi Auto",
+            "price": 700000.0,
+            "description": "Brand: Diamondback | Origin: USA | Caliber: .308 Win | Capacity: 20 rds | Action: Semi Auto | Genuine USA Import",
+        })
+
     # Also save as CSV for fast reference and syncing
     try:
         with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
@@ -228,12 +241,21 @@ async def sync_catalog():
 
         tenant_id = tenant.id
 
-        # 2. Clear old items for this tenant
+        # Preserve owner-uploaded items (e.g. Tisas variants with inbound photos)
+        existing_res = await session.execute(select(CatalogItem).where(CatalogItem.tenant_id == tenant_id))
+        existing_items = existing_res.scalars().all()
+        preserved_custom = [
+            it for it in existing_items
+            if any("inbound_" in str(img) for img in (it.images or []))
+            and not any(p["name"].lower() == it.name.lower() for p in products)
+        ]
+
+        # 2. Clear old base items for this tenant
         del_stmt = delete(CatalogItem).where(CatalogItem.tenant_id == tenant_id)
         del_res = await session.execute(del_stmt)
         print(f"Cleared {del_res.rowcount} old catalog items.")
 
-        # 3. Insert all 114 firearms
+        # 3. Insert all firearms from master dataset
         inserted = 0
         for p in products:
             item = CatalogItem(
@@ -255,8 +277,23 @@ async def sync_catalog():
             session.add(item)
             inserted += 1
 
+        # Re-insert preserved owner-uploaded items
+        for cit in preserved_custom:
+            new_cit = CatalogItem(
+                tenant_id=tenant_id,
+                name=cit.name,
+                price=cit.price,
+                description=cit.description,
+                category=cit.category,
+                images=cit.images,
+                metadata_json=cit.metadata_json,
+                in_stock=True,
+            )
+            session.add(new_cit)
+            inserted += 1
+
         await session.commit()
-        print(f"Successfully synced {inserted} firearms to DB for tenant {tenant.name}!")
+        print(f"Successfully synced {inserted} firearms to DB for tenant {tenant.name} (including {len(preserved_custom)} preserved custom items)!")
 
         # 4. Flush cache
         invalidate_catalog_cache(str(tenant_id))

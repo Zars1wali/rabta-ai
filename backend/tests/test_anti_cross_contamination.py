@@ -177,3 +177,72 @@ async def test_vision_guardrail_blocks_mismatch():
         assert check.scalar_one_or_none() is None
 
     print("[PASS] Multimodal Vision Guard successfully blocked cross-contamination.")
+
+
+@pytest.mark.asyncio
+async def test_db10_photo_isolation_never_returns_ar10_or_glfa():
+    """Verify that searching photos for 'db-10' returns ONLY Diamondback DB10 and rejects GLFA / Utas AR-10."""
+    t_uuid = uuid.UUID(TENANT_ID)
+    async with AsyncSessionLocal() as session:
+        # Create test items: GLFA AR-10 with 4 photos, Diamondback DB10 with 1 photo
+        item_glfa = CatalogItem(
+            tenant_id=t_uuid,
+            name="GLFA AR-10 .308 Win",
+            price=700000.0,
+            images=["http://65.20.90.130/static/catalog_images/glfa_1.jpg", "http://65.20.90.130/static/catalog_images/glfa_2.jpg"],
+            category="Rifle",
+        )
+        item_db10 = CatalogItem(
+            tenant_id=t_uuid,
+            name="Diamondback DB10 .308 Win",
+            price=700000.0,
+            images=["http://65.20.90.130/static/catalog_images/diamondback_db10_308_win_od_green.jpg"],
+            category="Rifle",
+        )
+        session.add(item_glfa)
+        session.add(item_db10)
+        await session.commit()
+
+        from app.services.catalog_tools import get_product_photos
+
+        # Query for 'db-10'
+        photos = await get_product_photos(tenant_id=TENANT_ID, product_name="db-10", allow_multiple=True)
+        photo_prods = [p["product_name"] for p in photos]
+
+        # Cleanup test items
+        await session.execute(delete(CatalogItem).where(CatalogItem.tenant_id == t_uuid, CatalogItem.name.in_(["GLFA AR-10 .308 Win", "Diamondback DB10 .308 Win"])))
+        await session.commit()
+
+        assert "Diamondback DB10 .308 Win" in photo_prods
+        assert "GLFA AR-10 .308 Win" not in photo_prods
+        print("[PASS] DB-10 isolation verified: GLFA AR-10 never matches DB10 query.")
+
+
+@pytest.mark.asyncio
+async def test_cross_brand_image_url_blocked_in_get_product_photos():
+    """Verify that an image URL containing 'taurus' is blocked when associated with 'Norinco CQ M4'."""
+    t_uuid = uuid.UUID(TENANT_ID)
+    async with AsyncSessionLocal() as session:
+        # Norinco item with an accidental Taurus image URL
+        item_norinco = CatalogItem(
+            tenant_id=t_uuid,
+            name="Norinco CQ M4 Test",
+            price=390000.0,
+            images=["http://65.20.90.130/static/catalog_images/taurus_t4.jpg"],
+            category="Rifle",
+        )
+        session.add(item_norinco)
+        await session.commit()
+
+        from app.services.catalog_tools import get_product_photos
+
+        photos = await get_product_photos(tenant_id=TENANT_ID, product_name="Norinco CQ M4 Test", allow_multiple=False)
+
+        # Cleanup
+        await session.execute(delete(CatalogItem).where(CatalogItem.tenant_id == t_uuid, CatalogItem.name == "Norinco CQ M4 Test"))
+        await session.commit()
+
+        # The image must be blocked due to brand mismatch (Norinco item vs Taurus image)
+        assert len(photos) == 0
+        print("[PASS] Cross-brand image blocked: Taurus image rejected for Norinco product.")
+

@@ -945,15 +945,26 @@ async def get_product_photos(
 
     cleaned_name = clean_product_query(product_name)
     req_clean = (cleaned_name or product_name).lower().strip()
+    # Normalize patterns: "db 10" -> "db10", "db-10" -> "db10", "t 4" -> "t4", "m 4" -> "m4", "ar 10" -> "ar10", "g 3" -> "g3"
+    req_clean = re.sub(r'\b(db|ar|t|m|g)\s*[-_]?\s*(\d+)\b', r'\1\2', req_clean)
 
     # Split into meaningful tokens: only len>=3 or tokens containing digits or recognized short codes
-    short_whitelist = {"ak", "ar", "fn", "cz", "hk", "kp", "fx", "m4", "g3"}
+    short_whitelist = {"ak", "ar", "fn", "cz", "hk", "kp", "fx", "m4", "g3", "db", "t4", "px", "kr", "mc", "tp"}
     raw_tokens = [t.strip('.') for t in req_clean.split() if t.strip('.')]
     tokens = [t for t in raw_tokens if len(t) >= 3 or any(c.isdigit() for c in t) or t in short_whitelist]
     if not tokens:
         tokens = [t.strip('.') for t in product_name.lower().split() if len(t) >= 3 or any(c.isdigit() for c in t) or t in short_whitelist]
     if not tokens:
         return []
+
+    # Known brands for cross-contamination and conflict checking
+    KNOWN_BRANDS = {
+        "glock", "taurus", "canik", "beretta", "cz", "ruger", "norinco", "colt",
+        "anderson", "diamondback", "tisas", "zigana", "kral", "ermox", "akdas",
+        "stoeger", "baikal", "heckler", "hk", "kimber", "walther", "sig sauer",
+        "utas", "glfa", "kel-tec", "keltec", "smith & wesson", "magnum research",
+        "bear creek", "palmetto"
+    }
 
     async with AsyncSessionLocal() as session:
         token_conds = []
@@ -964,6 +975,10 @@ async def get_product_photos(
                 num = tok[2:]
                 token_conds.append(CatalogItem.name.ilike(f"%db {num}%"))
                 token_conds.append(CatalogItem.name.ilike(f"%db-{num}%"))
+            elif tok.startswith("ar") and tok[2:].isdigit():
+                num = tok[2:]
+                token_conds.append(CatalogItem.name.ilike(f"%ar {num}%"))
+                token_conds.append(CatalogItem.name.ilike(f"%ar-{num}%"))
             elif tok in ("57", "5.7"):
                 token_conds.append(CatalogItem.name.ilike("%5.7%"))
                 token_conds.append(CatalogItem.name.ilike("%57%"))
@@ -981,8 +996,24 @@ async def get_product_photos(
             name_words = set(re.findall(r'[a-z0-9]+', name_lower))
             score = 0.0
 
+            # 0. Brand conflict guard:
+            # If the user's query explicitly specifies a known brand, candidate MUST match that brand.
+            query_brands = {b for b in KNOWN_BRANDS if b in req_clean or b in product_name.lower()}
+            if any(t.startswith("db") for t in tokens) or "diamondback" in req_clean:
+                query_brands.add("diamondback")
+
+            cand_brands = {b for b in KNOWN_BRANDS if b in name_lower}
+            if "db" in name_words or any(w.startswith("db") for w in name_words):
+                cand_brands.add("diamondback")
+
+            if query_brands:
+                if cand_brands and not (query_brands & cand_brands):
+                    return -100.0  # Completely wrong brand (e.g. Norinco requested, candidate is Taurus; or DB10 requested, candidate is GLFA)
+                if query_brands & cand_brands:
+                    score += 20.0
+
             # 1. Exact phrase match
-            if req_clean in name_lower:
+            if req_clean in name_lower or (cleaned_name and cleaned_name in name_lower):
                 score += 25.0
 
             # 2. Model number check (e.g. 'db10' vs 'db15', '19' vs '17', '57' vs 'pof')
@@ -1080,6 +1111,13 @@ async def get_product_photos(
                         is_pistol = "pistol" in cat_lower or any(p in it.name.lower() for p in ["kimber", "glock", "taurus", "cz", "beretta", "canik", "zigana", "tisas", "sig p365", "sig p320"])
                         if is_pistol and any(r in img_l for r in ["db10", "db15", "diamondback", "rifle", "ar10", "ar15", "shotgun", "bullpup"]):
                             logger.warning("[get_product_photos] Blocked cross-contaminated rifle image '%s' for pistol '%s'", img, it.name)
+                            continue
+
+                        # Brand-level negative filter on image URLs
+                        cand_brands = {b for b in KNOWN_BRANDS if b in it.name.lower()}
+                        img_brands = {b for b in KNOWN_BRANDS if b in img_l}
+                        if cand_brands and img_brands and not (cand_brands & img_brands):
+                            logger.warning("[get_product_photos] Blocked cross-brand image '%s' (%s) for product '%s' (%s)", img, img_brands, it.name, cand_brands)
                             continue
 
                         valid_url = _resolve_valid_photo_url(img, it.name)
