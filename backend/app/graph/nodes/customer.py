@@ -716,15 +716,20 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                     if not caption_text:
                         p_val = photos[0].get("price")
                         p_str = f" — {p_val:,.0f} PKR" if p_val else ""
-                        caption_text = f"Yeh rahi {prod_name} ki picture bhai{p_str}. Genuine import piece."
-                    media_urls = [
-                        {
-                            "name": p.get("product_name") or prod_name,
+                        caption_text = f"{prod_name}{p_str}"
+                    media_urls = []
+                    for idx, p in enumerate(photos):
+                        p_name = p.get("product_name") or prod_name
+                        p_price = p.get("price")
+                        p_cap = p.get("caption")
+                        if not p_cap:
+                            p_str = f" — {p_price:,.0f} PKR" if p_price else ""
+                            p_cap = f"{p_name}{p_str}"
+                        media_urls.append({
+                            "name": p_name,
                             "url": p["url"],
-                            "caption": caption_text if idx == 0 else None,
-                        }
-                        for idx, p in enumerate(photos)
-                    ]
+                            "caption": p_cap,
+                        })
                     reply = caption_text
                     return {
                         **state,
@@ -805,15 +810,22 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             if photos:
                 media_url = photos[0]["url"]
                 prod_name = photos[0].get("product_name") or target_product.title()
-                media_urls = [
-                    {
-                        "name": p.get("product_name") or prod_name,
+                p_val = photos[0].get("price")
+                p_str = f" — {p_val:,.0f} PKR" if p_val else ""
+                media_urls = []
+                for idx, p in enumerate(photos):
+                    p_name = p.get("product_name") or prod_name
+                    p_price = p.get("price")
+                    p_cap = p.get("caption")
+                    if not p_cap:
+                        p_cap_price = f" — {p_price:,.0f} PKR" if p_price else ""
+                        p_cap = f"{p_name}{p_cap_price}"
+                    media_urls.append({
+                        "name": p_name,
                         "url": p["url"],
-                        "caption": photos[0].get("caption", f"Jee yeh rahi {prod_name} ki picture.") if idx == 0 else None,
-                    }
-                    for idx, p in enumerate(photos)
-                ]
-                reply_text = f"Yeh rahi {prod_name} ki picture bhai. Genuine import piece."
+                        "caption": p_cap,
+                    })
+                reply_text = f"{prod_name}{p_str}"
                 reply_chunks = [reply_text]
             else:
                 display_name = target_product.title() if target_product else "is firearm"

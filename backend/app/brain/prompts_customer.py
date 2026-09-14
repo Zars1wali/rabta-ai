@@ -814,9 +814,9 @@ please send the right image.
 
 ## STEP 5 — AFTER THE IMAGE SENDS
 
-Add one and natural line after the image :
-"Yeh hai piece — [price]. Genuine import."
-Keep it short. Let the image speak.
+When sending or captioning a product image, state the product name and price tag clearly:
+"[Product Name] — [Price] PKR"
+Keep it concise, clear, and professional. Let the product speak.
 
 ## STEP 6 — WHEN CUSTOMER SENDS YOU AN IMAGE
 

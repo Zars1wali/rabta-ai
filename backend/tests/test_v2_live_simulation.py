@@ -61,9 +61,9 @@ async def test_live_customer_photo_request_flag():
     # Either returns IMAGE_REQUEST flag or image product
     if res.get("flag"):
         assert res["flag"].flag_type == "IMAGE_REQUEST"
-        assert "Glock" in (res["flag"].product or "")
+        assert "glock" in (res["flag"].product or "").lower()
     else:
-        assert res.get("image_product") is not None or "Glock" in res.get("reply_text", "")
+        assert res.get("image_product") is not None or "glock" in res.get("reply_text", "").lower()
 
 
 @pytest.mark.asyncio
