@@ -455,6 +455,36 @@ Below is the forensic catalog and bug breakdown of all screenshots submitted acr
   4. Added **Brand Gallery Query Support**: When a customer asks for *"all available [brand] pics"*, the tool automatically retrieves one verified photo for every distinct in-stock model of that brand (Glock 19, Glock 17, Glock 19X, Glock 45, Glock 26).
   5. Built and deployed live container on VPS `65.20.90.130`. Both `'Glock 19 Gen 5'` and `'send all avaible glovk. model pics'` now return disk-verified photos with full price tags.
 
+#### Screenshot 2.13 (`media_1789502675443.jpg`): The Glock 550k vs 600k Price Hallucination
+- **User Comment:** *"Image 1: in the pic of glock it stated the price 550k then when asked for specs it stated the price 600k"*
+- **Visual Evidence:** Customer asked for Glock 19X. AI sent photo with caption `"Glock 19X — 550,000 PKR"`. When customer swiped and asked *"iski specs"*, the bot replied with specs but stated: *"Price: PKR 600,000"*.
+- **Root Cause (Forensic Breakdown):**
+  1. **Dual Variants in Database:** The database contains both `Glock 19X` (PKR 550,000) and `Glock 19X V MOS` (PKR 600,000).
+  2. **Stateless Pronoun Resolution:** When the customer sent a pronoun query (*"iski specs"*), the photo delivery node had not explicitly pinned the exact active catalog model name into the conversational context.
+  3. **Arbitrary Variant Selection:** The LLM searched the catalog for "Glock 19X", saw two matches, and arbitrarily selected the MOS variant (PKR 600,000) instead of matching the exact 550,000 PKR unit shown in the photo sent one second earlier.
+- **Fix Implemented:**
+  1. **Thread State Product Pinning:** In `customer.py`, whenever a photo is dispatched, `state["customer_product"]` is locked to that specific product name.
+  2. **Active Product Focus Injection:** Passed `CURRENT_PRODUCT_IN_FOCUS: {prod_focus}` into the prompt context for subsequent turns.
+  3. **Strict Consistency Rules 6 & 7:** Added prompt guardrails enforcing that follow-up specs inquiries MUST match the price and exact model sent in the preceding photo/message. If multiple variants exist, the AI must explicitly differentiate the base model vs MOS rather than silently changing the quoted price.
+
+#### Screenshot 2.14 (`media_1789502755911.jpg`): Empty Category Templates & Unresponsive Deadlock
+- **User Comment:** *"Image 2: empty and unresponsive"*
+- **Visual Evidence:**
+  - Customer asked: *"nato 5.56 rifles mai konsi hai apke pas"*
+  - Bot replied: *"Hamare paas Rifles mein yeh top options available hain:\n\n\n\nAapko kis model ki details ya tasveer chahiye?"* (Completely blank listing with no rifles listed!)
+  - Customer asked: *"shotguns 12 bore konse hain"* $\to$ AI returned identical blank listing.
+  - Customer asked: *"konse options"* $\to$ AI stalled in an unresponsive filler loop: *"Jee bilkul, main details check kar raha hoon..."*.
+- **Root Cause (Forensic Breakdown):**
+  1. **Google GenAI SDK `response.text` Exception:** When `gemini-3.5-flash-lite` returned reasoning/thought parts along with text, accessing `response.text` raised `ValueError: Multiple parts detected`.
+  2. **Key Name Mismatch in Harness Fallback:** The exception triggered a fallback in `agent_harness.py`. The fallback queried catalog items via `_tool_search_catalog`. In `catalog_tools.py`, the price key returned was `"price_pkr"`. However, the fallback checked `if it.get('price')`. Because `it.get('price')` was `None`, all 15 catalog items were filtered out, leaving `items_str = ""`.
+  3. **Unconditional Template Emission:** The code still printed the header *"Hamare paas Rifles mein yeh top options available hain:\n\n"* even when zero items were formatted!
+  4. **The "Konse Options" Deadlock:** When the customer asked *"konse options"*, the query lacked the category keywords ("rifle", "shotgun"), so the fallback triggered the generic stalling filler: *"Jee bilkul, main details check kar raha hoon..."*.
+- **Fix Implemented:**
+  1. **Safe Multi-Part Response Parsing:** In `agent_harness.py`, safely iterate `response.candidates[0].content.parts` to extract non-thought text parts, eliminating `ValueError: Multiple parts detected`.
+  2. **Key Name Standardization:** Updated `catalog_tools.py` to always return both `"price"` and `"price_pkr"`.
+  3. **Conditional Template Rendering:** In `agent_harness.py`, verify that formatted items actually exist before rendering list headers. If no items match, return a polite Roman Urdu clarification instead of an empty template.
+  4. **Live Verification:** NATO 5.56 rifles now cleanly list Tisas ZPT, Palmetto PA-15, Taurus T4, DB15, Colt M4, Sig M400; 12 Bore Shotguns list Bellini Magnum, Kral A12, Serengeti, Stoeger M3000, etc.
+
 ---
 
 ## 6. The "Architecture Upgrades" Post-Mortem: What Failed and Why Undoing Them Restored Intelligence
