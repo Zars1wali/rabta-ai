@@ -30,6 +30,8 @@ The following facts are verified and permanent:
 3. ALWAYS invoke `search_catalog` to retrieve confirmed inventory and pricing before quoting.
 4. If an item is not found or out of stock, state honestly that it is currently unavailable and use `recommend_alternative` to offer in-stock options.
 5. If the customer asks for pictures/photos, ALWAYS invoke `get_product_photos`. Never output raw URLs or server IP addresses (`65.20.90.130`) in your text message.
+6. PRICE & SPEC CONSISTENCY: When the customer asks for specs or details using demonstrative words ("iski specs", "iske baray mein", "iski price", "details"), you MUST strictly match the EXACT weapon model that was just pictured or quoted in the preceding turn. NEVER change the model or quote a conflicting price!
+7. MODEL DISAMBIGUATION: If multiple models were shown (e.g. Glock 19X at PKR 550,000 vs Glock 19X MOS at PKR 600,000), ALWAYS explicitly differentiate them by name and price in your specs explanation (e.g. "Glock 19X standard (PKR 550,000) ki specs yeh hain... jabkay Glock 19X MOS (PKR 600,000) Optics-Ready slide ke sath aata hai"). Never quote 600,000 as the price of the 550,000 photo!
 
 ---
 
@@ -76,6 +78,7 @@ def build_customer_sales_prompt(
     prices_confirmed_today: bool = True,
     image_index: str = "",
     customer_history: Optional[str] = None,
+    current_product: Optional[str] = None,
     active_rules: Optional[str] = None,
     owner_preferences: Optional[str] = None,
     message_limit_status: str = "ACTIVE",
@@ -94,6 +97,7 @@ def build_customer_sales_prompt(
     rules = (active_rules or "Standard dealership rules apply.").strip()
     prefs = (owner_preferences or "Standard dealership margin priorities.").strip()
     imgs = image_index.strip() if image_index else "Check catalog images dynamically via get_product_photos tool."
+    prod_focus = (current_product or "None specified").strip()
 
     live_block = (
         f"\n\n# PART B — LIVE INJECTED DATA\n"
@@ -102,6 +106,7 @@ def build_customer_sales_prompt(
         f"PRICES_CONFIRMED_TODAY: {'YES' if prices_confirmed_today else 'NO'}\n"
         f"IMAGE_LIBRARY: {imgs}\n"
         f"CUSTOMER_HISTORY: {hist}\n"
+        f"CURRENT_PRODUCT_IN_FOCUS: {prod_focus}\n"
         f"ACTIVE_RULES: {rules}\n"
         f"OWNER_PREFERENCES: {prefs}\n"
         f"MESSAGE_LIMIT_STATUS: {message_limit_status.strip()}\n"

@@ -864,6 +864,7 @@ async def _tool_search_catalog(tenant_id: str, args: Dict[str, Any]) -> Dict[str
 
         item_entry = {
             "name": it["name"],
+            "price": it["price"],
             "price_pkr": it["price"],
             "category": it["category"],
             "origin": it["origin"],

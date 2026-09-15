@@ -687,6 +687,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         image_base64=state.get("image_base64"),
         tenant_id=tenant_id_str,
         sender_phone=sender_phone,
+        current_product=state.get("customer_product"),
     )
 
     flag: Optional[RabtaFlag] = reply_data.get("flag")
@@ -757,6 +758,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             if photos:
                 media_url = photos[0]["url"]
                 prod_name = photos[0].get("product_name") or target_product.title()
+                product = prod_name
                 p_val = photos[0].get("price")
                 p_str = f" — {p_val:,.0f} PKR" if p_val else ""
                 media_urls = []

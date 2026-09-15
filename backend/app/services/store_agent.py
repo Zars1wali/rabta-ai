@@ -194,6 +194,7 @@ class WhatsAppStoreAgent:
         image_base64: Optional[str] = None,
         tenant_id: Optional[str] = None,
         sender_phone: Optional[str] = None,
+        current_product: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Handle a customer turn using Native Gemini Tool Calling & ReAct Harness.
@@ -273,6 +274,7 @@ class WhatsAppStoreAgent:
             prices_confirmed_today=prices_confirmed_today,
             image_index="",
             customer_history=customer_hist,
+            current_product=current_product,
             active_rules=active_rules,
             owner_preferences=owner_prefs,
             message_limit_status=msg_limit_status,
@@ -283,6 +285,7 @@ class WhatsAppStoreAgent:
             "tenant_id": tenant_id,
             "sender_phone": sender_phone,
             "is_boss": False,
+            "current_product": current_product,
         }
 
         try:

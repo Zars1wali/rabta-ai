@@ -172,12 +172,25 @@ class ReActAgentHarness:
 
                 # If no function calls, the model gave its final text response!
                 if not function_calls:
-                    final_text = ""
-                    try:
-                        final_text = response.text or ""
-                    except Exception:
-                        final_text = last_tool_message or "Maaf kijiye, main is query par baat nahi kar sakta."
-                    chunks = [final_text.strip()] if final_text.strip() else []
+                    text_parts = []
+                    if model_content and getattr(model_content, "parts", None):
+                        for p in model_content.parts:
+                            is_thought = getattr(p, "thought", False)
+                            p_text = getattr(p, "text", None)
+                            if p_text and not is_thought:
+                                text_parts.append(p_text)
+
+                    final_text = "\n".join(text_parts).strip()
+                    if not final_text:
+                        try:
+                            final_text = (response.text or "").strip()
+                        except Exception:
+                            final_text = (last_tool_message or "").strip()
+
+                    if not final_text:
+                        final_text = "Jee bilkul, main aapki poori madad karne ke liye hazir hoon. Aap kis specific model ya category ke baray mein janna chahte hain?"
+
+                    chunks = [final_text]
                     state_updates = context.get("state_updates") or {} if isinstance(context, dict) else {}
                     owner_alert = "\n\n".join(gathered_owner_alerts) if gathered_owner_alerts else state_updates.get("owner_alert")
                     return {
@@ -231,16 +244,16 @@ class ReActAgentHarness:
                 break
 
         # If loop exited after max iterations or error, generate safe natural fallback or return tool output
-        fallback = last_tool_message
-        if not fallback and role == "customer":
+        fallback = None
+        if role == "customer":
             u_low = (user_message or "").lower()
             cat_match = None
-            if "rifle" in u_low:
-                cat_match = "Rifle"
-            elif "shotgun" in u_low:
-                cat_match = "Shotgun"
-            elif "pistol" in u_low:
-                cat_match = "Pistol"
+            if "rifle" in u_low or "5.56" in u_low or "223" in u_low or "7.62" in u_low or "308" in u_low:
+                cat_match = "Rifles"
+            elif "shotgun" in u_low or "12 bore" in u_low or "12 gauge" in u_low:
+                cat_match = "Shotguns"
+            elif "pistol" in u_low or "9mm" in u_low or "30 bore" in u_low:
+                cat_match = "Pistols"
 
             if cat_match:
                 try:
@@ -249,14 +262,22 @@ class ReActAgentHarness:
                         cat_res = await execute_tool("search_catalog", {"query": cat_match, "category": cat_match}, {"tenant_id": str(t_id)})
                         items_list = cat_res.get("items") or []
                         if items_list:
-                            items_str = "\n".join([f"- **{it['name']}**: PKR {it['price']:,.0f}" for it in items_list[:5] if it.get('price')])
-                            fallback = f"Hamare paas {cat_match}s mein yeh top options available hain:\n\n{items_str}\n\nAapko kis model ki details ya tasveer chahiye?"
+                            formatted_lines = []
+                            for it in items_list[:5]:
+                                p = it.get('price_pkr') or it.get('price')
+                                if p:
+                                    formatted_lines.append(f"- **{it['name']}**: PKR {p:,.0f}")
+                                else:
+                                    formatted_lines.append(f"- **{it['name']}**")
+                            if formatted_lines:
+                                items_str = "\n".join(formatted_lines)
+                                fallback = f"Hamare paas {cat_match} mein yeh top options available hain:\n\n{items_str}\n\nAapko kis model ki details ya tasveer chahiye?"
                 except Exception as cat_err:
                     logger.warning("[ReActHarness] Fallback category search failed: %s", cat_err)
 
         if not fallback:
-            fallback = (
-                "Jee bilkul, main details check kar raha hoon. Mazeed koi specific model dekhna chahein toh batayein."
+            fallback = last_tool_message or (
+                "Jee bilkul! Hamare paas mukhtalif models available hain. Aap kis specific model ya caliber (jaise 9mm, 5.56, 12 Bore) ke baray mein maloomat lena chahte hain?"
                 if role == "customer"
                 else "G boss, action complete kar diya hai. Koi mazeed tabdeeli karni ho toh batayein."
             )
