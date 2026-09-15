@@ -228,6 +228,29 @@ class ReActAgentHarness:
                                 "url": p.get("url", ""),
                                 "caption": p.get("caption", ""),
                             })
+                    
+                    # Automatically track customer_product in focus from tools
+                    if isinstance(context, dict):
+                        st_up = context.setdefault("state_updates", {})
+                        if tool_result.get("primary_product"):
+                            st_up["customer_product"] = tool_result["primary_product"]
+                        elif photos_list and photos_list[0].get("product_name"):
+                            st_up["customer_product"] = photos_list[0]["product_name"]
+                        elif tool_result.get("product_name"):
+                            st_up["customer_product"] = tool_result["product_name"]
+                        
+                        # Track customer profile if returned by escalation/registration tools
+                        if tool_result.get("customer_name"):
+                            prof = st_up.setdefault("customer_profile", {})
+                            prof["name"] = tool_result["customer_name"]
+                        if tool_result.get("destination_city") or tool_result.get("city"):
+                            prof = st_up.setdefault("customer_profile", {})
+                            prof["city"] = tool_result.get("destination_city") or tool_result.get("city")
+                        if tool_result.get("delivery_address") or tool_result.get("address"):
+                            prof = st_up.setdefault("customer_profile", {})
+                            prof["address"] = tool_result.get("delivery_address") or tool_result.get("address")
+                        if tool_result.get("escalation_id"):
+                            st_up["escalation_id"] = tool_result["escalation_id"]
 
                     function_response_parts.append(
                         types.Part.from_function_response(

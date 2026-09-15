@@ -158,475 +158,47 @@ def extract_customer_entities(
 
 
 # --------------------------------------------------------------------------
-# customer_router — edge function
+# Modern ReAct Customer Sales Node (Node 2A)
 # --------------------------------------------------------------------------
-def route_customer(state: RabtaGraphState) -> str:
+async def customer_react_node(state: RabtaGraphState) -> RabtaGraphState:
     """
-    Evaluates current conversation state to route between ongoing info collection
-    and dynamic Sales Intelligence chat.
+    Core ReAct Sales Intelligence Node for Rabta AI.
+    Executes native tool calling via WhatsAppStoreAgent & ReActAgentHarness.
+    
+    Binds: search_catalog, get_product_photos, check_delivery_policy,
+    get_payment_bank_details, escalate_delivery_quote, escalate_custom_inquiry,
+    recommend_alternative.
     """
-    cs = state.get("customer_state", "BROWSING")
-    msg = (state.get("raw_message") or "").lower()
-
-    # If in active info collection, continue unless customer changes topic
-    if cs in ("COLLECTING_INFO", "DELIVERY_ASKED"):
-        return "collect_customer_info"
-
-    # Delivery intent initiates info collection (name -> city -> address)
-    if any(w in msg for w in ["delivery", "deliver", "bhejo", "bhej do"]):
-        return "collect_customer_info"
-
-    # All conversational queries, greetings, product questions route to customer_sales_chat
-    return "customer_sales_chat"
-
-
-# --------------------------------------------------------------------------
-# Node: ask_city
-# --------------------------------------------------------------------------
-async def ask_city(state: RabtaGraphState) -> RabtaGraphState:
-    """Natural delivery closing step asking for destination city."""
-    reply = "Delivery bilkul ho sakti hai — Karachi, Lahore, Islamabad, sab jagah. 100% advance payment pe. Aapka city kya hai?"
-    return {
-        **state,
-        "customer_state": "DELIVERY_ASKED",
-        "reply_text": reply,
-        "reply_chunks": [reply],
-        "media_url": None,
-        "media_urls": None,
-        "owner_alert": None,
-    }
-
-
-# --------------------------------------------------------------------------
-# Node: ask_city_again
-# --------------------------------------------------------------------------
-async def ask_city_again(state: RabtaGraphState) -> RabtaGraphState:
-    """Gentle clarification for city."""
-    reply = "Bhai please city batayein — kis city mein delivery chahiye?"
-    return {
-        **state,
-        "reply_text": reply,
-        "reply_chunks": [reply],
-        "media_url": None,
-        "media_urls": None,
-        "owner_alert": None,
-    }
-
-
-# --------------------------------------------------------------------------
-# Node: send_patience_reply
-# --------------------------------------------------------------------------
-async def send_patience_reply(state: RabtaGraphState) -> RabtaGraphState:
-    """Natural reassurance while owner confirms unverified details."""
-    reply = "Main shop se confirm kar raha hoon, thoda sa wait karein — abhi batata hoon."
-    return {
-        **state,
-        "reply_text": reply,
-        "reply_chunks": [reply],
-        "media_url": None,
-        "media_urls": None,
-        "owner_alert": None,
-    }
-
-
-# --------------------------------------------------------------------------
-# Node: escalate_to_owner
-# --------------------------------------------------------------------------
-async def escalate_to_owner(state: RabtaGraphState) -> RabtaGraphState:
-    """Redirects to collection for structured delivery details."""
-    merged = {**state, "escalation_type": "delivery", "customer_state": "COLLECTING_INFO"}
-    return await collect_customer_info(merged)
-
-
-# --------------------------------------------------------------------------
-# Node: collect_customer_info
-# --------------------------------------------------------------------------
-async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
-    """
-    Progressively collects Name -> City -> WhatsApp SIM / Address when delivery
-    or bank details payment is chosen, then executes relay or alerts owner.
-    """
-    msg = (state.get("raw_message") or "").strip()
-    phone = state.get("sender_phone", "unknown")
-    name = state.get("customer_name")
-    city = state.get("customer_city")
-    address = state.get("customer_address")
-    sim = state.get("customer_sim_phone")
-    product = state.get("customer_product", "requested firearm")
-    step = state.get("info_collection_step")
-    esc_type = state.get("escalation_type")
-    tenant_id_str = state.get("tenant_id", "")
-
-    # Check if sender phone is already a real Pakistani SIM phone
-    clean_sender = re.sub(r'[^\d]', '', phone)
-    if not sim and len(clean_sender) <= 12 and (clean_sender.startswith("923") or clean_sender.startswith("03") or clean_sender.startswith("3")):
-        sim = clean_sender
-
-    msg_l = msg.lower().strip()
-    is_stop_req = any(
-        phrase in msg_l for phrase in [
-            "stop texting", "stop text", "dont text", "don't text", "dont message",
-            "don't message", "stop", "mat karo", "message mat karo", "msg mat karo",
-            "too many messages", "no need", "nahi chahiye", "na karo", "toba", "unsub"
-        ]
-    )
-    if is_stop_req:
-        logger.info("[CollectInfo] Customer %s requested stop/opt-out. Pausing AI.", phone)
-        reply = "Theek hai bhai, bilkul pareshan na hon. Main mazeed message nahi karunga. Agar aainda kabhi koi zaroorat ho toh aap bejhijhak rabta kar sakte hain. Allah hafiz! 🙏"
-        return {
-            **state,
-            "customer_state": "IDLE",
-            "info_collection_step": None,
-            "escalation_type": None,
-            "reply_text": reply,
-            "reply_chunks": [reply],
-            "media_url": None,
-            "media_urls": None,
-            "owner_alert": None,
-            "ai_active": False,
-        }
-
-    # Entity extraction
-    extracted_name, extracted_city, extracted_sim = extract_customer_entities(
-        msg, current_name=name, current_city=city, current_sim=sim, push_name=state.get("push_name")
-    )
-    name = extracted_name or name
-    city = extracted_city or city
-    sim = extracted_sim or sim
-
-    if not name and step == "name" and len(msg.split()) <= 3 and not any(w in msg.lower() for w in ["lahore", "karachi", "delivery", "payment"]):
-        cand = msg.strip().title()
-        if is_valid_human_name(cand):
-            name = cand
-
-    if not city and step == "city" and len(msg.split()) <= 3:
-        city = msg.strip().title()
-
-    # Address extraction: accept when step is address or text contains address keywords (and not purely phone)
-    addr_kws = ["road", "street", "gali", "phase", "sector", "block", "house", "dha", "town", "chowk", "near", "mohalla", "colony", "bazar", "market", "pull", "addah"]
-    is_phone_msg = bool(is_valid_pakistani_sim(msg) or re.search(r'(?:(?:\+92|0092|92|0)?\s?3\d{2}[-\s]?\d{7})', msg))
-    if not address:
-        if step == "address" and not is_phone_msg and len(msg) >= 3:
-            address = msg
-        elif any(w in msg.lower() for w in addr_kws) and not is_phone_msg:
-            address = msg
-
-    clean_sender_digits = re.sub(r'[^\d]', '', phone)
-    effective_sim = sim if is_valid_pakistani_sim(sim) else (clean_sender_digits if is_valid_pakistani_sim(clean_sender_digits) else phone)
-    saved_sim = effective_sim
-    has_name = is_valid_human_name(name)
-    has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
-
-    # ── WORKFLOW A: Payment & Bank Details Collection ─────────────────────────
-    if step == "payment_details" or esc_type == "payment":
-        if not has_name:
-            reply = "Jee bilkul bhai! Payment aur bank account details provide kar dete hain. Kindly apna Naam share kar dein taake invoice record generate ho sake."
-            return {
-                **state,
-                "customer_state": "COLLECTING_INFO",
-                "info_collection_step": "payment_details",
-                "escalation_type": "payment",
-                "customer_name": None,
-                "customer_city": city,
-                "customer_address": address,
-                "customer_sim_phone": saved_sim,
-                "reply_text": reply,
-                "reply_chunks": [reply],
-                "owner_alert": None,
-            }
-
-        if not city:
-            reply = f"Jee {name}, kis city se hain aap?"
-            return {
-                **state,
-                "customer_state": "COLLECTING_INFO",
-                "info_collection_step": "payment_details",
-                "escalation_type": "payment",
-                "customer_name": name,
-                "customer_city": None,
-                "customer_address": address,
-                "customer_sim_phone": saved_sim,
-                "reply_text": reply,
-                "reply_chunks": [reply],
-                "owner_alert": None,
-            }
-
-        # Complete payment details collected! Check database accounts
-        async with AsyncSessionLocal() as session:
-            t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else None
-            accounts = await tenant_repo.get_payment_accounts(session, t_uuid) if t_uuid else []
-            auto_share = await tenant_repo.is_payment_auto_share_enabled(session, t_uuid) if t_uuid else True
-
-        if accounts and auto_share:
-            reply = tenant_repo.format_payment_accounts_text(accounts, name)
-            owner_alert = build_owner_inquiry_alert(
-                customer_name=name,
-                customer_phone=effective_sim,
-                product=product,
-                city=city,
-                address=address,
-                inquiry_type="payment_share_alert",
-            )
-            return {
-                **state,
-                "customer_state": "COLLECTING_INFO",
-                "info_collection_step": "receipt_awaited",
-                "escalation_type": None,
-                "customer_name": name,
-                "customer_city": city,
-                "customer_address": address,
-                "customer_sim_phone": effective_sim,
-                "reply_text": reply,
-                "reply_chunks": [reply],
-                "owner_alert": owner_alert,
-            }
-        else:
-            t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
-            esc_record = _esc_service.create_escalation(
-                tenant_id=t_uuid,
-                customer_phone=effective_sim,
-                question=f"Bank details requested by {name} from {city} for {product}",
-                product_context=product,
-                customer_name=name,
-                conversation_snippet=(state.get("conversation_history") or [])[-6:],
-            )
-            owner_alert = build_owner_inquiry_alert(
-                customer_name=name,
-                customer_phone=effective_sim,
-                product=product,
-                city=city,
-                address=address,
-                question="Customer ne bank account details maangi hain — please provide bank details",
-                inquiry_type="payment",
-            )
-            reply = f"Theek hai {name} bhai, main shop se verified bank account details confirm karke aapko foran share karta hoon."
-            return {
-                **state,
-                "customer_state": "ESCALATED",
-                "customer_name": name,
-                "customer_city": city,
-                "customer_address": address,
-                "customer_sim_phone": effective_sim,
-                "escalation_id": esc_record.escalation_id,
-                "info_collection_step": None,
-                "escalation_type": None,
-                "reply_text": reply,
-                "reply_chunks": [reply],
-                "owner_alert": owner_alert,
-            }
-
-    # ── WORKFLOW C: General Inquiry / Delivery Charges Identity Collection ────
-    if step == "inquiry_details":
-        if not has_name:
-            reply = "Jee bilkul bhai, kindly apna Naam share kar dein taake shop se confirm kar sakein."
-            return {
-                **state,
-                "customer_state": "COLLECTING_INFO",
-                "info_collection_step": "inquiry_details",
-                "escalation_type": esc_type or "inquiry",
-                "customer_name": None,
-                "customer_city": city,
-                "customer_address": address,
-                "customer_sim_phone": saved_sim,
-                "reply_text": reply,
-                "reply_chunks": [reply],
-                "owner_alert": None,
-            }
-
-        # Gate: If customer is on a privacy LID and has not provided a real Pakistani SIM, ask for it!
-        if not has_sim:
-            reply = f"Jee {name} bhai! Apna WhatsApp contact number share kar dein taake shop se details confirm kar sakein."
-            return {
-                **state,
-                "customer_state": "COLLECTING_INFO",
-                "info_collection_step": "inquiry_details",
-                "escalation_type": esc_type or "inquiry",
-                "customer_name": name,
-                "customer_city": city,
-                "customer_address": address,
-                "customer_sim_phone": None,
-                "reply_text": reply,
-                "reply_chunks": [reply],
-                "owner_alert": None,
-            }
-
-        # Guard against cross-product stale query bleed from prior turns
-        stored_query = state.get("pending_owner_query")
-        if stored_query and product:
-            known_brands = ["kimber", "glock", "beretta", "sig", "cz", "taurus", "canik", "diamondback", "db10", "db15", "colt", "palmetto"]
-            stored_brands = [b for b in known_brands if b in stored_query.lower()]
-            prod_brands = [b for b in known_brands if b in product.lower()]
-            if stored_brands and prod_brands and set(stored_brands) != set(prod_brands):
-                logger.warning(
-                    "[CollectInfo] Stored pending query '%s' mentions %s, but active product is %s. Discarding stale query.",
-                    stored_query, stored_brands, product
-                )
-                stored_query = None
-
-        q_text = stored_query or (f"{product} ke hawale se inquiry" if product else state.get("raw_message") or "Customer inquiry")
-        inq_type = esc_type or "inquiry"
-        t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
-        cust_jid = state.get("sender_jid") or phone
-        esc = _esc_service.create_escalation(
-            tenant_id=t_uuid,
-            customer_phone=effective_sim,
-            customer_jid=cust_jid,
-            customer_city=city,
-            customer_name=name,
-            question=q_text,
-            product_context=product,
-            conversation_snippet=(state.get("conversation_history") or [])[-6:],
-        )
-        owner_alert = build_owner_inquiry_alert(
-            customer_name=name,
-            customer_phone=effective_sim,
-            product=product,
-            city=city,
-            address=address,
-            question=q_text,
-            inquiry_type=inq_type,
-        )
-        reply = f"Jee {name} bhai! Main shop owner se confirm karke aapko abhi batata hoon, thoda sa wait karein."
-        return {
-            **state,
-            "customer_state": "ESCALATED",
-            "info_collection_step": None,
-            "escalation_type": None,
-            "customer_name": name,
-            "customer_city": city,
-            "customer_address": address,
-            "customer_sim_phone": effective_sim,
-            "escalation_id": esc.escalation_id,
-            "pending_owner_query": None,  # ALWAYS flush pending query on escalation!
-            "reply_text": reply,
-            "reply_chunks": [reply],
-            "owner_alert": owner_alert,
-        }
-
-    # ── WORKFLOW B: Delivery Address Collection ───────────────────────────────
-    if not has_name:
-        reply = "Delivery bilkul ho sakti hai. Aapka naam kya hai?"
-        return {
-            **state,
-            "customer_state": "COLLECTING_INFO",
-            "info_collection_step": "name",
-            "escalation_type": "delivery",
-            "customer_name": None,
-            "customer_city": city,
-            "customer_address": address,
-            "customer_sim_phone": saved_sim,
-            "reply_text": reply,
-            "reply_chunks": [reply],
-            "owner_alert": None,
-        }
-
-    if not city:
-        reply = f"Jee {name}, kis city mein delivery chahiye?"
-        return {
-            **state,
-            "customer_state": "COLLECTING_INFO",
-            "info_collection_step": "city",
-            "escalation_type": "delivery",
-            "customer_name": name,
-            "customer_city": None,
-            "customer_address": address,
-            "customer_sim_phone": saved_sim,
-            "reply_text": reply,
-            "reply_chunks": [reply],
-            "owner_alert": None,
-        }
-
-    if not address:
-        reply = f"{city} mein delivery address ya area batayein?"
-        return {
-            **state,
-            "customer_state": "COLLECTING_INFO",
-            "info_collection_step": "address",
-            "escalation_type": "delivery",
-            "customer_name": name,
-            "customer_city": city,
-            "customer_address": None,
-            "customer_sim_phone": saved_sim,
-            "reply_text": reply,
-            "reply_chunks": [reply],
-            "owner_alert": None,
-        }
-
-    # Complete delivery info collected — notify owner for charges
-    try:
-        tenant_id = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
-    except (ValueError, AttributeError):
-        tenant_id = uuid.uuid4()
-
-    cust_jid = state.get("sender_jid") or phone
-    esc_record = _esc_service.create_escalation(
-        tenant_id=tenant_id,
-        customer_phone=effective_sim,
-        customer_jid=cust_jid,
-        customer_city=city,
-        question=f"Delivery to {city} ({address}) for {product}",
-        product_context=product,
-        customer_name=name,
-        conversation_snippet=(state.get("conversation_history") or [])[-6:],
-    )
-
-    owner_alert = build_owner_inquiry_alert(
-        customer_name=name,
-        customer_phone=effective_sim,
-        product=product,
-        city=city,
-        address=address,
-        inquiry_type="delivery",
-    )
-
-    reply = f"Theek hai {name} bhai, main shop se {city} ke liye {product} ke delivery charges confirm karke aapko foran batata hoon."
-    return {
-        **state,
-        "customer_state": "ESCALATED",
-        "customer_name": name,
-        "customer_city": city,
-        "customer_address": address,
-        "customer_sim_phone": effective_sim,
-        "escalation_id": esc_record.escalation_id,
-        "info_collection_step": None,
-        "escalation_type": None,
-        "reply_text": reply,
-        "reply_chunks": [reply],
-        "owner_alert": owner_alert,
-    }
-
-
-# --------------------------------------------------------------------------
-# Node: customer_sales_chat
-# --------------------------------------------------------------------------
-async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
-    """
-    Core Sales Intelligence Node driven by Master Sales Intelligence Prompt v2.0.
-    Enforces customer detail collection before payment escalation and clean SIM alerts.
-    """
-    raw_message = state.get("raw_message", "")
-    tenant_id_str = state.get("tenant_id", "")
-    sender_phone = state.get("sender_phone", "")
+    raw_message = (state.get("raw_message") or "").strip()
+    tenant_id_str = state.get("tenant_id") or ""
+    sender_phone = state.get("sender_phone") or ""
+    sender_jid = state.get("sender_jid") or sender_phone
+    push_name = state.get("push_name")
+    
     current_name = state.get("customer_name")
     current_city = state.get("customer_city")
+    current_address = state.get("customer_address")
     current_sim = state.get("customer_sim_phone")
-    address = state.get("customer_address")
+    current_product = state.get("customer_product")
     escalation_id = state.get("escalation_id")
+    history = state.get("conversation_history") or []
+    image_b64 = state.get("image_base64")
 
     # Detect real SIM phone
     clean_sender = re.sub(r'[^\d]', '', sender_phone)
     if not current_sim and len(clean_sender) <= 12 and (clean_sender.startswith("923") or clean_sender.startswith("03") or clean_sender.startswith("3")):
         current_sim = clean_sender
 
-    # Entity extraction from current turn
+    # Light opportunistic entity extraction for phone/name if customer directly sent it
     ext_name, ext_city, ext_sim = extract_customer_entities(
-        raw_message, current_name=current_name, current_city=current_city, current_sim=current_sim, push_name=state.get("push_name")
+        raw_message, current_name=current_name, current_city=current_city, current_sim=current_sim, push_name=push_name
     )
     name = ext_name or current_name
     city = ext_city or current_city
     sim = ext_sim or current_sim
-    effective_sim = sim or sender_phone
+    address = current_address
 
+    # 1. Customer Opt-Out / Stop Request Check
     raw_l = raw_message.lower().strip()
     is_stop_req = any(
         phrase in raw_l for phrase in [
@@ -636,10 +208,11 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         ]
     )
     if is_stop_req:
-        logger.info("[CustomerNode] Customer %s requested stop/opt-out. Pausing AI.", sender_phone)
+        logger.info("[CustomerReactNode] Customer %s requested stop/opt-out. Pausing AI.", sender_phone)
         reply = "Theek hai bhai, bilkul pareshan na hon. Main mazeed message nahi karunga. Agar aainda kabhi koi zaroorat ho toh aap bejhijhak rabta kar sakte hain. Allah hafiz! 🙏"
         return {
             **state,
+            "customer_state": "IDLE",
             "reply_text": reply,
             "reply_chunks": [reply],
             "media_url": None,
@@ -648,364 +221,71 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             "ai_active": False,
         }
 
-    # PDF 1 §A.16: Collect customer Name and City before sharing bank details or triggering alert
-    is_payment_req = any(w in raw_l for w in ["bank", "account", "jazzcash", "easypaisa", "raast", "payment details", "paise transfer", "online payment", "advance payment", "bank details", "a/c", "khata"])
-    if is_payment_req and (not name or not city or (len(clean_sender) >= 13 and not sim)):
-        if not name and not city:
-            if len(clean_sender) >= 13 and not sim:
-                prompt_reply = "Jee bilkul bhai! Payment aur bank account details provide kar dete hain. Kindly apna Naam, City aur WhatsApp contact number share kar dein taake aapka order aur invoice record mein register ho sake."
-            else:
-                prompt_reply = "Jee bilkul bhai! Payment aur bank account details provide kar dete hain. Kindly apna Naam aur City share kar dein taake aapka order aur invoice record mein register ho sake."
-        elif not name:
-            prompt_reply = "Jee bilkul bhai! Payment aur bank details share karne ke liye aapka shubh naam kya hai?"
-        elif not city:
-            prompt_reply = f"Jee {name} bhai! Kis city se hain aap taake invoice record ban sake?"
-        else:
-            prompt_reply = f"Jee {name} bhai! Apna WhatsApp SIM contact number share kar dein taake official order slip book ho sake."
-
-        return {
-            **state,
-            "customer_state": "COLLECTING_INFO",
-            "customer_name": name,
-            "customer_city": city,
-            "customer_sim_phone": sim,
-            "customer_product": state.get("customer_product"),
-            "info_collection_step": "payment_details",
-            "escalation_type": "payment",
-            "reply_text": prompt_reply,
-            "reply_chunks": [prompt_reply],
-            "owner_alert": None,
-        }
-
-    # Call the Sales Intelligence Agent
+    # 2. Call the ReAct Sales Intelligence Agent
     reply_data = await _store_agent.handle_customer_interaction(
         customer_message=raw_message,
         business_name=state.get("business_name", "Haider Arms"),
         industry=state.get("industry", "Firearms Retail"),
         catalog_context=state.get("catalog_context", ""),
-        conversation_history=state.get("conversation_history") or [],
-        image_base64=state.get("image_base64"),
+        conversation_history=history,
+        image_base64=image_b64,
         tenant_id=tenant_id_str,
         sender_phone=sender_phone,
-        current_product=state.get("customer_product"),
+        current_product=current_product,
     )
 
-    flag: Optional[RabtaFlag] = reply_data.get("flag")
-    reply_text = reply_data.get("reply_text", "")
+    reply_text = reply_data.get("reply_text") or ""
     reply_chunks = reply_data.get("reply_chunks") or ([reply_text] if reply_text else [])
+    media_urls = reply_data.get("media_urls") or []
+    final_media_url = media_urls[0]["url"] if media_urls else None
+    owner_alert = reply_data.get("owner_alert")
+    state_updates = reply_data.get("state_updates") or {}
 
-    owner_alert = None
-    media_urls = reply_data.get("media_urls") or None
-    media_url = media_urls[0]["url"] if media_urls else None
-    customer_state = state.get("customer_state", "BROWSING")
-    product = reply_data.get("extracted_item") or reply_data.get("product") or state.get("customer_product")
+    # 3. Product in focus tracking
+    new_product = state_updates.get("customer_product") or reply_data.get("extracted_item") or reply_data.get("product") or current_product
+    if media_urls and media_urls[0].get("name"):
+        new_product = media_urls[0]["name"]
+    elif media_urls and media_urls[0].get("product_name"):
+        new_product = media_urls[0]["product_name"]
 
-    # Native Tool Execution Check: If tool created an escalation or owner alert, handle directly
-    if reply_data.get("owner_alert"):
-        owner_alert = reply_data["owner_alert"]
-        profile = (reply_data.get("state_updates") or {}).get("customer_profile") or {}
-        if profile.get("name"):
-            name = profile["name"]
-        if profile.get("city"):
-            city = profile["city"]
-        if profile.get("address"):
-            address = profile["address"]
-        if profile.get("sim"):
-            sim = profile["sim"]
-        esc_id = (reply_data.get("state_updates") or {}).get("escalation_id") or escalation_id
-        return {
-            **state,
-            "customer_state": "ESCALATED",
-            "customer_name": name,
-            "customer_city": city,
-            "customer_address": address or state.get("customer_address"),
-            "customer_sim_phone": sim,
-            "customer_product": product,
-            "escalation_id": esc_id,
-            "media_url": media_url,
-            "media_urls": media_urls,
-            "reply_text": reply_text,
-            "reply_chunks": reply_chunks,
-            "owner_alert": owner_alert,
-        }
-
-    # 1. Handle Native Media or Legacy IMAGE_REQUEST Flag
-    if not media_urls and flag and flag.flag_type == "IMAGE_REQUEST":
-        raw_target = flag.product or reply_data.get("image_product") or product or ""
-        target_product = (raw_target or "").strip()
-
-        FILLER_WORDS = {
-            "yes", "haan", "ok", "acha", "theek", "bhejo", "dikhao", "send", "show", "pic", "pics",
-            "photo", "photos", "that", "yeh", "woh", "isko", "unko", "inhe", "dekhein", "karein", "me"
-        }
-        if target_product.lower() in FILLER_WORDS:
-            target_product = (product or "").strip()
-
-        # Check if the customer is asking where photos are / complaining about delivery failure
-        is_missing_pic_complaint = any(w in (raw_message or "").lower() for w in [
-            "kidher", "kidhar", "kahan", "nahi", "nhi", "aayi", "bheji", "send ki", "kahan hain", "where", "missing"
-        ])
-
-        if not target_product or is_missing_pic_complaint or target_product.lower() in FILLER_WORDS:
-            target_product = (product or "").strip()
-
-        try:
-            photos = await get_product_photos(
-                tenant_id=tenant_id_str,
-                product_name=target_product or "firearm",
-                allow_multiple=False,
-            ) if target_product and target_product.lower() not in FILLER_WORDS else []
-            if photos:
-                media_url = photos[0]["url"]
-                prod_name = photos[0].get("product_name") or target_product.title()
-                product = prod_name
-                p_val = photos[0].get("price")
-                p_str = f" — {p_val:,.0f} PKR" if p_val else ""
-                media_urls = []
-                for idx, p in enumerate(photos):
-                    p_name = p.get("product_name") or prod_name
-                    p_price = p.get("price")
-                    p_cap = p.get("caption")
-                    if not p_cap:
-                        p_cap_price = f" — {p_price:,.0f} PKR" if p_price else ""
-                        p_cap = f"{p_name}{p_cap_price}"
-                    media_urls.append({
-                        "name": p_name,
-                        "url": p["url"],
-                        "caption": p_cap,
-                    })
-                reply_text = f"{prod_name}{p_str}"
-                reply_chunks = [reply_text]
-            else:
-                if reply_data.get("reply_text"):
-                    reply_text = reply_data["reply_text"]
-                elif is_missing_pic_complaint or not target_product:
-                    reply_text = "Bhai maazrat, network issue ki wajah se picture transfer nahi ho saki thi. Aap batayein kis firearm ki picture dekhna chahte hain, main foran deliver karta hoon."
-                else:
-                    display_name = target_product.title()
-                    reply_text = f"Bhai {display_name} ki photo abhi catalog mein load nahi hui — aap features ya specs pooch sakte hain."
-                reply_chunks = [reply_text]
-        except Exception as e:
-            logger.warning("[Node:customer_sales_chat] Image fetch error: %s", e)
-            reply_text = "Jee batayein, kis firearm ki picture dekhna chahte hain?"
-            reply_chunks = [reply_text]
-
-    # 2. Handle ESCALATE Flag (Section A.28: Immediate and Silent)
-    elif flag and flag.flag_type == "ESCALATE":
-        reply_text = ""
-        reply_chunks = []
-        customer_state = "ESCALATED"
+    # 4. Profile and Escalation tracking
+    profile = state_updates.get("customer_profile") or {}
+    if profile.get("name"):
+        name = profile["name"]
+    if profile.get("city"):
+        city = profile["city"]
+    if profile.get("address"):
+        address = profile["address"]
+    if profile.get("sim"):
+        sim = profile["sim"]
+    
+    if state_updates.get("escalation_id"):
+        escalation_id = state_updates["escalation_id"]
+    elif reply_data.get("needs_escalation") and not escalation_id:
+        # Create escalation record if flagged
         try:
             t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
             esc = _esc_service.create_escalation(
                 tenant_id=t_uuid,
-                customer_phone=effective_sim,
-                customer_name=name,
-                question=flag.payload or raw_message,
-                product_context=product,
-                conversation_snippet=(state.get("conversation_history") or [])[-6:],
-            )
-            escalation_id = esc.escalation_id
-            owner_alert = (
-                f"🚨 [URGENT ESCALATION]\n"
-                f"Customer {name or ''} (WhatsApp SIM: {format_pakistani_phone_display(effective_sim)}) ne serious issue report kiya hai:\n"
-                f"\"{flag.payload or raw_message}\"\n"
-                f"Please check and handle immediately."
-            )
-        except Exception as e:
-            logger.error("[Node:customer_sales_chat] Failed creating escalation: %s", e)
-
-    # 3. Handle OWNER_QUERY Flag (Section A.29)
-    elif flag and flag.flag_type == "OWNER_QUERY":
-        query_payload = flag.payload or raw_message
-        q_lower = query_payload.lower()
-
-        # Routine direct resolutions — DO NOT alert the owner!
-        if any(w in q_lower for w in ["shop kider", "shop kidhar", "shop kahan", "address", "location", "dukaan", "showroom"]):
-            shop_reply = "Hamari physical shop Peshawar mein hai: Shop 4, Old Fruit Market, GT Rd, Sikander Town, Peshawar. Timing subah 9:00 AM se shaam 7:00 PM tak hai. Google Maps link yeh raha: https://www.google.com/maps/place/Haider+Arms/@34.0162786,71.5943887,17z"
-            return {
-                **state,
-                "customer_state": "BROWSING",
-                "customer_name": name,
-                "customer_city": city,
-                "customer_product": product,
-                "reply_text": shop_reply,
-                "reply_chunks": [shop_reply],
-                "owner_alert": None,
-            }
-
-        if any(w in q_lower for w in ["payment process", "process kia", "screenshot bhej", "bhejta hoon", "bhej raha hoon", "screen shot"]):
-            ack_reply = "Jee bilkul theek hai bhai! Aap payment transfer ka screenshot share kar dein, hum verify karke confirmation de denge."
-            return {
-                **state,
-                "customer_state": "COLLECTING_INFO",
-                "info_collection_step": "receipt_awaited",
-                "customer_name": name,
-                "customer_city": city,
-                "customer_product": product,
-                "reply_text": ack_reply,
-                "reply_chunks": [ack_reply],
-                "owner_alert": None,
-            }
-
-        if any(w in q_lower for w in ["konse finish", "konsi finish", "finish me", "finish mein", "konse finish me hai"]):
-            prod_clean = product or "firearm"
-            finish_reply = f"Jee bhai, {prod_clean} original import piece hai aur premium factory finish mein mojood hai. Aapko detailed pictures share kar doon?"
-            return {
-                **state,
-                "customer_state": "BROWSING",
-                "customer_name": name,
-                "customer_city": city,
-                "customer_product": product,
-                "reply_text": finish_reply,
-                "reply_chunks": [finish_reply],
-                "owner_alert": None,
-            }
-
-        customer_state = "ESCALATED"
-
-        # Extract city from query if not already known
-        if not city:
-            common_cities = [
-                "lahore", "karachi", "islamabad", "rawalpindi", "peshawar", "hyderabad",
-                "multan", "faisalabad", "quetta", "sialkot", "gujranwala", "abbottabad",
-                "mardan", "sukkur", "sargodha", "bahawalpur", "gujrat", "mirpur"
-            ]
-            for c in common_cities:
-                if re.search(rf"\b{c}\b", q_lower):
-                    city = c.title()
-                    break
-
-        # Determine specific inquiry type
-        if any(w in q_lower for w in ["delivery", "cargo", "courier", "charges", "pahunch", "hyderabad"]):
-            inquiry_type = "delivery"
-            wait_reply = f"Jee bilkul bhai, main {'(' + city + ') ' if city else ''}delivery charges shop se confirm karke aapko abhi batata hoon, thoda sa wait karein."
-        elif any(w in q_lower for w in ["discount", "kam", "gunjaish", "final price"]):
-            inquiry_type = "discount"
-            wait_reply = "Jee bilkul bhai, main final discount aur rate shop owner se pooch kar aapko abhi batata hoon, thoda sa wait karein."
-        elif any(w in q_lower for w in ["available", "stock", "stock mein", "available hai"]):
-            inquiry_type = "availability"
-            wait_reply = "Jee bhai, main shop se stock check karke abhi confirm karta hoon, thoda sa wait karein."
-        elif "license" in q_lower:
-            inquiry_type = "license"
-            wait_reply = "Jee bhai, licensing process ki guidance ke liye main shop owner ko notify kar raha hoon, thoda sa wait karein."
-        else:
-            inquiry_type = "inquiry"
-            wait_reply = "Jee bilkul bhai, main shop se confirm karke aapko abhi update karta hoon, thoda sa wait karein."
-
-        # Strict Identity Check: Do NOT escalate anonymously to Haider bhai!
-        # If customer Name or real SIM is not yet collected, gate and collect them first!
-        clean_sender_digits = re.sub(r'[^\d]', '', sender_phone)
-        has_sim = is_valid_pakistani_sim(sim) or is_valid_pakistani_sim(clean_sender_digits)
-        has_name = is_valid_human_name(name)
-
-        if not has_name or not has_sim:
-            topic_str = "delivery charges" if (inquiry_type == "delivery" or "delivery" in q_lower) else "maloomat"
-            if not has_name and not has_sim:
-                prompt_reply = f"Jee bilkul bhai! {topic_str.title()} shop se confirm kar dete hain. Kindly apna Naam aur WhatsApp contact number share kar dein taake shop record verify ho sake."
-            elif not has_name:
-                prompt_reply = f"Jee bilkul bhai! {topic_str.title()} shop se confirm kar dete hain. Kindly apna Naam share kar dein."
-            else:
-                prompt_reply = f"Jee {name} bhai! Apna WhatsApp SIM contact number share kar dein taake {topic_str} confirm ho sake."
-
-            return {
-                **state,
-                "customer_state": "COLLECTING_INFO",
-                "info_collection_step": "inquiry_details",
-                "escalation_type": inquiry_type,
-                "customer_name": name if has_name else None,
-                "customer_city": city,
-                "customer_address": state.get("customer_address"),
-                "customer_sim_phone": sim if is_valid_pakistani_sim(sim) else (clean_sender_digits if is_valid_pakistani_sim(clean_sender_digits) else None),
-                "customer_product": product,
-                "pending_owner_query": query_payload,
-                "reply_text": prompt_reply,
-                "reply_chunks": [prompt_reply],
-                "owner_alert": None,
-            }
-
-        reply_text = wait_reply
-        reply_chunks = [reply_text]
-
-        try:
-            t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
-            cust_jid = state.get("sender_jid") or sender_phone
-
-            # Check if an escalation is ALREADY pending for this customer to prevent bombarding the owner
-            pending_list = _esc_service.get_pending_for_tenant(t_uuid)
-            existing_esc = next(
-                (e for e in pending_list if e.customer_phone == effective_sim or e.customer_jid == cust_jid),
-                None,
-            )
-            if existing_esc:
-                existing_esc.customer_question = f"{existing_esc.customer_question} | Follow-up: {query_payload}"
-                _esc_service._save_persisted_escalations()
-                wait_followup = f"Jee {name} bhai! Aapka yeh sawal bhi note kar liya hai. Jaise hi shop owner ka response aata hai, main foran aapko update karta hoon."
-                return {
-                    **state,
-                    "customer_state": "ESCALATED",
-                    "customer_name": name,
-                    "customer_city": city,
-                    "customer_sim_phone": effective_sim,
-                    "customer_product": product,
-                    "escalation_id": existing_esc.escalation_id,
-                    "reply_text": wait_followup,
-                    "reply_chunks": [wait_followup],
-                    "owner_alert": None,
-                }
-
-            esc = _esc_service.create_escalation(
-                tenant_id=t_uuid,
-                customer_phone=effective_sim,
-                customer_jid=cust_jid,
+                customer_phone=sim or sender_phone,
+                customer_jid=sender_jid,
                 customer_city=city,
                 customer_name=name,
-                question=query_payload,
-                product_context=product,
-                conversation_snippet=(state.get("conversation_history") or [])[-6:],
+                question=raw_message,
+                product_context=new_product,
+                conversation_snippet=history[-6:],
             )
             escalation_id = esc.escalation_id
-            owner_alert = build_owner_inquiry_alert(
-                customer_name=name,
-                customer_phone=effective_sim,
-                product=product,
-                city=city,
-                address=state.get("customer_address"),
-                question=query_payload,
-                inquiry_type=inquiry_type,
-            )
-        except Exception as e:
-            logger.error("[Node:customer_sales_chat] Failed creating owner query: %s", e)
+        except Exception as esc_err:
+            logger.warning("[CustomerReactNode] Escalation creation: %s", esc_err)
 
-    # 4. Handle BULK_LEAD Flag (Section A.21)
-    elif flag and flag.flag_type == "BULK_LEAD":
-        customer_state = "ESCALATED"
-        try:
-            t_uuid = uuid.UUID(tenant_id_str) if tenant_id_str else uuid.uuid4()
-            cust_jid = state.get("sender_jid") or sender_phone
-            esc = _esc_service.create_escalation(
-                tenant_id=t_uuid,
-                customer_phone=effective_sim,
-                customer_jid=cust_jid,
-                customer_city=city,
-                customer_name=name,
-                question=f"BULK LEAD: {flag.payload}",
-                product_context=flag.product,
-            )
-            escalation_id = esc.escalation_id
-            owner_alert = (
-                f"💼 [BULK BUYER LEAD]\n"
-                f"Customer {name or ''} (WhatsApp SIM: {format_pakistani_phone_display(effective_sim)}) wants {flag.quantity or 'bulk'} of {flag.product or 'firearms'}.\n"
-                f"Serious buyer lag raha hai — aap khud baat karein ya main rate quote karun?"
-            )
-        except Exception as e:
-            logger.error("[Node:customer_sales_chat] Failed creating bulk lead: %s", e)
+    customer_state = "ESCALATED" if (owner_alert or escalation_id) else "BROWSING"
 
-    # Final Security Check: Never send internal flags or directives to customer
+    # 5. Sanitize reply text (remove any internal [FLAG: ...] stanzas)
     if reply_text:
         reply_text = strip_rabta_flags(reply_text)
         if not reply_text.strip():
-            reply_text = "Jee bilkul bhai, main shop se confirm karke aapko abhi batata hoon, thoda sa wait karein."
+            reply_text = "Jee bilkul bhai! Main mazeed details confirm karke aapko batata hoon."
         reply_chunks = [strip_rabta_flags(c) for c in reply_chunks if strip_rabta_flags(c).strip()]
         if not reply_chunks:
             reply_chunks = [reply_text]
@@ -1017,12 +297,46 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         "customer_city": city,
         "customer_address": address,
         "customer_sim_phone": sim,
-        "customer_product": product,
+        "customer_product": new_product,
         "escalation_id": escalation_id,
-        "media_url": media_url,
-        "media_urls": media_urls,
+        "media_url": final_media_url,
+        "media_urls": media_urls if media_urls else None,
         "reply_text": reply_text,
         "reply_chunks": reply_chunks,
         "owner_alert": owner_alert,
     }
+
+
+# --------------------------------------------------------------------------
+# Backward-compatibility aliases & stubs
+# --------------------------------------------------------------------------
+customer_sales_chat = customer_react_node
+
+async def collect_customer_info(state: RabtaGraphState) -> RabtaGraphState:
+    """Backward-compatible alias routing directly to customer_react_node."""
+    return await customer_react_node(state)
+
+def route_customer(state: RabtaGraphState) -> str:
+    """Backward-compatible routing function returning customer_react_node."""
+    return "customer_react_node"
+
+async def ask_city(state: RabtaGraphState) -> RabtaGraphState:
+    return await customer_react_node(state)
+
+async def ask_city_again(state: RabtaGraphState) -> RabtaGraphState:
+    return await customer_react_node(state)
+
+async def send_patience_reply(state: RabtaGraphState) -> RabtaGraphState:
+    reply = "Main shop se confirm kar raha hoon, thoda sa wait karein — abhi batata hoon."
+    return {
+        **state,
+        "reply_text": reply,
+        "reply_chunks": [reply],
+        "media_url": None,
+        "media_urls": None,
+        "owner_alert": None,
+    }
+
+async def escalate_to_owner(state: RabtaGraphState) -> RabtaGraphState:
+    return await customer_react_node(state)
 

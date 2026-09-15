@@ -1198,10 +1198,13 @@ async def get_product_photos(
 
 
 async def _tool_check_delivery_policy(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    city = args.get("city", "").title().strip()
+    city = args.get("city", "").title().strip() or "Pakistan"
+    msg = f"Delivery to {city} available via secure courier (24-48 hours). 100% advance payment required via Bank Transfer / EasyPaisa / JazzCash."
     return {
         "status": "success",
         "city": city,
+        "message": msg,
+        "advance_payment_required": True,
         "policy": {
             "all_pakistan_delivery": True,
             "terms": "100% advance payment required via Bank Transfer / EasyPaisa / JazzCash.",
@@ -1209,6 +1212,7 @@ async def _tool_check_delivery_policy(tenant_id: str, args: Dict[str, Any]) -> D
             "procedure": f"{city} mein verified courier ke zariye mahfooz delivery ki jaati hai.",
         },
     }
+
 
 
 async def _tool_escalate_inquiry(tenant_id: str, args: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -2585,7 +2589,14 @@ async def _tool_recommend_alternative(tenant_id: str, args: Dict[str, Any]) -> D
             "status": "not_found",
             "message": f"Filhal {original_product} ka koi alternate available nahi mila.",
             "alternatives": [],
+            "recommendations": [],
+            "items": [],
         }
+
+    # Filter out the original product if specified
+    candidates = [it for it in all_items if original_product.lower() not in (it.name or "").lower()]
+    if not candidates:
+        candidates = all_items
 
     # Score and rank candidates
     def score_item(it: CatalogItem) -> float:
@@ -2608,21 +2619,25 @@ async def _tool_recommend_alternative(tenant_id: str, args: Dict[str, Any]) -> D
                 score -= 10.0
         return score
 
-    scored = sorted(all_items, key=score_item, reverse=True)
+    scored = sorted(candidates, key=score_item, reverse=True)
     top_picks = scored[:3]
 
     alternatives = []
     for it in top_picks:
         has_photo = bool(it.images and len(it.images) > 0)
+        p = float(it.price) if it.price else 0.0
         alternatives.append({
             "name": it.name,
-            "price_pkr": it.price,
+            "product_name": it.name,
+            "price": p,
+            "price_pkr": p,
             "category": it.category,
             "origin": (it.metadata_json or {}).get("origin", ""),
             "caliber": (it.metadata_json or {}).get("caliber", ""),
             "capacity": (it.metadata_json or {}).get("capacity", ""),
             "has_photo": has_photo,
             "photo_url": it.images[0] if has_photo else None,
+            "in_stock": it.in_stock,
         })
 
     return {
@@ -2631,6 +2646,8 @@ async def _tool_recommend_alternative(tenant_id: str, args: Dict[str, Any]) -> D
         "reason": reason,
         "count": len(alternatives),
         "alternatives": alternatives,
+        "recommendations": alternatives,
+        "items": alternatives,
         "message": f"{original_product} ke {len(alternatives)} suitable in-stock alternatives mil gaye hain.",
     }
 

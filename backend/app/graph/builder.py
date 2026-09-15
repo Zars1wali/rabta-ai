@@ -15,12 +15,7 @@ import re
 import logging
 from langgraph.graph import StateGraph, END
 from app.graph.state import RabtaGraphState
-from app.graph.nodes.nlu import run_customer_nlu
-from app.graph.nodes.customer import (
-    route_customer,
-    collect_customer_info,
-    customer_sales_chat,
-)
+from app.graph.nodes.customer import customer_react_node
 from app.graph.nodes.owner import owner_react_node
 from app.core.config import settings
 
@@ -45,8 +40,8 @@ async def route_message(state: RabtaGraphState) -> RabtaGraphState:
 
 
 def _dispatch_route(state: RabtaGraphState) -> str:
-    """Edge after route_message: go to owner ReAct agent or customer NLU."""
-    return "owner_react_node" if state.get("is_boss") else "run_customer_nlu"
+    """Edge after route_message: go to owner ReAct agent or customer ReAct agent."""
+    return "owner_react_node" if state.get("is_boss") else "customer_react_node"
 
 
 # --------------------------------------------------------------------------
@@ -160,15 +155,8 @@ def build_graph(checkpointer=None) -> StateGraph:
     graph.add_conditional_edges("route_message", _dispatch_route)
 
     # ── Node 2A: Customer ReAct Agent ─────────────────────────────────────
-    graph.add_node("customer_sales_chat", customer_sales_chat)
-    graph.add_edge("customer_sales_chat", "output_guardrail")
-
-    # ── Customer Info Collection Funnel (Deterministic Delivery Intake) ──
-    graph.add_node("run_customer_nlu", run_customer_nlu)
-    graph.add_conditional_edges("run_customer_nlu", route_customer)
-
-    graph.add_node("collect_customer_info", collect_customer_info)
-    graph.add_edge("collect_customer_info", "output_guardrail")
+    graph.add_node("customer_react_node", customer_react_node)
+    graph.add_edge("customer_react_node", "output_guardrail")
 
     # ── Node 2B: Owner ReAct Agent ────────────────────────────────────────
     graph.add_node("owner_react_node", owner_react_node)
