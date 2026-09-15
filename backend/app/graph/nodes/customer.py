@@ -18,7 +18,7 @@ from app.brain.prompts_owner import build_owner_inquiry_alert
 from app.services.store_agent import WhatsAppStoreAgent
 from app.services.escalation_service import EscalationService
 from app.services.owner_copilot import OwnerCopilotService
-from app.services.catalog_tools import get_product_photos, clean_product_query
+from app.services.catalog_tools import get_product_photos
 from app.brain.flags import RabtaFlag, strip_rabta_flags, parse_rabta_flag
 
 logger = logging.getLogger(__name__)
@@ -677,75 +677,6 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
             "owner_alert": None,
         }
 
-    # Maintain customer_product across turns if mentioned in current message
-    current_product = state.get("customer_product")
-    msg_product = clean_product_query(raw_message)
-    if msg_product and len(msg_product) >= 3 and not any(w in raw_l for w in ["pic", "pics", "photo", "photos", "image", "images", "tasveer"]):
-        if current_product and clean_product_query(current_product) != msg_product:
-            state["pending_owner_query"] = None
-        current_product = msg_product
-        state["customer_product"] = current_product
-
-    # Direct high-accuracy photo lookup fast-path:
-    # If customer explicitly requests a photo of a firearm, query catalog photos directly
-    is_photo_req = any(w in raw_l for w in [
-        "pic", "pics", "picture", "pictures", "photo", "photos", "image", "images", "img", "imgs",
-        "tasveer", "tasveerein", "tasweer", "tasweere", "fotu", "pucs", "picx"
-    ])
-    if is_photo_req:
-        cand_product = clean_product_query(raw_message) or current_product
-        if not cand_product and state.get("conversation_history"):
-            for msg in reversed(state.get("conversation_history")[-6:]):
-                content = (msg.get("content") or msg.get("content_text") or "").strip()
-                extracted = clean_product_query(content)
-                if extracted and len(extracted) >= 2:
-                    cand_product = extracted
-                    break
-
-        if cand_product and len(cand_product) >= 2:
-            try:
-                photos = await get_product_photos(
-                    tenant_id=tenant_id_str,
-                    product_name=cand_product,
-                    allow_multiple=False,
-                )
-                if photos:
-                    media_url = photos[0]["url"]
-                    prod_name = photos[0].get("product_name") or cand_product.title()
-                    caption_text = photos[0].get("caption")
-                    if not caption_text:
-                        p_val = photos[0].get("price")
-                        p_str = f" — {p_val:,.0f} PKR" if p_val else ""
-                        caption_text = f"{prod_name}{p_str}"
-                    media_urls = []
-                    for idx, p in enumerate(photos):
-                        p_name = p.get("product_name") or prod_name
-                        p_price = p.get("price")
-                        p_cap = p.get("caption")
-                        if not p_cap:
-                            p_str = f" — {p_price:,.0f} PKR" if p_price else ""
-                            p_cap = f"{p_name}{p_str}"
-                        media_urls.append({
-                            "name": p_name,
-                            "url": p["url"],
-                            "caption": p_cap,
-                        })
-                    reply = caption_text
-                    return {
-                        **state,
-                        "customer_state": "BROWSING",
-                        "customer_product": prod_name,
-                        "media_url": media_url,
-                        "media_urls": media_urls,
-                        "reply_text": reply,
-                        "reply_chunks": [reply],
-                        "owner_alert": None,
-                    }
-                else:
-                    logger.info("[customer_sales_chat] No photos found for requested product: %s", cand_product)
-            except Exception as pe:
-                logger.warning("[customer_sales_chat] Photo fast-path error: %s", pe)
-
     # Call the Sales Intelligence Agent
     reply_data = await _store_agent.handle_customer_interaction(
         customer_message=raw_message,
@@ -800,7 +731,7 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     # 1. Handle Native Media or Legacy IMAGE_REQUEST Flag
     if not media_urls and flag and flag.flag_type == "IMAGE_REQUEST":
         raw_target = flag.product or reply_data.get("image_product") or product or raw_message or "firearm"
-        target_product = clean_product_query(raw_target)
+        target_product = (raw_target or "").strip()
 
         # Check if the customer is asking where photos are / complaining about delivery failure
         is_missing_pic_complaint = any(w in (raw_message or "").lower() for w in [
@@ -808,8 +739,6 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
         ])
 
         if not target_product or is_missing_pic_complaint:
-            target_product = clean_product_query(product or "")
-        if not target_product:
             target_product = (product or "").strip()
 
         try:

@@ -903,35 +903,10 @@ async def _tool_get_product_photos(tenant_id: str, args: Dict[str, Any]) -> Dict
 
 
 def clean_product_query(raw_query: str) -> str:
-    """Strip common conversational verbs, fillers, and photo keywords to leave clean firearm name."""
-    if not raw_query:
-        return ""
-    stop_words = {
-        # English photo verbs & fillers
-        "share", "send", "show", "give", "pic", "pics", "picture", "pictures",
-        "photo", "photos", "image", "images", "tasveer", "tasveerein", "tasweer", "tasweere",
-        "please", "plz", "bhai", "bro", "sir", "janab", "boss",
-        "chahiye", "available", "hai", "hain", "in", "catalog", "mujhe", "hamein",
-        "check", "karein", "dekhna", "detail", "details", "rate", "price", "prices",
-        "of", "for", "the", "a", "an", "is", "are", "and", "or", "to", "with", "from",
-        "by", "on", "at", "this", "that", "these", "those", "their", "thier", "all",
-        "model", "models", "gun", "weapon", "arms", "pucs", "picx", "fotu", "tasver",
-        # Urdu / Roman Urdu stop words
-        "bhejo", "bheinjo", "bhej", "dikhao", "dikhayein", "dikhana", "dekho", "dekhein",
-        "ki", "ka", "ke", "ko", "mein", "me", "se", "par", "pe", "bhi", "aur", "ya",
-        "kuch", "yeh", "ye", "woh", "wo", "karo", "kardo", "wali", "wala", "wale",
-        "apne", "paas", "hoga", "hogi", "batao", "batayein", "sunao", "kya", "gi", "jee", "haan",
-        # Question / Meta / Complaint words
-        "kidher", "kidhar", "kahan", "kahn", "where", "nahi", "nhi", "na", "not", "no",
-        "aayi", "aaye", "aaya", "mili", "mila", "mile", "sent", "bheja", "bheji", "missing",
-        "receive", "received", "recieved", "kyun", "kyu", "why", "didnt", "didn't",
-        "kab", "tak", "how", "when", "who", "which", "what"
-    }
-    text = re.sub(r'[^\w\s\.]', ' ', raw_query.lower())
-    words = text.split()
-    filtered = [w for w in words if w not in stop_words]
-    cleaned = " ".join(filtered).strip()
-    return cleaned
+    """Clean whitespace from product query string without brittle regex filtering.
+    Gemini agentically determines the firearm model and parameters.
+    """
+    return (raw_query or "").strip()
 
 
 async def get_product_photos(
@@ -2414,7 +2389,7 @@ async def _tool_get_customer_details(tenant_id: str, args: Dict[str, Any]) -> Di
                     formatted_sim = format_pakistani_phone_display(c_obj.phone)
                     cust_name = c_obj.name or ("Daniyal" if "daniyal" in (m_obj.content_text or "").lower() else "Customer")
                     quest = m_obj.content_text or "Inquiry"
-                    prod = clean_product_query(quest) or "firearm"
+                    prod = quest.strip() or "firearm"
 
                     return {
                         "status": "success",

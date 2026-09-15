@@ -29,16 +29,11 @@ from unittest.mock import Mock, MagicMock
 
 logger = logging.getLogger(__name__)
 
-# Resilient Circuit Breaker state across conversational turns
-_MODEL_COOLDOWNS: Dict[str, float] = {}
-_ACTIVE_HEALTHY_MODEL: Optional[str] = None
-
-
 class ReActAgentHarness:
-    """Executes ReAct conversational turns with Native Gemini Tool Calling."""
+    """Executes ReAct conversational turns with Native Gemini Tool Calling locked to gemini-3.5-flash-lite."""
 
     def __init__(self, max_iterations: int = 3):
-        self.model = settings.GEMINI_MODEL or "gemini-3.5-flash-lite"
+        self.model = "gemini-3.5-flash-lite"
         self.api_key = settings.GEMINI_API_KEY
         self.max_iterations = max_iterations
         self._client: Optional[genai.Client] = None
@@ -143,29 +138,6 @@ class ReActAgentHarness:
                     tools=tools,
                 )
 
-                response = None
-                global _ACTIVE_HEALTHY_MODEL, _MODEL_COOLDOWNS
-                now = time.time()
-
-                # Fast selection: if an active healthy model is known and not in cooldown, prioritize it
-                preferred = []
-                if _ACTIVE_HEALTHY_MODEL and _MODEL_COOLDOWNS.get(_ACTIVE_HEALTHY_MODEL, 0) < now:
-                    preferred.append(_ACTIVE_HEALTHY_MODEL)
-                preferred.extend(["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", self.model])
-
-                # Filter out models currently in cooldown to avoid wasting seconds on known 429/503 exhaustion
-                valid_pool = [m for m in preferred if m and _MODEL_COOLDOWNS.get(m, 0) < now]
-                if not valid_pool:
-                    _MODEL_COOLDOWNS.clear()
-                    valid_pool = [m for m in preferred if m]
-
-                seen_models = set()
-                dedup_pool = []
-                for m in valid_pool:
-                    if m not in seen_models:
-                        seen_models.add(m)
-                        dedup_pool.append(m)
-
                 from unittest.mock import Mock, MagicMock
                 if isinstance(getattr(self.client.models, "generate_content", None), (Mock, MagicMock)):
                     response = self.client.models.generate_content(
@@ -174,29 +146,11 @@ class ReActAgentHarness:
                         config=config,
                     )
                 else:
-                    last_exc = None
-                    for attempt_model in dedup_pool:
-                        try:
-                            response = await self.client.aio.models.generate_content(
-                                model=attempt_model,
-                                contents=contents,
-                                config=config,
-                            )
-                            _ACTIVE_HEALTHY_MODEL = attempt_model
-                            if attempt_model != self.model:
-                                logger.info("[ReActHarness] Succeeded with healthy model %s", attempt_model)
-                            break
-                        except Exception as m_err:
-                            last_exc = m_err
-                            err_str = str(m_err)
-                            if any(k in err_str for k in ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "quota", "demand")):
-                                _MODEL_COOLDOWNS[attempt_model] = time.time() + 180.0
-                                logger.warning("[ReActHarness] Model %s rate-limited/unavailable (%s), cooling down for 180s", attempt_model, err_str[:80])
-                            else:
-                                logger.warning("[ReActHarness] Model %s failed (%s), trying next in pool", attempt_model, m_err)
-                    
-                    if response is None:
-                        raise last_exc or RuntimeError("All models in pool failed")
+                    response = await self.client.aio.models.generate_content(
+                        model=self.model,
+                        contents=contents,
+                        config=config,
+                    )
 
                 if not response.candidates:
                     logger.warning("[ReActHarness] No candidates returned on turn %d", iteration)
