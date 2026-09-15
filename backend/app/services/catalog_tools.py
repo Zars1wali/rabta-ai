@@ -1440,7 +1440,20 @@ async def _tool_update_price(tenant_id: str, args: Dict[str, Any], context: Dict
     except (ValueError, TypeError):
         return {"status": "error", "message": "Invalid tenant ID"}
 
-    tokens = [t for t in product_name.lower().split() if len(t) >= 2]
+    TYPO_MAP = {
+        "glovk": "glock", "glok": "glock", "gloc": "glock", "glocl": "glock",
+        "torus": "taurus", "tauras": "taurus", "taurs": "taurus",
+        "kanik": "canik", "canic": "canik", "canick": "canik",
+        "bereta": "beretta", "beratta": "beretta", "baretta": "beretta",
+        "norinko": "norinco", "norincco": "norinco",
+        "tisa": "tisas", "tisasz": "tisas",
+        "zigana": "zigana", "ziganna": "zigana",
+    }
+    norm_pname = product_name.lower()
+    for typo, correct in TYPO_MAP.items():
+        norm_pname = re.sub(r'\b' + typo + r'\b', correct, norm_pname)
+
+    tokens = [t for t in norm_pname.split() if len(t) >= 2]
     async with AsyncSessionLocal() as session:
         conds = [CatalogItem.name.ilike(f"%{t}%") for t in tokens]
         stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, or_(*conds)).limit(10)
@@ -1495,7 +1508,20 @@ async def _tool_update_stock_status(tenant_id: str, args: Dict[str, Any]) -> Dic
     except (ValueError, TypeError):
         return {"status": "error", "message": "Invalid tenant ID"}
 
-    tokens = [t for t in product_name.lower().split() if len(t) >= 2]
+    TYPO_MAP = {
+        "glovk": "glock", "glok": "glock", "gloc": "glock", "glocl": "glock",
+        "torus": "taurus", "tauras": "taurus", "taurs": "taurus",
+        "kanik": "canik", "canic": "canik", "canick": "canik",
+        "bereta": "beretta", "beratta": "beretta", "baretta": "beretta",
+        "norinko": "norinco", "norincco": "norinco",
+        "tisa": "tisas", "tisasz": "tisas",
+        "zigana": "zigana", "ziganna": "zigana",
+    }
+    norm_pname = product_name.lower()
+    for typo, correct in TYPO_MAP.items():
+        norm_pname = re.sub(r'\b' + typo + r'\b', correct, norm_pname)
+
+    tokens = [t for t in norm_pname.split() if len(t) >= 2]
     async with AsyncSessionLocal() as session:
         conds = [CatalogItem.name.ilike(f"%{t}%") for t in tokens]
         stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, or_(*conds)).limit(5)
