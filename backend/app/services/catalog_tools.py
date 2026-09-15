@@ -1616,9 +1616,9 @@ async def resolve_pending_photo_confirmation(tenant_id: str, action: str) -> Dic
     if not pending:
         return {"status": "not_found", "message": "Koi pending photo confirmation nahi mili."}
 
-    item_id = pending.get("item_id")
+    item_id = pending.get("item_id") or pending.get("product_id")
     prod_name = pending.get("product_name", "Weapon")
-    old_images = pending.get("old_images") or []
+    old_images = pending.get("old_images") or pending.get("existing_images") or []
     new_images = pending.get("new_images") or []
     new_price = pending.get("price")
 

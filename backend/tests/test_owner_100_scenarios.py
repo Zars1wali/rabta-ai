@@ -29,13 +29,13 @@ from app.services.catalog_tools import (
     _tool_confirm_daily_prices,
     _tool_relay_to_customer,
     _tool_get_pending_escalations,
-    search_catalog,
     get_product_photos,
     get_pending_photo_confirmation,
     set_pending_photo_confirmation,
     clear_pending_photo_confirmation,
     resolve_pending_photo_confirmation,
 )
+from app.services.knowledge_base import kb_service
 from app.graph.nodes.owner import owner_react_node
 from app.services.escalation_service import escalation_service
 from app.services.owner_copilot import owner_copilot
@@ -238,9 +238,11 @@ async def test_scenarios_56_to_62_photo_replace_choices(keyword):
 
     # Set pending confirmation
     set_pending_photo_confirmation(TENANT_ID, {
+        "item_id": str(it.id),
         "product_id": str(it.id),
         "product_name": test_gun,
         "new_images": [new_img],
+        "old_images": [old_img],
         "existing_images": [old_img],
     })
 
@@ -285,9 +287,11 @@ async def test_scenarios_63_to_69_photo_keep_both_choices(keyword):
         await session.commit()
 
     set_pending_photo_confirmation(TENANT_ID, {
+        "item_id": str(it.id),
         "product_id": str(it.id),
         "product_name": test_gun,
         "new_images": [new_img],
+        "old_images": [old_img],
         "existing_images": [old_img],
     })
 
@@ -314,9 +318,11 @@ async def test_scenarios_63_to_69_photo_keep_both_choices(keyword):
 async def test_scenario_70_photo_confirmation_cancel():
     """Scenario 70: Owner replies 'cancel' -> pending confirmation is cleanly discarded."""
     set_pending_photo_confirmation(TENANT_ID, {
+        "item_id": str(uuid.uuid4()),
         "product_id": str(uuid.uuid4()),
         "product_name": "Test Gun",
         "new_images": ["http://test/img.jpg"],
+        "old_images": [],
         "existing_images": [],
     })
     owner_state = {
@@ -359,6 +365,10 @@ async def test_scenarios_71_to_85_escalation_relays(owner_msg, desc):
     t_uuid = uuid.UUID(TENANT_ID)
     cust_jid = f"{uuid.uuid4().hex[:12]}@s.whatsapp.net"
     cust_phone = f"+92300{uuid.uuid4().hex[:7]}"
+
+    # Clear any previous pending escalations for tenant to ensure clean test isolation
+    for p_esc in escalation_service.get_pending_for_tenant(t_uuid):
+        p_esc.status = "RESOLVED"
 
     # Setup pending escalation
     esc = escalation_service.create_escalation(
@@ -431,7 +441,7 @@ async def test_scenarios_86_to_92_daily_price_confirmations(text):
 @pytest.mark.asyncio
 async def test_scenario_93_owner_inspects_glock_models():
     """Scenario 93: Owner asks 'Hamare paas kitne Glock hain?'."""
-    res = await search_catalog(TENANT_ID, query="Glock", limit=10)
+    res = await kb_service.search_catalog(TENANT_ID, query="Glock", limit=10)
     assert len(res) > 0
     assert any("Glock" in it["name"] for it in res)
 
@@ -439,7 +449,7 @@ async def test_scenario_93_owner_inspects_glock_models():
 @pytest.mark.asyncio
 async def test_scenario_94_owner_checks_taurus_price():
     """Scenario 94: Owner checks current price for Taurus G3."""
-    res = await search_catalog(TENANT_ID, query="Taurus G3")
+    res = await kb_service.search_catalog(TENANT_ID, query="Taurus G3")
     assert len(res) > 0
     assert res[0]["price"] > 0
 
@@ -455,7 +465,7 @@ async def test_scenario_95_owner_previews_glock_19x_photo():
 @pytest.mark.asyncio
 async def test_scenario_96_owner_checks_tisas_stock():
     """Scenario 96: Owner checks if Tisas 5.56 is in stock."""
-    res = await search_catalog(TENANT_ID, query="Tisas ZPT 5.56 Black")
+    res = await kb_service.search_catalog(TENANT_ID, query="Tisas ZPT 5.56 Black")
     assert len(res) > 0
     assert "in_stock" in res[0]
 
