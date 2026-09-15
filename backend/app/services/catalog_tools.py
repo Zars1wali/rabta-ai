@@ -973,8 +973,14 @@ async def get_product_photos(
 
         def _calculate_photo_score(it: CatalogItem) -> float:
             name_lower = (it.name or "").lower()
-            name_words = set(re.findall(r'[a-z0-9]+', name_lower))
+            name_words = set(re.findall(r'[a-z0-9\.]+', name_lower))
+            for w in list(name_words):
+                name_words.add(w.replace(".", ""))
             score = 0.0
+
+            name_compact = re.sub(r'[^a-z0-9]', '', name_lower)
+            req_compact = re.sub(r'[^a-z0-9]', '', req_clean)
+            cleaned_compact = re.sub(r'[^a-z0-9]', '', cleaned_name) if cleaned_name else ""
 
             # 0. Brand conflict guard:
             # If the user's query explicitly specifies a known brand, candidate MUST match that brand.
@@ -992,37 +998,41 @@ async def get_product_photos(
                 if query_brands & cand_brands:
                     score += 20.0
 
-            # 1. Exact phrase match
+            # 1. Exact phrase or compact sequence match
             if req_clean in name_lower or (cleaned_name and cleaned_name in name_lower):
                 score += 25.0
+            elif (req_compact and req_compact in name_compact) or (cleaned_compact and cleaned_compact in name_compact):
+                score += 30.0
 
-            # 2. Model number check (e.g. 'db10' vs 'db15', '19' vs '17', '57' vs 'pof')
+            # 2. Model number and caliber check (e.g. '5.56', 'ar10', 'db10' vs 'db15', '19' vs '17')
+            CALIBERS = {"5.56", "556", "7.62", "762", "308", "9mm", "9x19", "22lr", "22", "12ga", "380", "45acp", "5.7", "57"}
             query_model_nums = [t for t in tokens if any(c.isdigit() for c in t)]
             if query_model_nums:
                 matched_model = False
                 for qm in query_model_nums:
                     clean_qm = qm.replace(".", "").replace("-", "")
-                    if qm in name_words or clean_qm in name_words or any(clean_qm in w for w in name_words):
+                    if qm in name_lower or clean_qm in name_compact or clean_qm in name_words or any(clean_qm in w for w in name_words):
                         score += 15.0
                         matched_model = True
                     else:
-                        # If candidate has a conflicting model number, heavily penalize
-                        cand_models = [w for w in name_words if any(c.isdigit() for c in w)]
-                        if cand_models and not any(clean_qm in cm for cm in cand_models):
-                            return -100.0  # Conflicting model, discard immediately
+                        # Only heavily penalize explicit non-caliber model series collisions (e.g. DB10 vs DB15)
+                        if clean_qm not in CALIBERS:
+                            cand_models = [w for w in name_words if any(c.isdigit() for c in w) and w not in CALIBERS]
+                            if cand_models and not any(clean_qm in cm for cm in cand_models):
+                                return -100.0  # Conflicting model series, discard immediately
 
-                if not matched_model:
+                if not matched_model and score < 20.0:
                     return 0.0
 
             # 3. Token matches
             matched_count = 0
             for tok in tokens:
                 clean_tok = tok.replace(".", "")
-                if tok in name_lower or clean_tok in name_words:
+                if tok in name_lower or clean_tok in name_words or clean_tok in name_compact:
                     score += 5.0
                     matched_count += 1
 
-            if matched_count == 0:
+            if matched_count == 0 and score < 20.0:
                 return 0.0
 
             # 4. Tie-breaking bonus: prefer candidate with more images (gives customer full photo gallery)
@@ -1095,7 +1105,8 @@ async def get_product_photos(
                         # If the product is a handgun / pistol (e.g. Kimber, Glock, CZ), never return an image that has "db10", "db15", "diamondback" or rifle indicators
                         img_l = img.lower()
                         cat_lower = (getattr(it, "category", "") or "").lower()
-                        is_pistol = "pistol" in cat_lower or any(p in it.name.lower() for p in ["kimber", "glock", "taurus", "cz", "beretta", "canik", "zigana", "tisas", "sig p365", "sig p320"])
+                        is_rifle = any(r in it.name.lower() for r in ["zpt", "5.56", "rifle", ".223", "223", ".308", "308", "db10", "db15", "ar10", "ar15", "m4", "t4"])
+                        is_pistol = not is_rifle and ("pistol" in cat_lower or any(p in it.name.lower() for p in ["kimber", "glock", "taurus", "cz", "beretta", "canik", "zigana", "sig p365", "sig p320"]))
                         if is_pistol and any(r in img_l for r in ["db10", "db15", "diamondback", "rifle", "ar10", "ar15", "shotgun", "bullpup"]):
                             logger.warning("[get_product_photos] Blocked cross-contaminated rifle image '%s' for pistol '%s'", img, it.name)
                             continue

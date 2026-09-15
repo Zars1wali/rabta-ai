@@ -314,9 +314,7 @@ class WhatsAppStoreAgent:
 
             # Backward-compatibility flag mapping if tools were called
             if not flag:
-                if "get_product_photos" in tool_calls and not media_urls:
-                    flag = RabtaFlag(flag_type="IMAGE_REQUEST", product=customer_message.strip())
-                elif any(t in tool_calls for t in escalation_tools):
+                if any(t in tool_calls for t in escalation_tools):
                     flag = RabtaFlag(flag_type="ESCALATE", payload=customer_message)
 
             # 3. CRITICAL SAFEGUARD: Never leak raw flags or internal directives to the customer!

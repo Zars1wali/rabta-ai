@@ -76,6 +76,17 @@ function extractTextMessage(message) {
     return '';
 }
 
+function extractQuotedMessageText(quotedMsg) {
+    if (!quotedMsg) return '';
+    if (quotedMsg.conversation) return quotedMsg.conversation;
+    if (quotedMsg.extendedTextMessage?.text) return quotedMsg.extendedTextMessage.text;
+    if (quotedMsg.imageMessage?.caption) return quotedMsg.imageMessage.caption;
+    if (quotedMsg.videoMessage?.caption) return quotedMsg.videoMessage.caption;
+    if (quotedMsg.ephemeralMessage?.message) return extractQuotedMessageText(quotedMsg.ephemeralMessage.message);
+    if (quotedMsg.viewOnceMessage?.message) return extractQuotedMessageText(quotedMsg.viewOnceMessage.message);
+    return '';
+}
+
 // Per-customer async queue
 const customerQueues = new Map();
 
@@ -284,6 +295,16 @@ async function handleIncomingMessage(input) {
                 console.warn(`[${senderPhone}] Could not download quoted image:`, e.message);
             }
         }
+
+        // Extract any quoted text/caption for conversational context
+        var quotedText = '';
+        const quotedMsgObj = m?.extendedTextMessage?.contextInfo?.quotedMessage;
+        if (quotedMsgObj) {
+            quotedText = extractQuotedMessageText(quotedMsgObj);
+            if (quotedText) {
+                console.log(`💬 Inbound message is quoting: "${quotedText.substring(0, 60)}"`);
+            }
+        }
     }
 
     // Strict Single-Owner Enforcement: Solely match active owner (+923140922056 / 79938417877160)
@@ -335,9 +356,16 @@ async function handleIncomingMessage(input) {
         if (OWNER_LID) recordJidMapping(OWNER_LID, sender);
     }
 
-    const promptText = textMessage
+    let promptText = textMessage
         || (imageBase64 ? (isOwnerMsg ? 'Add new product from photo' : 'Ye photo mein konsi product hai aur iski price kya hai?') : '')
         || (audioBase64 ? '[VOICE NOTE — transcribe and respond]' : '');
+    
+    if (quotedText && promptText) {
+        promptText = `[Quoting previous message: "${quotedText}"]\n${promptText}`;
+    } else if (quotedText && !promptText) {
+        promptText = `[Quoting previous message: "${quotedText}"]`;
+    }
+
     if (!promptText && !imageBase64 && !audioBase64) return;
 
     console.log(`📩 Incoming WhatsApp from [${effectiveSenderPhone}] (SIM: ${realSimPhone || 'unknown'}, Name: ${pushName}): "${promptText.substring(0, 60)}" [Images: ${imagesBase64.length}]`);
@@ -406,7 +434,7 @@ async function handleIncomingMessage(input) {
                     const sent = await sock.sendMessage(sender, {
                         image: imagePayload,
                         caption: item.caption || undefined
-                    });
+                    }, { quoted: msg });
                     if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
                     sentAtLeastOne = true;
                     console.log(`✅ Successfully delivered product image ${i + 1}/${mediaUrls.length} to [${senderPhone}]`);
@@ -417,7 +445,7 @@ async function handleIncomingMessage(input) {
             if (!sentAtLeastOne) {
                 const fallbackNotice = replyText || "Bhai is model ki picture verify ho rahi hai — main confirm karke fresh tasveer bhejta hoon.";
                 console.log(`⚠️ All images failed for [${senderPhone}], sending single fallback notice.`);
-                const sent = await sock.sendMessage(sender, { text: fallbackNotice });
+                const sent = await sock.sendMessage(sender, { text: fallbackNotice }, { quoted: msg });
                 if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
             }
         } else {
@@ -430,7 +458,7 @@ async function handleIncomingMessage(input) {
                     console.log(`🛡️ [DEDUP] Suppressed duplicate outgoing message to [${senderPhone}]`);
                 } else {
                     console.log(`🤖 Replying to [${senderPhone}] (1 message): "${fullReply.substring(0, 80)}..."`);
-                    const sent = await sock.sendMessage(sender, { text: fullReply });
+                    const sent = await sock.sendMessage(sender, { text: fullReply }, { quoted: msg });
                     if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
                 }
             }
