@@ -801,12 +801,23 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
     if not media_urls and flag and flag.flag_type == "IMAGE_REQUEST":
         raw_target = flag.product or reply_data.get("image_product") or product or raw_message or "firearm"
         target_product = clean_product_query(raw_target)
+
+        # Check if the customer is asking where photos are / complaining about delivery failure
+        is_missing_pic_complaint = any(w in (raw_message or "").lower() for w in [
+            "kidher", "kidhar", "kahan", "nahi", "nhi", "aayi", "bheji", "send ki", "kahan hain", "where", "missing"
+        ])
+
+        if not target_product or is_missing_pic_complaint:
+            target_product = clean_product_query(product or "")
+        if not target_product:
+            target_product = (product or "").strip()
+
         try:
             photos = await get_product_photos(
                 tenant_id=tenant_id_str,
-                product_name=target_product,
+                product_name=target_product or "firearm",
                 allow_multiple=False,
-            )
+            ) if target_product else []
             if photos:
                 media_url = photos[0]["url"]
                 prod_name = photos[0].get("product_name") or target_product.title()
@@ -828,8 +839,11 @@ async def customer_sales_chat(state: RabtaGraphState) -> RabtaGraphState:
                 reply_text = f"{prod_name}{p_str}"
                 reply_chunks = [reply_text]
             else:
-                display_name = target_product.title() if target_product else "is firearm"
-                reply_text = f"Bhai {display_name} ki photo abhi catalog mein load nahi hui — aap features ya specs pooch sakte hain."
+                if is_missing_pic_complaint or not target_product:
+                    reply_text = "Bhai maazrat, network issue ki wajah se picture transfer nahi ho saki thi. Aap batayein kis firearm ki picture dekhna chahte hain, main foran deliver karta hoon."
+                else:
+                    display_name = target_product.title()
+                    reply_text = f"Bhai {display_name} ki photo abhi catalog mein load nahi hui — aap features ya specs pooch sakte hain."
                 reply_chunks = [reply_text]
         except Exception as e:
             logger.warning("[Node:customer_sales_chat] Image fetch error: %s", e)

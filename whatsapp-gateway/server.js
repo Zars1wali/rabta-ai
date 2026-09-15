@@ -43,6 +43,27 @@ function cleanPhoneNumber(phone) {
     return digits;
 }
 
+async function fetchImageBuffer(rawUrl) {
+    if (!rawUrl) throw new Error('No URL provided');
+    let fetchUrl = rawUrl;
+    // Internal Docker network rewrite: avoids hairpin NAT failure on host IP
+    if (fetchUrl.includes('/static/catalog_images/')) {
+        const pathPart = fetchUrl.substring(fetchUrl.indexOf('/static/catalog_images/'));
+        const backendBase = (process.env.PYTHON_BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
+        fetchUrl = `${backendBase}${pathPart}`;
+    }
+    const response = await axios.get(fetchUrl, {
+        responseType: 'arraybuffer',
+        timeout: 15000,
+        headers: { 'Accept': 'image/*' }
+    });
+    const buffer = Buffer.from(response.data);
+    if (!buffer || buffer.length < 100) {
+        throw new Error(`Image at ${fetchUrl} is invalid or empty (${buffer ? buffer.length : 0} bytes)`);
+    }
+    return buffer;
+}
+
 function extractTextMessage(message) {
     if (!message) return '';
     if (message.conversation) return message.conversation;
@@ -374,12 +395,21 @@ async function handleIncomingMessage(input) {
                 const item = mediaUrls[i];
                 console.log(`📸 Sending product image ${i + 1}/${mediaUrls.length} to [${senderPhone}]: ${item.url}`);
                 try {
+                    let imagePayload;
+                    try {
+                        imagePayload = await fetchImageBuffer(item.url);
+                    } catch (bufErr) {
+                        console.warn(`⚠️ Could not fetch image buffer for ${item.url} (${bufErr.message}), falling back to direct URL`);
+                        imagePayload = { url: item.url };
+                    }
+
                     const sent = await sock.sendMessage(sender, {
-                        image: { url: item.url },
+                        image: imagePayload,
                         caption: item.caption || undefined
                     });
                     if (sent?.key?.id) sentMsgCache.set(sent.key.id, sent.message);
                     sentAtLeastOne = true;
+                    console.log(`✅ Successfully delivered product image ${i + 1}/${mediaUrls.length} to [${senderPhone}]`);
                 } catch (mediaErr) {
                     console.error(`❌ Failed to send image ${item.url}: ${mediaErr.message}`);
                 }

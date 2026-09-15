@@ -920,13 +920,18 @@ def clean_product_query(raw_query: str) -> str:
         "bhejo", "bheinjo", "bhej", "dikhao", "dikhayein", "dikhana", "dekho", "dekhein",
         "ki", "ka", "ke", "ko", "mein", "me", "se", "par", "pe", "bhi", "aur", "ya",
         "kuch", "yeh", "ye", "woh", "wo", "karo", "kardo", "wali", "wala", "wale",
-        "apne", "paas", "hoga", "hogi", "batao", "batayein", "sunao", "kya", "gi", "jee", "haan"
+        "apne", "paas", "hoga", "hogi", "batao", "batayein", "sunao", "kya", "gi", "jee", "haan",
+        # Question / Meta / Complaint words
+        "kidher", "kidhar", "kahan", "kahn", "where", "nahi", "nhi", "na", "not", "no",
+        "aayi", "aaye", "aaya", "mili", "mila", "mile", "sent", "bheja", "bheji", "missing",
+        "receive", "received", "recieved", "kyun", "kyu", "why", "didnt", "didn't",
+        "kab", "tak", "how", "when", "who", "which", "what"
     }
     text = re.sub(r'[^\w\s\.]', ' ', raw_query.lower())
     words = text.split()
     filtered = [w for w in words if w not in stop_words]
-    cleaned = " ".join(filtered)
-    return cleaned if cleaned else raw_query.strip()
+    cleaned = " ".join(filtered).strip()
+    return cleaned
 
 
 async def get_product_photos(
@@ -1076,27 +1081,34 @@ async def get_product_photos(
             if not url.startswith("http://") and not url.startswith("https://"):
                 url = f"http://65.20.90.130{url if url.startswith('/') else '/' + url}"
             
-            # If it's a local static catalog image, verify it exists on disk
+            # If it's a local static catalog image, verify it exists on disk and is not empty
             if "/static/catalog_images/" in url:
                 fname = url.split("/static/catalog_images/")[-1].split("?")[0]
-                exists = any(os.path.exists(os.path.join(d, fname)) for d in catalog_img_dirs)
+                def _is_valid_disk_file(d_path, f_name):
+                    try:
+                        p = os.path.join(d_path, f_name)
+                        return os.path.isfile(p) and os.path.getsize(p) > 1024
+                    except Exception:
+                        return False
+
+                exists = any(_is_valid_disk_file(d, fname) for d in catalog_img_dirs)
                 if exists or "pytest" in sys.modules or os.getenv("TESTING") == "1":
                     return url
                 
-                # File not found at exact name; search catalog_images for matching alternative
+                # File not found at exact name or is empty; search catalog_images for matching alternative
                 clean_prod = re.sub(r'[^a-z0-9]+', '_', prod_name.lower()).strip('_')
                 for d in catalog_img_dirs:
                     if os.path.exists(d):
                         try:
                             for f in os.listdir(d):
-                                if f.lower().endswith(('.jpg', '.jpeg', '.png')):
+                                if f.lower().endswith(('.jpg', '.jpeg', '.png')) and _is_valid_disk_file(d, f):
                                     tokens = [t for t in clean_prod.split('_') if len(t) >= 3][:3]
                                     if tokens and all(t in f.lower() for t in tokens):
-                                        logger.info("[get_product_photos] Recovered 404 '%s' with '%s'", fname, f)
+                                        logger.info("[get_product_photos] Recovered 404/empty '%s' with '%s'", fname, f)
                                         return f"http://65.20.90.130/static/catalog_images/{f}"
                         except Exception:
                             pass
-                logger.warning("[get_product_photos] Image file not found on disk: %s", fname)
+                logger.warning("[get_product_photos] Image file not found or empty on disk: %s", fname)
                 return None
             return url
 
