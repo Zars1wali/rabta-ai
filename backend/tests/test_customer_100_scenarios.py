@@ -428,3 +428,52 @@ async def test_scenario_100_customer_opt_out_stop_request():
     out = await customer_react_node(state)
     assert out.get("ai_active") is False
     assert "allah hafiz" in out["reply_text"].lower() or "pareshan" in out["reply_text"].lower()
+
+
+# ==============================================================================
+# GROUP 12: Multi-Item Gallery & Model Suffix Disambiguation Verifications
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_multi_product_gallery_distinct_items():
+    res = await _tool_get_product_photos(TENANT_ID, {
+        "product_names": ["Glock 19 Gen 5", "Taurus G3", "Canik TP9 Sub Elite", "Beretta 92FS"]
+    })
+    assert res["status"] == "success"
+    photos = res.get("photos", [])
+    assert len(photos) >= 3, f"Expected at least 3 photos across models, got {len(photos)}"
+    # Verify each photo belongs to a distinct product (never 4 photos of Glock!)
+    names = [p["product_name"].lower() for p in photos]
+    distinct_brands = set()
+    for n in names:
+        for b in ["glock", "taurus", "canik", "beretta"]:
+            if b in n:
+                distinct_brands.add(b)
+    assert len(distinct_brands) >= 3, f"Expected at least 3 distinct brands, got {distinct_brands}"
+
+@pytest.mark.asyncio
+async def test_glock_19_gen_5_never_returns_19x():
+    res = await _tool_get_product_photos(TENANT_ID, {"product_name": "Glock 19 Gen 5"})
+    assert res["status"] == "success"
+    photos = res.get("photos", [])
+    assert len(photos) >= 1
+    for p in photos:
+        assert "19x" not in p["product_name"].lower(), (
+            f"Model collision: Requested Glock 19 Gen 5 but got {p['product_name']}"
+        )
+
+@pytest.mark.asyncio
+async def test_glock_19x_never_returns_gen_5():
+    res = await _tool_get_product_photos(TENANT_ID, {"product_name": "Glock 19X"})
+    assert res["status"] == "success"
+    photos = res.get("photos", [])
+    assert len(photos) >= 1
+    has_19x = False
+    for p in photos:
+        assert "gen 5" not in p["product_name"].lower(), (
+            f"Model collision: Requested Glock 19X but got {p['product_name']}"
+        )
+        if "19x" in p["product_name"].lower():
+            has_19x = True
+    assert has_19x, "Expected Glock 19X in photos"
+

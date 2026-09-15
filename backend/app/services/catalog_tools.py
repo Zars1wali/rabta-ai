@@ -57,20 +57,24 @@ CUSTOMER_TOOLS_DECLARATIONS = [
     },
     {
         "name": "get_product_photos",
-        "description": "Retrieve verified product photo URLs to send to the customer on WhatsApp. Call this whenever the customer asks to see pictures, photos, or images of a firearm or product.",
+        "description": "Retrieve verified product photo URLs to send to the customer on WhatsApp. Call this whenever the customer asks to see pictures, photos, or images of one or more firearms.",
         "parameters": {
             "type": "object",
             "properties": {
                 "product_name": {
                     "type": "string",
-                    "description": "Exact product name or model requested by the customer (e.g. 'Taurus G3', 'Glock 19', 'Beretta 92FS')",
+                    "description": "Exact product name or comma-separated list of models (e.g. 'Taurus G3', 'Glock 19 Gen 5, Canik TP9, CZ P-10C')",
+                },
+                "product_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional list of distinct firearm models if customer requested photos of multiple models or said 'saro ki pics'",
                 },
                 "allow_multiple": {
                     "type": "boolean",
-                    "description": "Set to true if customer asked for multiple angles or pictures of multiple models",
+                    "description": "Set to true if customer asked for multiple angles of a single model",
                 },
             },
-            "required": ["product_name"],
         },
     },
     {
@@ -344,8 +348,12 @@ OWNER_TOOLS_DECLARATIONS = [
                     "type": "string",
                     "description": "Product name or brand (e.g. 'Taurus G3', 'Glock 19')",
                 },
+                "product_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional list of distinct models to inspect",
+                },
             },
-            "required": ["product_name"],
         },
     },
     {
@@ -899,19 +907,76 @@ async def _tool_search_catalog(tenant_id: str, args: Dict[str, Any]) -> Dict[str
 
 
 async def _tool_get_product_photos(tenant_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    product_name = args.get("product_name", "").strip()
+    raw_name = args.get("product_name", "").strip()
+    raw_names = args.get("product_names") or []
     allow_multiple = args.get("allow_multiple", False)
-    photos = await get_product_photos(tenant_id=tenant_id, product_name=product_name, allow_multiple=allow_multiple)
+
+    target_prods: List[str] = []
+    if isinstance(raw_names, list) and raw_names:
+        target_prods = [p.strip() for p in raw_names if isinstance(p, str) and p.strip()]
+    elif "," in raw_name or "/" in raw_name or " aur " in raw_name.lower() or " and " in raw_name.lower():
+        split_pattern = r',|\/|\baur\b|\band\b'
+        target_prods = [p.strip() for p in re.split(split_pattern, raw_name, flags=re.IGNORECASE) if p.strip()]
+    elif raw_name:
+        target_prods = [raw_name]
+
+    if not target_prods:
+        return {
+            "status": "not_found",
+            "product_name": raw_name,
+            "photos": [],
+            "message": "Kisi product ka naam specify nahi kiya gaya.",
+        }
+
+    # Case 1: Multi-product gallery request (e.g. "saro ki pics" for 4 options)
+    if len(target_prods) > 1:
+        gathered_photos = []
+        found_names = []
+        missing_names = []
+        for prod in target_prods:
+            item_photos = await get_product_photos(tenant_id=tenant_id, product_name=prod, allow_multiple=False)
+            if item_photos:
+                # Take 1 confirmed photo for this distinct product
+                gathered_photos.append(item_photos[0])
+                found_names.append(item_photos[0].get("product_name", prod))
+            else:
+                missing_names.append(prod)
+            if len(gathered_photos) >= 4:
+                break
+
+        if not gathered_photos:
+            return {
+                "status": "not_found",
+                "product_name": ", ".join(target_prods),
+                "photos": [],
+                "message": f"{', '.join(target_prods)} ki photos catalog mein available nahi hain.",
+            }
+
+        msg = f"{len(gathered_photos)} products ki photos mil gayin."
+        if missing_names:
+            msg += f" ({', '.join(missing_names)} ki photo filhal catalog mein load nahi hui)."
+
+        return {
+            "status": "success",
+            "product_name": ", ".join(found_names),
+            "count": len(gathered_photos),
+            "photos": gathered_photos,
+            "message": msg,
+            "missing_products": missing_names,
+        }
+
+    # Case 2: Single product request
+    photos = await get_product_photos(tenant_id=tenant_id, product_name=target_prods[0], allow_multiple=allow_multiple)
     if not photos:
         return {
             "status": "not_found",
-            "product_name": product_name,
+            "product_name": target_prods[0],
             "photos": [],
-            "message": f"{product_name} ki photo catalog mein available nahi hai.",
+            "message": f"{target_prods[0]} ki photo catalog mein available nahi hai.",
         }
     return {
         "status": "success",
-        "product_name": product_name,
+        "product_name": target_prods[0],
         "count": len(photos),
         "photos": photos,
     }
@@ -973,8 +1038,6 @@ async def get_product_photos(
             detected_brand = b
             break
 
-    is_brand_gallery_query = any(w in req_clean for w in ["all", "available", "models", "sab", "options", "range", "pics", "photos"])
-
     # Split into meaningful tokens: filter out standalone single digits (e.g. '5', '4') from loose search
     short_whitelist = {"ak", "ar", "fn", "cz", "hk", "kp", "fx", "m4", "g3", "db", "t4", "px", "kr", "mc", "tp"}
     raw_tokens = [t.strip('.') for t in req_clean.split() if t.strip('.')]
@@ -985,6 +1048,16 @@ async def get_product_photos(
         tokens = [detected_brand]
     if not tokens:
         return []
+
+    # Brand gallery is ONLY when user asks for a range/brand without a specific model number (e.g. "all glock", "kral shotguns")
+    # If the user asked for a specific model number like "19", "17", "g3", "19x", it is NEVER a brand gallery!
+    has_specific_model = any(
+        (any(c.isdigit() for c in t) and len(t) >= 2 and t not in ("9mm", "12ga", "5.56", ".308", "7.62", "762"))
+        for t in tokens
+    )
+    is_brand_gallery_query = not has_specific_model and (
+        any(w in req_clean for w in ["all", "available", "models", "sab", "options", "range", "rifles", "shotguns", "pistols", "saari", "saare", "pics", "photos"])
+    )
 
     async with AsyncSessionLocal() as session:
         stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid)
@@ -1053,7 +1126,7 @@ async def get_product_photos(
             elif (req_compact and req_compact in name_compact) or (cleaned_compact and cleaned_compact in name_compact):
                 score += 30.0
 
-            # 2. Model number and caliber check (e.g. '5.56', 'ar10', 'db10' vs 'db15', '19' vs '17')
+            # 2. Model number and caliber check (e.g. '5.56', 'ar10', 'db10' vs 'db15', '19' vs '17', '19' vs '19x')
             CALIBERS = {"5.56", "556", "7.62", "762", "308", "9mm", "9x19", "22lr", "22", "12ga", "380", "45acp", "5.7", "57"}
             query_model_nums = [t for t in tokens if any(c.isdigit() for c in t) and len(t) >= 2]
             if query_model_nums:
@@ -1063,15 +1136,34 @@ async def get_product_photos(
                     if qm in name_lower or clean_qm in name_compact or clean_qm in name_words or any(clean_qm in w for w in name_words):
                         score += 15.0
                         matched_model = True
-                    else:
+
+                    # Model suffix strict guard: "19" vs "19x", "17" vs "17l"
+                    # If query token lacks 'x', but candidate model word has 'x' (e.g. candidate is '19x', query was '19'):
+                    # Discard candidate immediately!
+                    if clean_qm not in CALIBERS:
+                        has_x_query = any(t.endswith("x") or t == "x" for t in tokens)
+                        has_x_cand = any(w.endswith("x") or w == "x" or "19x" in w for w in name_words)
+                        if has_x_query != has_x_cand:
+                            return -100.0
+
+                    if not matched_model:
                         # Only heavily penalize explicit non-caliber model series collisions (e.g. DB10 vs DB15, Glock 19 vs 17)
                         if clean_qm not in CALIBERS:
                             cand_models = [w for w in name_words if any(c.isdigit() for c in w) and w not in CALIBERS]
-                            if cand_models and not any(clean_qm in cm for cm in cand_models):
+                            if cand_models and not any(clean_qm == cm or clean_qm in cm for cm in cand_models):
                                 return -100.0  # Conflicting model series, discard immediately
 
                 if not matched_model and score < 20.0:
                     return 0.0
+
+            # 2b. Generation matching: "Gen 5", "Gen 6", "Gen 4"
+            if "gen" in tokens or "generation" in tokens:
+                gen_digits = [t for t in tokens if t.isdigit() and len(t) == 1]
+                for gd in gen_digits:
+                    if f"gen {gd}" in name_lower or f"gen{gd}" in name_compact:
+                        score += 30.0
+                    elif any(f"gen {other}" in name_lower or f"gen{other}" in name_compact for other in ["3", "4", "5", "6"] if other != gd):
+                        score -= 50.0  # Conflicting generation
 
             # 3. Token matches
             matched_count = 0
