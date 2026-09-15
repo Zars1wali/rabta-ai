@@ -1,50 +1,35 @@
 """
-Graph builder — assembles the complete Rabta AI state graph.
+Graph builder — assembles the streamlined 3-Node Rabta AI state graph.
 
 Architecture:
   Every message enters at the `route_message` node which checks is_boss.
-  From there, one of two sub-graphs takes over:
-    - Customer path:  run_customer_nlu → [route_customer edge] → customer nodes
-    - Owner path:     run_owner_nlu   → [route_owner edge]    → owner nodes
+  - Customer path: run_customer_nlu → [route_customer] → customer_sales_chat / collect_customer_info
+  - Owner path:    owner_react_node (autonomous ReAct agent)
+  All paths terminate at the `output_guardrail` quality/safety node before END.
 
 All state is checkpointed to PostgreSQL after every node run.
 Thread ID: "{tenant_id}:{sender_phone}" — one checkpoint per user per tenant.
 """
 from __future__ import annotations
+import re
 import logging
 from langgraph.graph import StateGraph, END
 from app.graph.state import RabtaGraphState
-from app.graph.nodes.nlu import run_customer_nlu, run_owner_nlu
+from app.graph.nodes.nlu import run_customer_nlu
 from app.graph.nodes.customer import (
     route_customer,
-    ask_city,
-    ask_city_again,
-    send_patience_reply,
-    escalate_to_owner,
     collect_customer_info,
     customer_sales_chat,
 )
-from app.graph.nodes.owner import (
-    owner_react_node,
-    route_owner,
-    handle_owner_command,
-    handle_owner_add_product,
-    extract_and_match_price,
-    handle_disambiguation,
-    handle_confirmation,
-    relay_owner_answer,
-    handle_owner_greeting,
-    handle_owner_info_request,
-    handle_owner_inquiry_clarification,
-    owner_fallback,
-)
+from app.graph.nodes.owner import owner_react_node
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------
-# Entry node: route_message
-# Determines is_boss and dispatches to the right branch
+# Node 1: Entry Gatekeeper (route_message)
+# Determines is_boss and dispatches to the right branch (0ms, pure routing)
 # --------------------------------------------------------------------------
 async def route_message(state: RabtaGraphState) -> RabtaGraphState:
     """
@@ -65,11 +50,103 @@ def _dispatch_route(state: RabtaGraphState) -> str:
 
 
 # --------------------------------------------------------------------------
-# Graph construction
+# Node 3: Unified Output Guardrail (Quality & Safety Valve)
+# --------------------------------------------------------------------------
+async def output_guardrail(state: RabtaGraphState) -> RabtaGraphState:
+    """
+    Unified Output Quality & Safety Valve:
+    1. Mask internal server IP (65.20.90.130) with clean public domain.
+    2. Extract any raw image URLs leaking in text and promote them to media_urls.
+    3. Ensure media captions follow the strict format: [Product Name] — [Price] PKR.
+    4. Enforce anti-flooding: cap media_urls to maximum 4 photos.
+    """
+    reply_text = state.get("reply_text") or ""
+    media_urls = list(state.get("media_urls") or [])
+    media_url = state.get("media_url")
+
+    # 1. URL Rescue from Text
+    img_url_pattern = re.compile(
+        r'https?://[^\s]+/static/catalog_images/[^\s\)\"\'\<\>]+',
+        re.IGNORECASE
+    )
+    extracted_urls = img_url_pattern.findall(reply_text)
+    if extracted_urls:
+        existing_urls = {m.get("url") for m in media_urls if isinstance(m, dict)}
+        if media_url:
+            existing_urls.add(media_url)
+
+        product_context = state.get("customer_product") or "Firearm"
+        for u in extracted_urls:
+            u_clean = u.rstrip(".,;!?)>\"'")
+            if u_clean not in existing_urls:
+                media_urls.append({
+                    "url": u_clean,
+                    "product_name": product_context,
+                    "caption": product_context,
+                })
+                existing_urls.add(u_clean)
+
+        # Strip extracted URLs and empty markdown brackets from text
+        reply_text = img_url_pattern.sub("", reply_text)
+        reply_text = re.sub(r'\[\s*\]\(\s*\)', '', reply_text)
+        reply_text = re.sub(r'!\s*\[\s*\]', '', reply_text)
+        reply_text = re.sub(r'\n{3,}', '\n\n', reply_text).strip()
+
+    # 2. IP Masking
+    domain = getattr(settings, "DOMAIN", None) or "https://65.20.90.130.nip.io"
+    if domain.startswith("http://"):
+        domain = "https://" + domain[7:]
+    elif not domain.startswith("https://"):
+        domain = "https://" + domain
+
+    if "65.20.90.130" in reply_text:
+        reply_text = reply_text.replace("http://65.20.90.130", domain).replace("https://65.20.90.130", domain).replace("65.20.90.130", domain.replace("https://", ""))
+
+    # 3. Media Sanitization & Anti-Flooding
+    clean_media = []
+    seen_media_urls = set()
+    for m in media_urls:
+        if not isinstance(m, dict):
+            continue
+        u = m.get("url") or ""
+        if not u or u in seen_media_urls:
+            continue
+        seen_media_urls.add(u)
+
+        if "http://65.20.90.130" in u:
+            u = u.replace("http://65.20.90.130", domain)
+        elif "https://65.20.90.130" in u:
+            u = u.replace("https://65.20.90.130", domain)
+        m["url"] = u
+
+        cap = m.get("caption") or m.get("product_name") or ""
+        if cap.startswith("http://") or cap.startswith("https://"):
+            cap = m.get("product_name") or "Firearm"
+        m["caption"] = cap
+        clean_media.append(m)
+
+    capped_media = clean_media[:4]
+    final_media_url = capped_media[0]["url"] if capped_media else None
+
+    chunks = state.get("reply_chunks") or []
+    if not chunks or len(chunks) == 1:
+        chunks = [reply_text] if reply_text else []
+
+    return {
+        **state,
+        "reply_text": reply_text,
+        "reply_chunks": chunks,
+        "media_url": final_media_url,
+        "media_urls": capped_media if capped_media else None,
+    }
+
+
+# --------------------------------------------------------------------------
+# Graph construction: Streamlined 3-Node Architecture
 # --------------------------------------------------------------------------
 def build_graph(checkpointer=None) -> StateGraph:
     """
-    Build and compile the Rabta AI conversation state graph.
+    Build and compile the streamlined Rabta AI conversation state graph.
 
     Args:
         checkpointer: AsyncPostgresSaver instance. If None, graph runs
@@ -77,70 +154,29 @@ def build_graph(checkpointer=None) -> StateGraph:
     """
     graph = StateGraph(RabtaGraphState)
 
-    # ── Entry ─────────────────────────────────────────────────────────────
+    # ── Node 1: Entry Gatekeeper ──────────────────────────────────────────
     graph.add_node("route_message", route_message)
     graph.set_entry_point("route_message")
     graph.add_conditional_edges("route_message", _dispatch_route)
 
-    # ── Customer branch ───────────────────────────────────────────────────
+    # ── Node 2A: Customer ReAct Agent ─────────────────────────────────────
+    graph.add_node("customer_sales_chat", customer_sales_chat)
+    graph.add_edge("customer_sales_chat", "output_guardrail")
+
+    # ── Customer Info Collection Funnel (Deterministic Delivery Intake) ──
     graph.add_node("run_customer_nlu", run_customer_nlu)
     graph.add_conditional_edges("run_customer_nlu", route_customer)
 
-    graph.add_node("customer_sales_chat", customer_sales_chat)
-    graph.add_edge("customer_sales_chat", END)
-
     graph.add_node("collect_customer_info", collect_customer_info)
-    graph.add_edge("collect_customer_info", END)
+    graph.add_edge("collect_customer_info", "output_guardrail")
 
-    graph.add_node("ask_city", ask_city)
-    graph.add_edge("ask_city", END)
-
-    graph.add_node("ask_city_again", ask_city_again)
-    graph.add_edge("ask_city_again", END)
-
-    graph.add_node("send_patience_reply", send_patience_reply)
-    graph.add_edge("send_patience_reply", END)
-
-    graph.add_node("escalate_to_owner", escalate_to_owner)
-    graph.add_edge("escalate_to_owner", END)
-
-    # ── Owner ReAct Agent ─────────────────────────────────────────────────
+    # ── Node 2B: Owner ReAct Agent ────────────────────────────────────────
     graph.add_node("owner_react_node", owner_react_node)
-    graph.add_edge("owner_react_node", END)
+    graph.add_edge("owner_react_node", "output_guardrail")
 
-    # ── Legacy Owner nodes for checkpoint backwards-compatibility ────────
-    graph.add_node("run_owner_nlu", run_owner_nlu)
-    graph.add_conditional_edges("run_owner_nlu", route_owner)
-
-    graph.add_node("handle_owner_command", handle_owner_command)
-    graph.add_edge("handle_owner_command", END)
-
-    graph.add_node("handle_owner_add_product", handle_owner_add_product)
-    graph.add_edge("handle_owner_add_product", END)
-
-    graph.add_node("extract_and_match_price", extract_and_match_price)
-    graph.add_edge("extract_and_match_price", END)
-
-    graph.add_node("handle_disambiguation", handle_disambiguation)
-    graph.add_edge("handle_disambiguation", END)
-
-    graph.add_node("handle_confirmation", handle_confirmation)
-    graph.add_edge("handle_confirmation", END)
-
-    graph.add_node("relay_owner_answer", relay_owner_answer)
-    graph.add_edge("relay_owner_answer", END)
-
-    graph.add_node("handle_owner_greeting", handle_owner_greeting)
-    graph.add_edge("handle_owner_greeting", END)
-
-    graph.add_node("handle_owner_info_request", handle_owner_info_request)
-    graph.add_edge("handle_owner_info_request", END)
-
-    graph.add_node("handle_owner_inquiry_clarification", handle_owner_inquiry_clarification)
-    graph.add_edge("handle_owner_inquiry_clarification", END)
-
-    graph.add_node("owner_fallback", owner_fallback)
-    graph.add_edge("owner_fallback", END)
+    # ── Node 3: Unified Output Guardrail ──────────────────────────────────
+    graph.add_node("output_guardrail", output_guardrail)
+    graph.add_edge("output_guardrail", END)
 
     return graph.compile(checkpointer=checkpointer)
 
@@ -178,4 +214,4 @@ async def init_graph() -> None:
     from app.graph.checkpointer import get_checkpointer
     checkpointer = await get_checkpointer()
     _rabta_graph = build_graph(checkpointer=checkpointer)
-    logger.info("[Graph] Rabta AI conversation graph initialised with PostgreSQL checkpointer.")
+    logger.info("[Graph] Streamlined 3-Node Rabta AI conversation graph initialised.")
