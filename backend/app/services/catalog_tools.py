@@ -2016,6 +2016,7 @@ async def _tool_add_catalog_item(tenant_id: str, args: Dict[str, Any], context: 
             "status": "success",
             "item_id": str(item.id),
             "name": name,
+            "product_name": name,
             "price": price,
             "has_photo": len(images) > 0,
             "images": images,

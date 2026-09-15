@@ -68,7 +68,7 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
         # Option 1: Replace / Delete Old
         if raw_l in ["1", "one", "first", "option 1", "pehla", "pehli", "replace", "delete"]:
             choice_action = "replace"
-        elif any(kw in raw_l for kw in ["replace", "purani delete", "old delete", "hata do", "hata dein", "delete kardo", "delete kar do", "badal do"]):
+        elif any(kw in raw_l for kw in ["replace", "purani delete", "old delete", "hata do", "hata dein", "delete kardo", "delete kar do", "badal do", "pehla", "pehli", "option 1", "first option", "1st"]):
             choice_action = "replace"
         elif re.search(r'\b1\b', raw_l) and not re.search(r'\b2\b', raw_l):
             choice_action = "replace"
@@ -76,7 +76,7 @@ async def owner_react_node(state: RabtaGraphState) -> RabtaGraphState:
         # Option 2: Keep Both / Dono
         elif raw_l in ["2", "two", "second", "option 2", "doosra", "doosri", "dono", "keep", "both", "all", "saari"]:
             choice_action = "keep_both"
-        elif any(kw in raw_l for kw in ["dono", "keep", "both", "saari", "sari", "purani bhi", "old bhi", "add kardo", "add kar do", "rakhein", "rakh lo", "rakhlo"]):
+        elif any(kw in raw_l for kw in ["dono", "keep", "both", "saari", "sari", "purani bhi", "old bhi", "add kardo", "add kar do", "rakhein", "rakh lo", "rakhlo", "doosra", "doosri", "option 2", "second option", "2nd"]):
             choice_action = "keep_both"
         elif re.search(r'\b2\b', raw_l) and not re.search(r'\b1\b', raw_l):
             choice_action = "keep_both"
