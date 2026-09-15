@@ -79,8 +79,22 @@ class KnowledgeBaseService:
             logger.error("[KnowledgeBase] Invalid tenant_id: %s", tenant_id)
             return []
 
-        tokens = [tok.lower().strip() for tok in query.split() if len(tok.strip()) >= 2]
-        query_lower = query.lower().strip()
+        import re
+        TYPO_MAP = {
+            "glovk": "glock", "glok": "glock", "gloc": "glock", "glocl": "glock",
+            "torus": "taurus", "tauras": "taurus", "taurs": "taurus",
+            "kanik": "canik", "canic": "canik", "canick": "canik",
+            "bereta": "beretta", "beratta": "beretta", "baretta": "beretta",
+            "norinko": "norinco", "norincco": "norinco",
+            "tisa": "tisas", "tisasz": "tisas",
+            "zigana": "zigana", "ziganna": "zigana",
+        }
+        clean_query = query
+        for typo, correct in TYPO_MAP.items():
+            clean_query = re.sub(r'\b' + typo + r'\b', correct, clean_query, flags=re.IGNORECASE)
+
+        tokens = [tok.lower().strip() for tok in clean_query.split() if len(tok.strip()) >= 2]
+        query_lower = clean_query.lower().strip()
 
         async with AsyncSessionLocal() as session:
             conditions = [CatalogItem.tenant_id == t_uuid, CatalogItem.in_stock == True]

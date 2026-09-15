@@ -794,6 +794,20 @@ async def _tool_search_catalog(tenant_id: str, args: Dict[str, Any]) -> Dict[str
     category = args.get("category")
     caliber = args.get("caliber")
     limit = int(args.get("limit", 15))
+
+    # Mobile typo normalization for known brands
+    TYPO_MAP = {
+        "glovk": "glock", "glok": "glock", "gloc": "glock", "glocl": "glock",
+        "torus": "taurus", "tauras": "taurus", "taurs": "taurus",
+        "kanik": "canik", "canic": "canik", "canick": "canik",
+        "bereta": "beretta", "beratta": "beretta", "baretta": "beretta",
+        "norinko": "norinco", "norincco": "norinco",
+        "tisa": "tisas", "tisasz": "tisas",
+        "zigana": "zigana", "ziganna": "zigana",
+    }
+    for typo, correct in TYPO_MAP.items():
+        query = re.sub(r'\b' + typo + r'\b', correct, query, flags=re.IGNORECASE)
+
     items = await kb_service.search_catalog(
         tenant_id=tenant_id,
         query=query,
@@ -925,17 +939,22 @@ async def get_product_photos(
 
     cleaned_name = clean_product_query(product_name)
     req_clean = (cleaned_name or product_name).lower().strip()
+
+    # Mobile keyboard typo normalization for known brands
+    TYPO_MAP = {
+        "glovk": "glock", "glok": "glock", "gloc": "glock", "glocl": "glock",
+        "torus": "taurus", "tauras": "taurus", "taurs": "taurus",
+        "kanik": "canik", "canic": "canik", "canick": "canik",
+        "bereta": "beretta", "beratta": "beretta", "baretta": "beretta",
+        "norinko": "norinco", "norincco": "norinco",
+        "tisa": "tisas", "tisasz": "tisas",
+        "zigana": "zigana", "ziganna": "zigana",
+    }
+    for typo, correct in TYPO_MAP.items():
+        req_clean = re.sub(r'\b' + typo + r'\b', correct, req_clean)
+
     # Normalize patterns: "db 10" -> "db10", "db-10" -> "db10", "t 4" -> "t4", "m 4" -> "m4", "ar 10" -> "ar10", "g 3" -> "g3"
     req_clean = re.sub(r'\b(db|ar|t|m|g)\s*[-_]?\s*(\d+)\b', r'\1\2', req_clean)
-
-    # Split into meaningful tokens: only len>=3 or tokens containing digits or recognized short codes
-    short_whitelist = {"ak", "ar", "fn", "cz", "hk", "kp", "fx", "m4", "g3", "db", "t4", "px", "kr", "mc", "tp"}
-    raw_tokens = [t.strip('.') for t in req_clean.split() if t.strip('.')]
-    tokens = [t for t in raw_tokens if len(t) >= 3 or any(c.isdigit() for c in t) or t in short_whitelist]
-    if not tokens:
-        tokens = [t.strip('.') for t in product_name.lower().split() if len(t) >= 3 or any(c.isdigit() for c in t) or t in short_whitelist]
-    if not tokens:
-        return []
 
     # Known brands for cross-contamination and conflict checking
     KNOWN_BRANDS = {
@@ -946,25 +965,54 @@ async def get_product_photos(
         "bear creek", "palmetto"
     }
 
-    async with AsyncSessionLocal() as session:
-        token_conds = []
-        for tok in tokens:
-            token_conds.append(CatalogItem.name.ilike(f"%{tok}%"))
-            # Expand DB10 / DB15 / Ruger-57 variations
-            if tok.startswith("db") and tok[2:].isdigit():
-                num = tok[2:]
-                token_conds.append(CatalogItem.name.ilike(f"%db {num}%"))
-                token_conds.append(CatalogItem.name.ilike(f"%db-{num}%"))
-            elif tok.startswith("ar") and tok[2:].isdigit():
-                num = tok[2:]
-                token_conds.append(CatalogItem.name.ilike(f"%ar {num}%"))
-                token_conds.append(CatalogItem.name.ilike(f"%ar-{num}%"))
-            elif tok in ("57", "5.7"):
-                token_conds.append(CatalogItem.name.ilike("%5.7%"))
-                token_conds.append(CatalogItem.name.ilike("%57%"))
-                token_conds.append(CatalogItem.name.ilike("%5-7%"))
+    # Detect if a known brand is present in the request
+    detected_brand = None
+    for b in KNOWN_BRANDS:
+        if re.search(r'\b' + re.escape(b) + r'\b', req_clean) or b in req_clean:
+            detected_brand = b
+            break
 
-        stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid, or_(*token_conds)).order_by(CatalogItem.created_at.desc()).limit(20)
+    is_brand_gallery_query = any(w in req_clean for w in ["all", "available", "models", "sab", "options", "range", "pics", "photos"])
+
+    # Split into meaningful tokens: filter out standalone single digits (e.g. '5', '4') from loose search
+    short_whitelist = {"ak", "ar", "fn", "cz", "hk", "kp", "fx", "m4", "g3", "db", "t4", "px", "kr", "mc", "tp"}
+    raw_tokens = [t.strip('.') for t in req_clean.split() if t.strip('.')]
+    tokens = [t for t in raw_tokens if len(t) >= 3 or (len(t) >= 2 and any(c.isdigit() for c in t)) or t in short_whitelist]
+    if not tokens:
+        tokens = [t.strip('.') for t in product_name.lower().split() if len(t) >= 3 or (len(t) >= 2 and any(c.isdigit() for c in t)) or t in short_whitelist]
+    if not tokens and detected_brand:
+        tokens = [detected_brand]
+    if not tokens:
+        return []
+
+    async with AsyncSessionLocal() as session:
+        stmt = select(CatalogItem).where(CatalogItem.tenant_id == t_uuid)
+        if detected_brand:
+            # BRAND-ANCHORING: When user asks for a known brand, ONLY retrieve products matching that brand!
+            # Prevents unrelated items with a '5' (like Tisas 5.56 or ZPAP85) from pushing Glocks out of the candidate pool!
+            stmt = stmt.where(CatalogItem.name.ilike(f"%{detected_brand}%"))
+        else:
+            token_conds = []
+            for tok in tokens:
+                token_conds.append(CatalogItem.name.ilike(f"%{tok}%"))
+                # Expand DB10 / DB15 / Ruger-57 variations
+                if tok.startswith("db") and tok[2:].isdigit():
+                    num = tok[2:]
+                    token_conds.append(CatalogItem.name.ilike(f"%db {num}%"))
+                    token_conds.append(CatalogItem.name.ilike(f"%db-{num}%"))
+                elif tok.startswith("ar") and tok[2:].isdigit():
+                    num = tok[2:]
+                    token_conds.append(CatalogItem.name.ilike(f"%ar {num}%"))
+                    token_conds.append(CatalogItem.name.ilike(f"%ar-{num}%"))
+                elif tok in ("57", "5.7"):
+                    token_conds.append(CatalogItem.name.ilike("%5.7%"))
+                    token_conds.append(CatalogItem.name.ilike("%57%"))
+                    token_conds.append(CatalogItem.name.ilike("%5-7%"))
+            if token_conds:
+                stmt = stmt.where(or_(*token_conds))
+
+        # Order in-stock items first, up to 50 candidates
+        stmt = stmt.order_by(CatalogItem.in_stock.desc(), CatalogItem.created_at.desc()).limit(50)
         res = await session.execute(stmt)
         candidates = res.scalars().all()
 
@@ -994,7 +1042,7 @@ async def get_product_photos(
 
             if query_brands:
                 if cand_brands and not (query_brands & cand_brands):
-                    return -100.0  # Completely wrong brand (e.g. Norinco requested, candidate is Taurus; or DB10 requested, candidate is GLFA)
+                    return -100.0  # Completely wrong brand
                 if query_brands & cand_brands:
                     score += 20.0
 
@@ -1006,7 +1054,7 @@ async def get_product_photos(
 
             # 2. Model number and caliber check (e.g. '5.56', 'ar10', 'db10' vs 'db15', '19' vs '17')
             CALIBERS = {"5.56", "556", "7.62", "762", "308", "9mm", "9x19", "22lr", "22", "12ga", "380", "45acp", "5.7", "57"}
-            query_model_nums = [t for t in tokens if any(c.isdigit() for c in t)]
+            query_model_nums = [t for t in tokens if any(c.isdigit() for c in t) and len(t) >= 2]
             if query_model_nums:
                 matched_model = False
                 for qm in query_model_nums:
@@ -1015,7 +1063,7 @@ async def get_product_photos(
                         score += 15.0
                         matched_model = True
                     else:
-                        # Only heavily penalize explicit non-caliber model series collisions (e.g. DB10 vs DB15)
+                        # Only heavily penalize explicit non-caliber model series collisions (e.g. DB10 vs DB15, Glock 19 vs 17)
                         if clean_qm not in CALIBERS:
                             cand_models = [w for w in name_words if any(c.isdigit() for c in w) and w not in CALIBERS]
                             if cand_models and not any(clean_qm in cm for cm in cand_models):
@@ -1035,25 +1083,42 @@ async def get_product_photos(
             if matched_count == 0 and score < 20.0:
                 return 0.0
 
-            # 4. Tie-breaking bonus: prefer candidate with more images (gives customer full photo gallery)
+            # 4. Tie-breaking bonus: in-stock and multiple images
+            if it.in_stock:
+                score += 5.0
             num_images = len(it.images) if isinstance(it.images, list) else 0
             score += min(num_images, 5) * 0.5
 
             return score
 
-        scored = sorted(candidates, key=_calculate_photo_score, reverse=True)
-        winner = scored[0]
+        # Check if customer asked for a gallery of all models of a brand (e.g. "send all available glock model pics")
+        if is_brand_gallery_query and detected_brand:
+            targets = []
+            seen_models = set()
+            for it in candidates:
+                if not it.images or not it.in_stock:
+                    continue
+                m_match = re.search(r'(' + re.escape(detected_brand) + r'\s*\d+[a-zA-Z]?)', it.name.lower())
+                model_key = m_match.group(1) if m_match else it.name.lower()
+                if model_key in seen_models:
+                    continue
+                seen_models.add(model_key)
+                targets.append(it)
+        else:
+            scored = sorted(candidates, key=_calculate_photo_score, reverse=True)
+            winner = scored[0]
 
-        if _calculate_photo_score(winner) < 5.0:
-            return []
+            if _calculate_photo_score(winner) < 5.0:
+                return []
 
-        # Zero Hallucination Rule: If the winning matching product has no photos, NEVER return another weapon's photo!
-        if not winner.images or len(winner.images) == 0:
-            logger.info("[get_product_photos] Matched '%s' but item has no images in catalog.", winner.name)
-            return []
+            # Zero Hallucination Rule: If the winning matching product has no photos, NEVER return another weapon's photo!
+            if not winner.images or len(winner.images) == 0:
+                logger.info("[get_product_photos] Matched '%s' but item has no images in catalog.", winner.name)
+                return []
+
+            targets = [it for it in scored if _calculate_photo_score(it) >= 10.0 and it.images] if allow_multiple else [winner]
 
         photos = []
-        targets = [it for it in scored if _calculate_photo_score(it) >= 10.0 and it.images] if allow_multiple else [winner]
 
         catalog_img_dirs = [
             "/app/app/static/catalog_images",
